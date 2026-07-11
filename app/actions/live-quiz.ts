@@ -283,24 +283,30 @@ export async function getDraftSessions(classId: string): Promise<DraftSessionDto
 
   const drafts: DraftSessionDto[] = []
   for (const r of rows) {
-    const snap = (r.snapshot as { lessonId?: string; defaultTimeSec?: number } | null) ?? null
-    if (!snap?.lessonId) continue
-    const [lesson] = await db
-      .select({ title: lessons.title, chapterTitle: chapters.title })
-      .from(lessons)
-      .innerJoin(chapters, eq(chapters.id, lessons.chapterId))
-      .where(eq(lessons.id, snap.lessonId))
-      .limit(1)
-    if (!lesson) continue
-    const qs = await loadQuizQuestions(snap.lessonId, snap.defaultTimeSec ?? 30)
-    drafts.push({
-      id: r.id,
-      lessonTitle: lesson.title,
-      chapterTitle: lesson.chapterTitle,
-      questionCount: qs.length,
-      defaultTimeSec: snap.defaultTimeSec ?? 30,
-      createdAt: r.createdAt.toISOString(),
-    })
+    try {
+      const snap = (r.snapshot as { lessonId?: string; defaultTimeSec?: number } | null) ?? null
+      if (!snap?.lessonId) continue
+      const [lesson] = await db
+        .select({ title: lessons.title, chapterTitle: chapters.title })
+        .from(lessons)
+        .innerJoin(chapters, eq(chapters.id, lessons.chapterId))
+        .where(eq(lessons.id, snap.lessonId))
+        .limit(1)
+      if (!lesson) continue
+      const qs = await loadQuizQuestions(snap.lessonId, snap.defaultTimeSec ?? 30)
+      if (!qs || qs.length === 0) continue
+      drafts.push({
+        id: r.id,
+        lessonTitle: lesson.title,
+        chapterTitle: lesson.chapterTitle,
+        questionCount: qs.length,
+        defaultTimeSec: snap.defaultTimeSec ?? 30,
+        createdAt: r.createdAt.toISOString(),
+      })
+    } catch (err) {
+      console.error("[v0] Error loading draft session:", err)
+      continue
+    }
   }
   return drafts
 }

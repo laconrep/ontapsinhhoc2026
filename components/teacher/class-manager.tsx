@@ -4,6 +4,7 @@ import { useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 import {
   createClass,
   updateClass,
@@ -181,7 +182,7 @@ export function ClassManager({ initialClasses }: { initialClasses: ClassRow[] })
 
                 <Link
                   href={`/teacher/classes/${cls.id}`}
-                  className={buttonVariants({ variant: "ghost", size: "sm" }) + " mt-4 w-full justify-between"}
+                  className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "mt-4 w-full justify-between")}
                 >
                   Xem chi tiết
                   <ArrowRight className="h-4 w-4" />
