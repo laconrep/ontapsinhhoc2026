@@ -14,7 +14,7 @@ import {
   UploadCloud,
   X,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { validateWorksheet, saveWorksheet, type WorksheetPreview } from "@/app/actions/worksheet"
@@ -102,18 +102,22 @@ export function WorksheetImporter() {
           <CardTitle className="text-base">1. Tải file mẫu và soạn nội dung</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">
-          <Button variant="outline" asChild>
-            <a href="/templates/mau-cau-hoi.docx" download>
-              <Download className="h-4 w-4" />
-              Mẫu Word (.docx)
-            </a>
-          </Button>
-          <Button variant="outline" asChild>
-            <a href="/templates/mau-cau-hoi.txt" download>
-              <Download className="h-4 w-4" />
-              Mẫu văn bản (.txt)
-            </a>
-          </Button>
+          <a
+            href="/templates/mau-cau-hoi.docx"
+            download
+            className={buttonVariants({ variant: "outline" })}
+          >
+            <Download className="h-4 w-4" />
+            Mẫu Word (.docx)
+          </a>
+          <a
+            href="/templates/mau-cau-hoi.txt"
+            download
+            className={buttonVariants({ variant: "outline" })}
+          >
+            <Download className="h-4 w-4" />
+            Mẫu văn bản (.txt)
+          </a>
         </CardContent>
       </Card>
 

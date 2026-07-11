@@ -13,7 +13,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
@@ -152,12 +152,10 @@ export function LessonManager({ initialChapters }: { initialChapters: ChapterDto
           <p className="mt-1 text-muted-foreground">Quản lý chương, bài giảng và điểm kiến thức.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" asChild>
-            <Link href="/teacher/lessons/import">
-              <Upload className="h-4 w-4" />
-              Nạp từ file
-            </Link>
-          </Button>
+          <Link href="/teacher/lessons/import" className={buttonVariants({ variant: "outline" })}>
+            <Upload className="h-4 w-4" />
+            Nạp từ file
+          </Link>
           <Button
             onClick={() => {
               setChapterDialog({ mode: "create" })
