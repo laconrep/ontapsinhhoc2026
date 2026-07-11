@@ -1,20 +1,19 @@
-import { BarChart3 } from "lucide-react"
+import { getStudentStats } from "@/app/actions/student-stats"
+import { StudentStats } from "@/components/student/student-stats"
 
-export default function StudentStatsPage() {
+export const dynamic = "force-dynamic"
+
+export default async function StudentStatsPage() {
+  const stats = await getStudentStats()
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="font-heading text-xl font-bold text-foreground text-balance">Tiến độ</h1>
+        <h1 className="font-heading text-xl font-bold text-foreground text-balance">Tiến độ học tập</h1>
         <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
-          Thống kê học tập, chuỗi ngày và ôn tập ngắt quãng.
+          Chuỗi ngày học, hoạt động tuần qua, huy hiệu và tiến độ từng bài.
         </p>
       </div>
-      <div className="rounded-xl border border-dashed border-border bg-card p-6 text-center">
-        <BarChart3 className="mx-auto h-8 w-8 text-muted-foreground" aria-hidden="true" />
-        <p className="mt-2 text-sm text-muted-foreground">
-          Bảng thống kê tiến độ sẽ được bổ sung ở bước tiếp theo.
-        </p>
-      </div>
+      <StudentStats stats={stats} />
     </div>
   )
 }
