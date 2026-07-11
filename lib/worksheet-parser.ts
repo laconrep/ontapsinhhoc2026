@@ -64,12 +64,17 @@ interface RawMarker {
   end: number
   text: string
   allowSwap: boolean
+  synonyms?: string[]
 }
 
 /**
  * Phân tích nội dung KP: tìm các ô trống đánh dấu bằng __từ__ (cố định) hoặc
- * "từ" (hoán đổi). __"từ"__ = vừa gạch chân vừa hoán đổi. Trả về content đã bỏ
- * ký hiệu delimiter và mảng underlinedTerms.
+ * "từ" (hoán đổi). __"từ"__ = vừa gạch chân vừa hoán đổi.
+ * 
+ * Hỗ trợ từ đồng nghĩa: __từ|đồng_nghĩa1|đồng_nghĩa2__ hoặc "từ|đồng_nghĩa1"
+ * Phần trước | là text (bắt buộc), phần sau | là synonyms (tuỳ chọn).
+ * 
+ * Trả về content đã bỏ ký hiệu delimiter và mảng underlinedTerms.
  */
 export function extractBlanks(raw: string): {
   content: string
@@ -82,12 +87,19 @@ export function extractBlanks(raw: string): {
   while ((m = underlineRe.exec(raw)) !== null) {
     let inner = m[1]
     let allowSwap = false
+    let synonyms: string[] = []
     const q = inner.match(/^"(.+)"$/)
     if (q) {
       inner = q[1]
       allowSwap = true
     }
-    markers.push({ start: m.index, end: m.index + m[0].length, text: inner, allowSwap })
+    // phân tích synonyms: từ|syn1|syn2
+    const parts = inner.split("|")
+    inner = parts[0]
+    if (parts.length > 1) {
+      synonyms = parts.slice(1).filter(p => p.trim().length > 0)
+    }
+    markers.push({ start: m.index, end: m.index + m[0].length, text: inner, allowSwap, synonyms })
   }
   // 2) tìm "..." không nằm trong vùng đã match ở bước 1
   const quoteRe = /"(.+?)"/g
@@ -96,7 +108,14 @@ export function extractBlanks(raw: string): {
     const e = m.index + m[0].length
     const overlap = markers.some((mk) => s < mk.end && e > mk.start)
     if (!overlap) {
-      markers.push({ start: s, end: e, text: m[1], allowSwap: true })
+      let text = m[1]
+      let synonyms: string[] = []
+      const parts = text.split("|")
+      text = parts[0]
+      if (parts.length > 1) {
+        synonyms = parts.slice(1).filter(p => p.trim().length > 0)
+      }
+      markers.push({ start: s, end: e, text, allowSwap: true, synonyms })
     }
   }
 
@@ -105,12 +124,12 @@ export function extractBlanks(raw: string): {
   // dựng content đã strip delimiter + tính vị trí ô trống trong content sạch
   let content = ""
   let cursor = 0
-  const placed: { text: string; allowSwap: boolean; cleanStart: number }[] = []
+  const placed: { text: string; allowSwap: boolean; cleanStart: number; synonyms?: string[] }[] = []
   for (const mk of markers) {
     content += raw.slice(cursor, mk.start)
     const cleanStart = content.length
     content += mk.text
-    placed.push({ text: mk.text, allowSwap: mk.allowSwap, cleanStart })
+    placed.push({ text: mk.text, allowSwap: mk.allowSwap, cleanStart, synonyms: mk.synonyms })
     cursor = mk.end
   }
   content += raw.slice(cursor)
@@ -142,6 +161,7 @@ export function extractBlanks(raw: string): {
       allowSwap: p.allowSwap,
       swapGroupId,
       extraAccepted: [],
+      synonyms: p.synonyms && p.synonyms.length > 0 ? p.synonyms : undefined,
     })
     prevEnd = p.cleanStart + p.text.length
     prevWasSwap = p.allowSwap

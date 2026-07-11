@@ -42,11 +42,14 @@ export function computeOverallStatus(args: {
 }
 
 /**
- * Chấm một câu FILL/DRAG có xét swap-group.
- * [FIX A-01]:
- *  - group allowSwap=false: so từng slot riêng (có xét extraAccepted)
- *  - group allowSwap=true: set-equality toàn group; nếu không khớp → cả group sai
- * Trả về kết quả từng slot + allCorrect.
+ * Chấm một câu FILL/DRAG với set-equality linh hoạt.
+ * Thứ tự không quan trọng — HS có thể điền slot bất kỳ, miễn tập đáp án khớp tập đúng.
+ * Xét extraAccepted & synonyms để linh hoạt hơn.
+ * 
+ * Luồng:
+ * 1. Gom slot theo group (swap-group hoặc individual).
+ * 2. Với swap-group || nhiều slot: dùng set-equality (greedy match mỗi HS answer với 1 term đúng).
+ * 3. Với slot đơn: so từng slot riêng.
  */
 export function gradeSlots(
   terms: UnderlinedTerm[],
@@ -63,38 +66,46 @@ export function gradeSlots(
 
   const resultMap = new Map<number, { slotIndex: number; isCorrect: boolean; correctAnswer: string }>()
 
-  const accepts = (term: UnderlinedTerm, value: string) => {
+  /**
+   * Kiểm tra xem giá trị có được chấp nhận bởi term không.
+   * Xét text + extraAccepted + synonyms, không phân biệt hoa/thường/khoảng cách.
+   */
+  const accepts = (term: UnderlinedTerm, value: string): boolean => {
     const norm = normalizeAnswer(value)
+    // Đáp án chính
     if (norm === normalizeAnswer(term.text)) return true
-    return (term.extraAccepted ?? []).some((e) => normalizeAnswer(e) === norm)
+    // Đáp án thay thế (extraAccepted)
+    if ((term.extraAccepted ?? []).some((e) => normalizeAnswer(e) === norm)) return true
+    // Từ đồng nghĩa (synonyms)
+    if ((term.synonyms ?? []).some((s) => normalizeAnswer(s) === norm)) return true
+    return false
   }
 
   for (const [, groupTerms] of groups) {
+    const isMultiSlot = groupTerms.length > 1
     const allowSwap = groupTerms.some((t) => t.allowSwap)
-    if (allowSwap && groupTerms.length > 1) {
-      // set equality: tập đáp án HS đặt vào group so với tập đáp án đúng
-      const correctSet = groupTerms.map((t) => normalizeAnswer(t.text)).sort()
-      const studentSet = groupTerms.map((t) => normalizeAnswer(answers[t.slotIndex] ?? "")).sort()
-      // xét cả extraAccepted: nếu studentSet[i] được chấp nhận bởi bất kỳ term nào thì quy về text đúng
-      let ok = correctSet.length === studentSet.length
-      if (ok) {
-        // greedy match từng student answer với 1 term chưa dùng
-        const remaining = [...groupTerms]
-        for (const t of groupTerms) {
-          const val = answers[t.slotIndex] ?? ""
-          const idx = remaining.findIndex((rt) => accepts(rt, val))
-          if (idx === -1) {
-            ok = false
-            break
-          }
-          remaining.splice(idx, 1)
+    const hasSwapGroup = groupTerms.some(t => t.swapGroupId)
+
+    if (isMultiSlot && (allowSwap || hasSwapGroup)) {
+      // Set-equality: đáp án HS phải khớp tập đáp án đúng (thứ tự tùy ý)
+      // Greedy matching: gán từng student answer đến 1 term đúng, không được dùng 2 lần
+      const remaining = [...groupTerms]
+      let ok = groupTerms.length > 0 // ít nhất có 1 term
+      for (const t of groupTerms) {
+        const val = answers[t.slotIndex] ?? ""
+        const idx = remaining.findIndex((rt) => accepts(rt, val))
+        if (idx === -1) {
+          ok = false
+          break
         }
+        remaining.splice(idx, 1)
       }
+
       for (const t of groupTerms) {
         resultMap.set(t.slotIndex, { slotIndex: t.slotIndex, isCorrect: ok, correctAnswer: t.text })
       }
     } else {
-      // so từng slot riêng
+      // Slot đơn: so từng slot riêng (không cần set-equality)
       for (const t of groupTerms) {
         const ok = accepts(t, answers[t.slotIndex] ?? "")
         resultMap.set(t.slotIndex, { slotIndex: t.slotIndex, isCorrect: ok, correctAnswer: t.text })

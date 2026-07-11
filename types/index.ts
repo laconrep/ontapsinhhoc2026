@@ -69,6 +69,8 @@ export interface UnderlinedTerm {
   allowSwap: boolean
   swapGroupId: string | null
   extraAccepted: string[]
+  /** Từ đồng nghĩa được chấp nhận (tùy chọn, để quản lý linh hoạt) */
+  synonyms?: string[]
 }
 
 // === Questions ===
