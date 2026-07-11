@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation"
-import { getSession, getSessionEvents } from "@/app/actions/sessions"
+import { getSession } from "@/app/actions/sessions"
 import { getCurrentUser } from "@/lib/auth-helpers"
-import { SessionBoard } from "@/components/teacher/session-board"
+import { TeacherConsole } from "@/components/live/teacher-console"
 
 export const dynamic = "force-dynamic"
 
@@ -17,14 +17,5 @@ export default async function SessionBoardPage({
   const session = await getSession(id)
   if (!session || session.teacherId !== user.id) notFound()
 
-  const events = await getSessionEvents(id)
-
-  return (
-    <SessionBoard
-      sessionId={session.id}
-      className={session.className}
-      status={session.status}
-      initialEvents={events}
-    />
-  )
+  return <TeacherConsole sessionId={session.id} />
 }

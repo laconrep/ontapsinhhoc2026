@@ -146,6 +146,7 @@ export const questions = pgTable("questions", {
   type: text("type", { enum: ["MC", "TF", "SA", "FILL", "DRAG"] }).notNull(),
   content: text("content").notNull(),
   difficulty: integer("difficulty").notNull().default(1),
+  timeLimitSec: integer("timeLimitSec"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
