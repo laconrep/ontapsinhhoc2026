@@ -24,6 +24,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
   const [submitting, setSubmitting] = useState(false)
   const [answeredId, setAnsweredId] = useState<string | null>(null)
   const [myCorrect, setMyCorrect] = useState<boolean | null>(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
 
   const currentQid = view.question?.id ?? null
 
@@ -54,6 +55,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
   useEffect(() => {
     const handler = () => {
       const fs = !!document.fullscreenElement
+      setIsFullscreen(fs)
       report(fs)
     }
     fsHandlerRef.current = handler
@@ -143,11 +145,12 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
   return (
     <>
       {/* Nút fullscreen (chỉ hiện khi thoát fullscreen) */}
-      {joined && !document.fullscreenElement && (
+      {joined && !isFullscreen && (
         <button
           onClick={reenterFullscreen}
-          className="fixed right-4 top-4 z-40 rounded-lg bg-primary p-2 text-primary-foreground hover:bg-primary/90"
+          className="fixed right-4 top-4 z-50 rounded-lg bg-primary p-2 text-primary-foreground hover:bg-primary/90 shadow-lg"
           title="Vào toàn màn hình"
+          aria-label="Vào toàn màn hình"
         >
           <Maximize className="h-5 w-5" />
         </button>

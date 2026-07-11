@@ -180,10 +180,10 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
         </div>
 
         {/* Câu tiếp theo (góc dưới phải) */}
-        <div className="flex min-w-0 flex-col justify-end rounded-lg bg-muted px-3 py-2">
-          <p className="text-xs font-medium text-muted-foreground">Câu tiếp</p>
-          <p className="line-clamp-2 text-xs text-foreground">
-            {view.teacherNext ? view.teacherNext.content : atEnd ? "Cuối cùng" : "—"}
+        <div className="flex min-w-0 flex-col justify-end rounded-lg bg-muted px-4 py-3">
+          <p className="text-sm font-semibold text-muted-foreground">Câu tiếp theo</p>
+          <p className="line-clamp-3 text-sm leading-relaxed text-foreground">
+            {view.teacherNext ? view.teacherNext.content : atEnd ? "Đây là câu cuối cùng" : "—"}
           </p>
         </div>
       </div>
