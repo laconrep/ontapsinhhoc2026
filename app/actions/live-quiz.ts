@@ -1,7 +1,7 @@
 "use server"
 
 import { randomUUID } from "crypto"
-import { and, asc, eq, inArray, sql } from "drizzle-orm"
+import { and, eq, isNotNull } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { db } from "@/lib/db"
 import {
@@ -41,24 +41,28 @@ async function emit(
 ) {
   const id = randomUUID()
   const createdAt = new Date()
-  await db.insert(sessionEvents).values({
+  const event = {
     id,
     sessionId,
     studentId: opts.studentId ?? null,
-    eventType: type,
+    studentName: opts.studentName ?? null,
     questionId: opts.questionId ?? null,
+    type,
     payload: opts.payload ?? null,
     createdAt,
-  })
-  const event: RealtimeEvent = {
-    id,
-    type,
-    studentId: opts.studentId ?? null,
-    studentName: opts.studentName ?? null,
-    payload: opts.payload ?? null,
-    createdAt: createdAt.toISOString(),
   }
-  publish(sessionId, event)
+  // Ghi vào DB
+  await db.insert(sessionEvents).values(event)
+  // Phát event ngay đến tất cả subscriber (realtime in-memory)
+  publish(sessionId, {
+    id: event.id,
+    type: event.type,
+    studentId: event.studentId,
+    studentName: event.studentName,
+    questionId: event.questionId,
+    payload: event.payload as Record<string, unknown> | undefined,
+    createdAt: event.createdAt.toISOString(),
+  })
 }
 
 // Phát realtime nhanh (không lưu DB) — dùng cho tín hiệu tần suất cao (fullscreen, tick).
