@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { useRouter } from "next/navigation"
 import { completeOnboarding } from "@/app/actions/onboarding"
 import { Button } from "@/components/ui/button"
 import { GraduationCap, BookOpen } from "lucide-react"
@@ -15,15 +14,12 @@ export function OnboardingForm({
   initialRole: UserRole
   name: string
 }) {
-  const router = useRouter()
   const [role, setRole] = useState<UserRole>(initialRole)
   const [pending, startTransition] = useTransition()
 
   const handleContinue = () => {
     startTransition(async () => {
       await completeOnboarding(role)
-      router.push(role === "teacher" ? "/teacher" : "/student")
-      router.refresh()
     })
   }
 

@@ -179,8 +179,9 @@ function FillInCard({
               onChange={(e) => setAnswer(t.slotIndex, e.target.value)}
               disabled={locked || pending}
               aria-label={`Ô trống ${t.slotIndex + 1}`}
+              size={Math.max((answers[t.slotIndex] ?? "").length + 1, 10)}
               className={cn(
-                "mx-1 inline-block min-w-[90px] rounded-md border-2 border-dashed px-2 py-0.5 text-center text-base outline-none",
+                "mx-1 inline-block rounded-md border-2 border-dashed px-2 py-0.5 text-center text-base outline-none",
                 "focus:border-primary focus:border-solid",
                 locked && "border-solid border-[color:var(--color-primary)] bg-primary/10 text-primary",
                 wrong && "border-solid border-destructive bg-destructive/10 text-destructive",

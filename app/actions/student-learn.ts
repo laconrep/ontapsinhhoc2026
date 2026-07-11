@@ -719,7 +719,7 @@ export async function getLatestQuizResult(lessonId: string): Promise<QuizResultD
     .where(eq(quizAnswers.attemptId, attempt.id))
 
   const correctSlots = ansRows.filter((a) => a.isCorrect).length
-  const totalSlots = attempt.totalSlots ?? ansRows.length || 1
+  const totalSlots = (attempt.totalSlots ?? ansRows.length) || 1
 
   return {
     attemptId: attempt.id,
