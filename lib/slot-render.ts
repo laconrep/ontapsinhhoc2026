@@ -1,4 +1,5 @@
 import type { UnderlinedTerm } from "@/types"
+import { cleanContentDisplay } from "./content-display"
 
 export type SlotPart =
   | { type: "text"; value: string }
@@ -9,8 +10,12 @@ export type SlotPart =
  * xuất hiện đầu tiên của mỗi term trong content. Mỗi term (theo slotIndex)
  * thay thế đúng 1 lần xuất hiện, xử lý theo thứ tự trong văn bản để tránh
  * chồng lấn khi nhiều term có cùng chuỗi.
+ * 
+ * Bỏ dấu ngoặc kép xung quanh từ hoán đổi trước khi render.
  */
 export function renderSlots(content: string, terms: UnderlinedTerm[]): SlotPart[] {
+  // Bỏ dấu ngoặc kép trước khi tìm slot
+  const cleanContent = cleanContentDisplay(content)
   // Tìm vị trí cho từng term (occurrence đầu tiên chưa bị chiếm)
   const placements: { start: number; end: number; term: UnderlinedTerm }[] = []
   const claimed: { start: number; end: number }[] = []
@@ -22,7 +27,7 @@ export function renderSlots(content: string, terms: UnderlinedTerm[]): SlotPart[
   for (const term of ordered) {
     if (!term.text) continue
     let from = 0
-    let idx = content.indexOf(term.text, from)
+    let idx = cleanContent.indexOf(term.text, from)
     while (idx !== -1) {
       const end = idx + term.text.length
       if (!overlaps(idx, end)) {
@@ -31,7 +36,7 @@ export function renderSlots(content: string, terms: UnderlinedTerm[]): SlotPart[
         break
       }
       from = idx + 1
-      idx = content.indexOf(term.text, from)
+      idx = cleanContent.indexOf(term.text, from)
     }
   }
 
@@ -41,13 +46,13 @@ export function renderSlots(content: string, terms: UnderlinedTerm[]): SlotPart[
   let cursor = 0
   for (const p of placements) {
     if (p.start > cursor) {
-      parts.push({ type: "text", value: content.slice(cursor, p.start) })
+      parts.push({ type: "text", value: cleanContent.slice(cursor, p.start) })
     }
     parts.push({ type: "slot", term: p.term })
     cursor = p.end
   }
-  if (cursor < content.length) {
-    parts.push({ type: "text", value: content.slice(cursor) })
+  if (cursor < cleanContent.length) {
+    parts.push({ type: "text", value: cleanContent.slice(cursor) })
   }
   return parts
 }

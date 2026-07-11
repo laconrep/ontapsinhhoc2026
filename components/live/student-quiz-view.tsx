@@ -141,9 +141,21 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
   const locked = answered || view.phase !== "question" || timeUp
 
   return (
-    <div className="fixed inset-0 z-50 mx-auto flex max-w-2xl flex-col gap-5 overflow-y-auto bg-background p-4 pb-28">
-      {/* Thanh trên: tiến độ + đồng hồ */}
-      <div className="flex items-center justify-between">
+    <>
+      {/* Nút fullscreen (chỉ hiện khi thoát fullscreen) */}
+      {joined && !document.fullscreenElement && (
+        <button
+          onClick={reenterFullscreen}
+          className="fixed right-4 top-4 z-40 rounded-lg bg-primary p-2 text-primary-foreground hover:bg-primary/90"
+          title="Vào toàn màn hình"
+        >
+          <Maximize className="h-5 w-5" />
+        </button>
+      )}
+
+      <div className="fixed inset-0 z-50 mx-auto flex max-w-2xl flex-col gap-5 overflow-y-auto bg-background p-4 pb-28">
+        {/* Thanh trên: tiến độ + đồng hồ */}
+        <div className="flex items-center justify-between">
         <span className="rounded-full bg-secondary px-3 py-1 text-sm font-medium text-secondary-foreground">
           {view.currentIndex >= 0 ? `Câu ${view.currentIndex + 1}/${view.total}` : "Đang chờ"}
         </span>
@@ -323,6 +335,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
           Đã gửi câu trả lời. Chờ các bạn khác…
         </p>
       )}
-    </div>
+      </div>
+    </>
   )
 }

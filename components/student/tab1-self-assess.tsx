@@ -14,6 +14,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { saveTab1Progress, submitTab1 } from "@/app/actions/student-learn"
+import { cleanContentDisplay } from "@/lib/content-display"
 import type { KnowledgePointDto } from "@/types"
 
 type Assessment = "known" | "unknown"
@@ -205,7 +206,7 @@ function KPCard({
               isLong && !expanded && "line-clamp-3",
             )}
           >
-            {content}
+            {cleanContentDisplay(content)}
           </p>
           {isLong && (
             <button

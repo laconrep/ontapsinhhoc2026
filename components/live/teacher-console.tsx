@@ -119,16 +119,10 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
         </aside>
       </div>
 
-      {/* Hàng dưới: câu kế tiếp + điều khiển */}
-      <div className="flex shrink-0 items-stretch gap-4 border-t bg-card px-4 py-3">
-        <div className="flex min-w-0 flex-1 flex-col justify-center rounded-lg bg-muted px-4 py-2">
-          <p className="text-xs font-medium text-muted-foreground">Câu hỏi tiếp theo</p>
-          <p className="truncate text-sm text-foreground">
-            {view.teacherNext ? view.teacherNext.content : atEnd ? "Đây là câu cuối cùng" : "—"}
-          </p>
-        </div>
-
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
+      {/* Hàng dưới: điều khiển (bên trái) + câu kế tiếp (bên dưới, góc phải) */}
+      <div className="grid shrink-0 grid-cols-[1fr_auto] gap-4 border-t bg-card px-4 py-3">
+        {/* Điều khiển (bên trái, chiếm full height) */}
+        <div className="flex shrink-0 flex-wrap items-center gap-2 self-center">
           <Button
             variant="outline"
             onClick={() => run(() => goToQuestion(sessionId, view.currentIndex - 1))}
@@ -183,6 +177,14 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
             <Square className="h-4 w-4" />
             Kết thúc
           </Button>
+        </div>
+
+        {/* Câu tiếp theo (góc dưới phải) */}
+        <div className="flex min-w-0 flex-col justify-end rounded-lg bg-muted px-3 py-2">
+          <p className="text-xs font-medium text-muted-foreground">Câu tiếp</p>
+          <p className="line-clamp-2 text-xs text-foreground">
+            {view.teacherNext ? view.teacherNext.content : atEnd ? "Cuối cùng" : "—"}
+          </p>
         </div>
       </div>
     </div>
