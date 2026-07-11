@@ -1,0 +1,392 @@
+import type { UnderlinedTerm } from "@/types"
+
+// ============ Kiểu dữ liệu kết quả parse ============
+
+export type ParsedQuestionType = "MC" | "TF" | "SA"
+
+export interface ParsedOption {
+  content: string
+  isCorrect: boolean
+}
+
+export interface ParsedQuestion {
+  type: ParsedQuestionType
+  content: string
+  options: ParsedOption[]
+  /** đáp án đúng dạng text (SA) */
+  correctAnswer?: string
+  line: number
+}
+
+export interface ParsedKnowledgePoint {
+  content: string
+  underlinedTerms: UnderlinedTerm[]
+  questions: ParsedQuestion[]
+  line: number
+}
+
+export interface ParsedLesson {
+  title: string
+  knowledgePoints: ParsedKnowledgePoint[]
+  line: number
+}
+
+export interface ParsedChapter {
+  title: string
+  lessons: ParsedLesson[]
+  line: number
+}
+
+export interface ParseError {
+  line?: number
+  message: string
+}
+
+export interface ParseResult {
+  chapters: ParsedChapter[]
+  errors: ParseError[]
+}
+
+export interface ValidationError {
+  line?: number
+  message: string
+}
+
+export interface ValidationResult {
+  isValid: boolean
+  errors: ValidationError[]
+}
+
+// ============ Tách ô trống trong nội dung KP ============
+
+interface RawMarker {
+  start: number
+  end: number
+  text: string
+  allowSwap: boolean
+}
+
+/**
+ * Phân tích nội dung KP: tìm các ô trống đánh dấu bằng __từ__ (cố định) hoặc
+ * "từ" (hoán đổi). __"từ"__ = vừa gạch chân vừa hoán đổi. Trả về content đã bỏ
+ * ký hiệu delimiter và mảng underlinedTerms.
+ */
+export function extractBlanks(raw: string): {
+  content: string
+  underlinedTerms: UnderlinedTerm[]
+} {
+  const markers: RawMarker[] = []
+  // 1) tìm __...__ trước (có thể chứa "..." bên trong)
+  const underlineRe = /__(.+?)__/g
+  let m: RegExpExecArray | null
+  while ((m = underlineRe.exec(raw)) !== null) {
+    let inner = m[1]
+    let allowSwap = false
+    const q = inner.match(/^"(.+)"$/)
+    if (q) {
+      inner = q[1]
+      allowSwap = true
+    }
+    markers.push({ start: m.index, end: m.index + m[0].length, text: inner, allowSwap })
+  }
+  // 2) tìm "..." không nằm trong vùng đã match ở bước 1
+  const quoteRe = /"(.+?)"/g
+  while ((m = quoteRe.exec(raw)) !== null) {
+    const s = m.index
+    const e = m.index + m[0].length
+    const overlap = markers.some((mk) => s < mk.end && e > mk.start)
+    if (!overlap) {
+      markers.push({ start: s, end: e, text: m[1], allowSwap: true })
+    }
+  }
+
+  markers.sort((a, b) => a.start - b.start)
+
+  // dựng content đã strip delimiter + tính vị trí ô trống trong content sạch
+  let content = ""
+  let cursor = 0
+  const placed: { text: string; allowSwap: boolean; cleanStart: number }[] = []
+  for (const mk of markers) {
+    content += raw.slice(cursor, mk.start)
+    const cleanStart = content.length
+    content += mk.text
+    placed.push({ text: mk.text, allowSwap: mk.allowSwap, cleanStart })
+    cursor = mk.end
+  }
+  content += raw.slice(cursor)
+
+  // gán swapGroupId: các ô hoán đổi liên tiếp, không có dấu chấm câu xen giữa → cùng group
+  const terms: UnderlinedTerm[] = []
+  let groupCounter = 0
+  let currentGroup: string | null = null
+  let prevEnd = -1
+  let prevWasSwap = false
+  placed.forEach((p, i) => {
+    let swapGroupId: string | null = null
+    if (p.allowSwap) {
+      const between = prevEnd >= 0 ? content.slice(prevEnd, p.cleanStart) : "."
+      const sentenceBreak = /[.!?;\n]/.test(between)
+      if (prevWasSwap && !sentenceBreak && currentGroup) {
+        swapGroupId = currentGroup
+      } else {
+        groupCounter += 1
+        currentGroup = `g${groupCounter}`
+        swapGroupId = currentGroup
+      }
+    } else {
+      currentGroup = null
+    }
+    terms.push({
+      text: p.text,
+      slotIndex: i,
+      allowSwap: p.allowSwap,
+      swapGroupId,
+      extraAccepted: [],
+    })
+    prevEnd = p.cleanStart + p.text.length
+    prevWasSwap = p.allowSwap
+  })
+
+  // group chỉ có 1 thành viên → swapGroupId = null (chấm như slot thường)
+  const groupCount = new Map<string, number>()
+  for (const t of terms) if (t.swapGroupId) groupCount.set(t.swapGroupId, (groupCount.get(t.swapGroupId) ?? 0) + 1)
+  for (const t of terms) if (t.swapGroupId && (groupCount.get(t.swapGroupId) ?? 0) < 2) t.swapGroupId = null
+
+  return { content: content.trim(), underlinedTerms: terms }
+}
+
+// ============ Parser văn bản thuần ============
+
+export function parseTextContent(text: string): ParseResult {
+  const errors: ParseError[] = []
+  const chapters: ParsedChapter[] = []
+
+  let curChapter: ParsedChapter | null = null
+  let curLesson: ParsedLesson | null = null
+  let curKp: ParsedKnowledgePoint | null = null
+  let curQuestion: ParsedQuestion | null = null
+
+  const ensureChapter = (): ParsedChapter => {
+    if (!curChapter) {
+      curChapter = { title: "Chương chưa đặt tên", lessons: [], line: 0 }
+      chapters.push(curChapter)
+    }
+    return curChapter
+  }
+
+  const lines = text.split(/\r?\n/)
+  lines.forEach((rawLine, idx) => {
+    const line = rawLine.trim()
+    const lineNo = idx + 1
+    if (!line) return
+    // dòng chú thích — bị bỏ qua
+    if (line.startsWith("//")) return
+
+    // {Chương}
+    let mm = line.match(/^\{(.+)\}$/)
+    if (mm) {
+      curChapter = { title: mm[1].trim(), lessons: [], line: lineNo }
+      chapters.push(curChapter)
+      curLesson = null
+      curKp = null
+      curQuestion = null
+      return
+    }
+
+    // [Bài]
+    mm = line.match(/^\[(.+)\]$/)
+    if (mm) {
+      const chap = ensureChapter()
+      curLesson = { title: mm[1].trim(), knowledgePoints: [], line: lineNo }
+      chap.lessons.push(curLesson)
+      curKp = null
+      curQuestion = null
+      return
+    }
+
+    // ### SA
+    if (line.startsWith("###")) {
+      const body = line.slice(3).trim()
+      const eq = body.indexOf("=")
+      const content = (eq >= 0 ? body.slice(0, eq) : body).trim()
+      const answer = eq >= 0 ? body.slice(eq + 1).trim() : ""
+      if (!curKp) {
+        errors.push({ line: lineNo, message: "Câu hỏi phải nằm trong một điểm kiến thức (bắt đầu bằng '-')" })
+        return
+      }
+      if (!answer) {
+        errors.push({ line: lineNo, message: "Câu trả lời ngắn (###) phải có đáp án sau dấu '='" })
+      }
+      curQuestion = { type: "SA", content, options: [], correctAnswer: answer, line: lineNo }
+      curKp.questions.push(curQuestion)
+      return
+    }
+
+    // ## TF
+    if (line.startsWith("##")) {
+      const content = line.slice(2).trim()
+      if (!curKp) {
+        errors.push({ line: lineNo, message: "Câu hỏi phải nằm trong một điểm kiến thức (bắt đầu bằng '-')" })
+        return
+      }
+      curQuestion = { type: "TF", content, options: [], line: lineNo }
+      curKp.questions.push(curQuestion)
+      return
+    }
+
+    // # MC
+    if (line.startsWith("#")) {
+      const content = line.slice(1).trim()
+      if (!curKp) {
+        errors.push({ line: lineNo, message: "Câu hỏi phải nằm trong một điểm kiến thức (bắt đầu bằng '-')" })
+        return
+      }
+      curQuestion = { type: "MC", content, options: [], line: lineNo }
+      curKp.questions.push(curQuestion)
+      return
+    }
+
+    // + Lựa chọn (thuộc câu hỏi hiện tại)
+    if (line.startsWith("+")) {
+      const body = line.slice(1).trim()
+      if (!curQuestion) {
+        errors.push({ line: lineNo, message: "Lựa chọn (+) phải nằm sau một câu hỏi (#, ## hoặc ###)" })
+        return
+      }
+      if (curQuestion.type === "MC") {
+        const isCorrect = body.startsWith("*")
+        const content = (isCorrect ? body.slice(1) : body).trim()
+        curQuestion.options.push({ content, isCorrect })
+      } else if (curQuestion.type === "TF") {
+        // dạng: a) nội dung = Đúng/Sai
+        const eq = body.lastIndexOf("=")
+        const stmt = (eq >= 0 ? body.slice(0, eq) : body).replace(/^[a-dA-D][).]\s*/, "").trim()
+        const verdict = eq >= 0 ? body.slice(eq + 1).trim().toLowerCase() : ""
+        const isCorrect = /^(đúng|dung|true|đ|d)$/i.test(verdict)
+        curQuestion.options.push({ content: stmt, isCorrect })
+      }
+      return
+    }
+
+    // - Điểm kiến thức
+    if (line.startsWith("-")) {
+      let body = line.slice(1).trim()
+      body = body.replace(/^Ý kiến thức\s*:\s*/i, "").replace(/^Y kien thuc\s*:\s*/i, "")
+      if (!curLesson) {
+        errors.push({ line: lineNo, message: "Điểm kiến thức phải nằm trong một bài [Tên bài]" })
+        return
+      }
+      const { content, underlinedTerms } = extractBlanks(body)
+      curKp = { content, underlinedTerms, questions: [], line: lineNo }
+      curLesson.knowledgePoints.push(curKp)
+      curQuestion = null
+      return
+    }
+
+    // dòng không nhận dạng được
+    errors.push({ line: lineNo, message: `Không nhận dạng được cú pháp: "${line.slice(0, 40)}"` })
+  })
+
+  return { chapters, errors }
+}
+
+// ============ Parser HTML (từ mammoth .docx) ============
+
+/** Gộp các thẻ <u> liền kề (FIX B-01) */
+export function normalizeHtml(html: string): string {
+  return html.replace(/<\/u>(\s*)<u>/gi, "$1")
+}
+
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ")
+}
+
+/**
+ * Chuyển HTML (mammoth) thành text có delimiter: <u>...</u> → __...__, giữ nguyên
+ * "..." để đánh dấu hoán đổi, rồi tái sử dụng parseTextContent.
+ */
+export function parseHtmlContent(html: string): ParseResult {
+  const normalized = normalizeHtml(html)
+  // tách theo block: mỗi <p>, </p>, <br>, <li> thành 1 dòng
+  const withBreaks = normalized
+    .replace(/<\/(p|div|li|h[1-6])>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+  // <u>...</u> → __...__
+  const withUnderline = withBreaks.replace(/<u>([\s\S]*?)<\/u>/gi, "__$1__")
+  // bỏ mọi thẻ còn lại
+  const stripped = withUnderline.replace(/<[^>]+>/g, "")
+  const text = decodeEntities(stripped)
+  return parseTextContent(text)
+}
+
+// ============ Validate ============
+
+export function validateDocument(result: ParseResult): ValidationResult {
+  const errors: ValidationError[] = [...result.errors]
+
+  const lessons = result.chapters.flatMap((c) => c.lessons)
+  if (lessons.length === 0) {
+    errors.push({ message: "Tài liệu phải có ít nhất 1 bài [Tên bài]" })
+  }
+
+  for (const lesson of lessons) {
+    if (lesson.knowledgePoints.length === 0) {
+      errors.push({ line: lesson.line, message: `Bài "${lesson.title}" phải có ít nhất 1 điểm kiến thức` })
+    }
+    for (const kp of lesson.knowledgePoints) {
+      if (kp.underlinedTerms.length === 0) {
+        errors.push({
+          line: kp.line,
+          message: `Điểm kiến thức phải có ít nhất 1 từ gạch chân (__từ__ hoặc "từ"): "${kp.content.slice(0, 30)}"`,
+        })
+      }
+      for (const q of kp.questions) {
+        if (q.type === "MC") {
+          if (q.options.length !== 4) {
+            errors.push({ line: q.line, message: `Câu trắc nghiệm phải có đúng 4 lựa chọn (hiện có ${q.options.length})` })
+          }
+          if (q.options.filter((o) => o.isCorrect).length !== 1) {
+            errors.push({ line: q.line, message: "Câu trắc nghiệm phải có đúng 1 đáp án đúng (đánh dấu *)" })
+          }
+        } else if (q.type === "TF") {
+          if (q.options.length !== 4) {
+            errors.push({ line: q.line, message: `Câu Đúng/Sai phải có đúng 4 ý a) b) c) d) (hiện có ${q.options.length})` })
+          }
+        } else if (q.type === "SA") {
+          if (!q.correctAnswer) {
+            errors.push({ line: q.line, message: "Câu trả lời ngắn phải có đáp án sau dấu '='" })
+          }
+        }
+      }
+    }
+  }
+
+  return { isValid: errors.length === 0, errors }
+}
+
+// ============ Thống kê preview ============
+
+export function summarize(result: ParseResult) {
+  const chapters = result.chapters.length
+  const lessons = result.chapters.reduce((s, c) => s + c.lessons.length, 0)
+  const kps = result.chapters.reduce(
+    (s, c) => s + c.lessons.reduce((s2, l) => s2 + l.knowledgePoints.length, 0),
+    0,
+  )
+  const questions = result.chapters.reduce(
+    (s, c) =>
+      s +
+      c.lessons.reduce(
+        (s2, l) => s2 + l.knowledgePoints.reduce((s3, kp) => s3 + kp.questions.length, 0),
+        0,
+      ),
+    0,
+  )
+  return { chapters, lessons, kps, questions }
+}

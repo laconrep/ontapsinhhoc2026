@@ -11,6 +11,7 @@ import {
   Pencil,
   Plus,
   Trash2,
+  Upload,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -150,15 +151,23 @@ export function LessonManager({ initialChapters }: { initialChapters: ChapterDto
           <h1 className="font-heading text-2xl font-bold text-foreground">Bài giảng</h1>
           <p className="mt-1 text-muted-foreground">Quản lý chương, bài giảng và điểm kiến thức.</p>
         </div>
-        <Button
-          onClick={() => {
-            setChapterDialog({ mode: "create" })
-            setChapterTitle("")
-          }}
-        >
-          <FolderPlus className="h-4 w-4" />
-          Thêm chương
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/teacher/lessons/import">
+              <Upload className="h-4 w-4" />
+              Nạp từ file
+            </Link>
+          </Button>
+          <Button
+            onClick={() => {
+              setChapterDialog({ mode: "create" })
+              setChapterTitle("")
+            }}
+          >
+            <FolderPlus className="h-4 w-4" />
+            Thêm chương
+          </Button>
+        </div>
       </div>
 
       {chapters.length === 0 ? (

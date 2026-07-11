@@ -1,0 +1,31 @@
+{Chương I - Cơ sở vật chất di truyền}
+[ADN và ARN]
+- ADN là đại phân tử cấu tạo theo nguyên tắc __đa phân__, đơn phân là __nucleotide__.
+# ADN có cấu trúc không gian dạng gì?
++ *Xoắn kép
++ Mạch thẳng
++ Vòng tròn
++ Xoắn ba
+## Chọn đúng/sai cho các phát biểu sau về ADN:
++ a) ADN có cấu trúc gồm hai mạch = Đúng
++ b) Đơn phân của ADN là axit amin = Sai
++ c) ADN có trong nhân tế bào = Đúng
++ d) ADN chỉ có một mạch đơn = Sai
+### Đơn phân của ADN được gọi là gì? = nucleotide
+- Hai mạch của ADN liên kết theo nguyên tắc "bổ sung", trong đó A liên kết với "T" và G liên kết với "X".
+
+// ============================================================
+// HƯỚNG DẪN CÚ PHÁP (các dòng bắt đầu bằng // sẽ được bỏ qua)
+// ============================================================
+// {Tên chương}                -> Tiêu đề chương
+// [Tên bài]                   -> Tiêu đề bài (bắt buộc)
+// - Nội dung kiến thức...     -> Một điểm kiến thức
+// __từ__                      -> Ô điền khuyết cố định
+// "từ"                        -> Ô điền khuyết hoán đổi (các "từ" liền nhau trong cùng câu có thể tráo chỗ)
+// __"từ"__                    -> Vừa gạch chân vừa hoán đổi
+// # Câu hỏi trắc nghiệm?      -> Câu trắc nghiệm (MC)
+//   + *Đáp án đúng            -> Lựa chọn đúng đánh dấu bằng dấu *
+//   + Đáp án sai              -> Các lựa chọn còn lại (cần đúng 4 lựa chọn)
+// ## Câu hỏi đúng/sai?        -> Câu đúng/sai (TF)
+//   + a) Ý phát biểu = Đúng   -> Mỗi ý ghi = Đúng hoặc = Sai (cần đúng 4 ý)
+// ### Câu hỏi trả lời ngắn? = đáp án   -> Câu trả lời ngắn (SA), đáp án sau dấu =
