@@ -1,9 +1,16 @@
+import Link from "next/link"
 import { getMyClasses } from "@/app/actions/student-class"
+import { getActiveSessionsForStudent } from "@/app/actions/sessions"
 import { JoinClassCard } from "@/components/student/join-class-card"
-import { Users } from "lucide-react"
+import { Users, Radio } from "lucide-react"
+
+export const dynamic = "force-dynamic"
 
 export default async function StudentHomePage() {
-  const classes = await getMyClasses()
+  const [classes, liveSessions] = await Promise.all([
+    getMyClasses(),
+    getActiveSessionsForStudent(),
+  ])
 
   return (
     <div className="flex flex-col gap-6">
@@ -13,6 +20,34 @@ export default async function StudentHomePage() {
           Tham gia lớp bằng mã mời để bắt đầu học.
         </p>
       </div>
+
+      {liveSessions.length > 0 && (
+        <section aria-labelledby="live-heading" className="flex flex-col gap-2">
+          <h2 id="live-heading" className="sr-only">
+            Phiên học đang diễn ra
+          </h2>
+          {liveSessions.map((s) => (
+            <Link
+              key={s.id}
+              href={`/student/sessions/${s.id}`}
+              className="flex items-center justify-between gap-3 rounded-xl border border-primary/40 bg-primary/5 p-4 transition-colors hover:bg-primary/10"
+            >
+              <div className="flex items-center gap-3">
+                <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-primary/15">
+                  <Radio className="h-4 w-4 text-primary" aria-hidden="true" />
+                  <span className="absolute right-0 top-0 h-2.5 w-2.5 animate-pulse rounded-full bg-primary" />
+                </span>
+                <div>
+                  <p className="font-heading text-sm font-semibold text-foreground">
+                    Phiên học đang diễn ra
+                  </p>
+                  <p className="text-xs text-muted-foreground">{s.className} · Bấm để tham gia</p>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </section>
+      )}
 
       <JoinClassCard />
 

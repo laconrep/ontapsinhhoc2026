@@ -1,20 +1,29 @@
 import Link from "next/link"
 import { getClasses } from "@/app/actions/classes"
+import { getChaptersWithLessons } from "@/app/actions/content"
+import { getQuestionBank } from "@/app/actions/questions"
 import { getCurrentUser } from "@/lib/auth-helpers"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Users, BookOpen, Library, ArrowRight, Plus } from "lucide-react"
 
+export const dynamic = "force-dynamic"
+
 export default async function TeacherHomePage() {
-  const user = await getCurrentUser()
-  const classes = await getClasses()
+  const [user, classes, chapters, questions] = await Promise.all([
+    getCurrentUser(),
+    getClasses(),
+    getChaptersWithLessons(),
+    getQuestionBank(),
+  ])
   const totalStudents = classes.reduce((sum, c) => sum + (c.studentCount ?? 0), 0)
+  const totalLessons = chapters.reduce((sum, c) => sum + (c.lessons?.length ?? 0), 0)
 
   const stats = [
     { label: "Lớp học", value: classes.length, icon: Users, href: "/teacher/classes" },
     { label: "Tổng học sinh", value: totalStudents, icon: Users, href: "/teacher/classes" },
-    { label: "Bài giảng", value: "—", icon: BookOpen, href: "/teacher/lessons" },
-    { label: "Câu hỏi", value: "—", icon: Library, href: "/teacher/questions" },
+    { label: "Bài giảng", value: totalLessons, icon: BookOpen, href: "/teacher/lessons" },
+    { label: "Câu hỏi", value: questions.length, icon: Library, href: "/teacher/questions" },
   ]
 
   return (

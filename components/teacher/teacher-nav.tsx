@@ -12,11 +12,18 @@ const items = [
   { href: "/teacher/questions", label: "Ngân hàng câu hỏi", icon: Library },
 ]
 
-export function TeacherNav() {
+export function TeacherNav({ variant = "sidebar" }: { variant?: "sidebar" | "mobile" }) {
   const pathname = usePathname()
 
   return (
-    <nav className="flex flex-col gap-1" aria-label="Điều hướng giáo viên">
+    <nav
+      className={cn(
+        variant === "sidebar"
+          ? "flex flex-col gap-1"
+          : "flex gap-1 overflow-x-auto",
+      )}
+      aria-label="Điều hướng giáo viên"
+    >
       {items.map((item) => {
         const active = item.exact
           ? pathname === item.href
@@ -27,7 +34,8 @@ export function TeacherNav() {
             key={item.href}
             href={item.href}
             className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+              "flex items-center gap-2 rounded-lg text-sm font-medium transition-colors",
+              variant === "sidebar" ? "px-3 py-2" : "shrink-0 px-3 py-2 whitespace-nowrap",
               active
                 ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:bg-secondary hover:text-foreground",
