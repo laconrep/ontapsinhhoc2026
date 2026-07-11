@@ -1,36 +1,93 @@
-import { requireRole } from "@/lib/auth-helpers"
-import { SignOutButton } from "@/components/auth/sign-out-button"
-import { GraduationCap } from "lucide-react"
+import Link from "next/link"
+import { getClasses } from "@/app/actions/classes"
+import { getCurrentUser } from "@/lib/auth-helpers"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Users, BookOpen, Library, ArrowRight, Plus } from "lucide-react"
 
 export default async function TeacherHomePage() {
-  const user = await requireRole("teacher")
+  const user = await getCurrentUser()
+  const classes = await getClasses()
+  const totalStudents = classes.reduce((sum, c) => sum + (c.studentCount ?? 0), 0)
+
+  const stats = [
+    { label: "Lớp học", value: classes.length, icon: Users, href: "/teacher/classes" },
+    { label: "Tổng học sinh", value: totalStudents, icon: Users, href: "/teacher/classes" },
+    { label: "Bài giảng", value: "—", icon: BookOpen, href: "/teacher/lessons" },
+    { label: "Câu hỏi", value: "—", icon: Library, href: "/teacher/questions" },
+  ]
 
   return (
-    <div className="min-h-svh bg-background">
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-          <div className="flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <GraduationCap className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="font-heading font-bold leading-tight text-foreground">EduSync</p>
-              <p className="text-xs text-muted-foreground">Khu vực giáo viên</p>
-            </div>
-          </div>
-          <SignOutButton />
+    <div className="space-y-8">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="font-heading text-2xl font-bold text-foreground text-balance">
+            Chào mừng, thầy/cô {user?.name}
+          </h1>
+          <p className="mt-1 text-muted-foreground text-pretty">
+            Tổng quan hoạt động giảng dạy của bạn.
+          </p>
         </div>
-      </header>
+        <Button nativeButton={false} render={<Link href="/teacher/classes" />}>
+          <Plus className="h-4 w-4" />
+          Quản lý lớp học
+        </Button>
+      </div>
 
-      <main className="mx-auto max-w-6xl px-4 py-10">
-        <h1 className="font-heading text-2xl font-bold text-foreground text-balance">
-          Chào mừng, thầy/cô {user.name}
-        </h1>
-        <p className="mt-2 max-w-xl text-muted-foreground leading-relaxed text-pretty">
-          Xác thực và phân quyền đã hoạt động. Các chức năng quản lý lớp học, chương, bài giảng và
-          ngân hàng câu hỏi sẽ được xây dựng ở các bước tiếp theo (B4–B5).
-        </p>
-      </main>
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {stats.map((s) => {
+          const Icon = s.icon
+          return (
+            <Card key={s.label}>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  {s.label}
+                </CardTitle>
+                <Icon className="h-4 w-4 text-primary" aria-hidden="true" />
+              </CardHeader>
+              <CardContent>
+                <p className="font-heading text-3xl font-bold text-foreground">{s.value}</p>
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-heading">Lớp học gần đây</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {classes.length === 0 ? (
+            <p className="text-muted-foreground">
+              Bạn chưa có lớp học nào.{" "}
+              <Link href="/teacher/classes" className="text-primary underline">
+                Tạo lớp đầu tiên
+              </Link>
+              .
+            </p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {classes.slice(0, 5).map((c) => (
+                <li key={c.id}>
+                  <Link
+                    href={`/teacher/classes/${c.id}`}
+                    className="flex items-center justify-between py-3 transition-colors hover:text-primary"
+                  >
+                    <span>
+                      <span className="font-medium">{c.name}</span>
+                      <span className="ml-2 text-sm text-muted-foreground">
+                        {c.subject} · {c.studentCount} học sinh
+                      </span>
+                    </span>
+                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }
