@@ -26,11 +26,11 @@ export function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/sign-in">Đăng nhập</Link>
+          <Button variant="ghost" size="sm" render={<Link href="/sign-in" />}>
+            Đăng nhập
           </Button>
-          <Button size="sm" asChild>
-            <Link href="/sign-up">Bắt đầu</Link>
+          <Button size="sm" render={<Link href="/sign-up" />}>
+            Bắt đầu
           </Button>
         </div>
       </div>

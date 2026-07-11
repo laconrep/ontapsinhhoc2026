@@ -44,11 +44,9 @@ export function RoleCards() {
               ))}
             </ul>
             <div className="mt-6 pt-2">
-              <Button variant="secondary" asChild>
-                <Link href={role.href}>
-                  {role.cta}
-                  <ArrowRight className="size-4" aria-hidden="true" />
-                </Link>
+              <Button variant="secondary" render={<Link href={role.href} />}>
+                {role.cta}
+                <ArrowRight className="size-4" aria-hidden="true" />
               </Button>
             </div>
           </div>

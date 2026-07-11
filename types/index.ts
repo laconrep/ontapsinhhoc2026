@@ -5,11 +5,12 @@
  */
 
 // === Auth ===
+export type UserRole = "teacher" | "student"
 export interface User {
   id: string
   email: string
   name: string
-  role: "teacher" | "student"
+  role: UserRole
   isOnboarded: boolean
 }
 export interface AuthTokens {

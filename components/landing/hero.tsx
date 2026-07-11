@@ -21,14 +21,12 @@ export function Hero() {
         </p>
 
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <Button size="lg" asChild>
-            <Link href="/sign-up">
-              Tạo tài khoản
-              <ArrowRight className="size-4" aria-hidden="true" />
-            </Link>
+          <Button size="lg" render={<Link href="/sign-up" />}>
+            Tạo tài khoản
+            <ArrowRight className="size-4" aria-hidden="true" />
           </Button>
-          <Button size="lg" variant="outline" asChild>
-            <Link href="#features">Xem tính năng</Link>
+          <Button size="lg" variant="outline" render={<Link href="#features" />}>
+            Xem tính năng
           </Button>
         </div>
       </div>
