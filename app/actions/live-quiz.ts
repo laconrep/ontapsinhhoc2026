@@ -251,6 +251,8 @@ export async function getLiveQuizSnapshot(sessionId: string) {
         ? {
             current: current ? { correctOptionIds: current.correctOptionIds, correctText: current.correctText } : null,
             next: state.currentIndex + 1 < state.total ? maskQuestion(state.questions[state.currentIndex + 1]) : null,
+            // toàn bộ đề (đã che đáp án) để GV tính câu kế tiếp mà không phải hỏi lại server
+            outline: state.questions.map(maskQuestion),
           }
         : null,
   }

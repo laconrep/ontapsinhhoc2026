@@ -71,6 +71,8 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
   // Đồng bộ đồng hồ: offset = giờ_local - giờ_server
   const clockOffsetRef = useRef(0)
   const questionStartedAtRef = useRef<number | null>(null)
+  // toàn bộ đề (đã che đáp án) — chỉ GV có, dùng để tính câu kế tiếp
+  const outlineRef = useRef<LiveQuestionView[]>([])
   const [remainingSec, setRemainingSec] = useState<number | null>(null)
   const joinBadgeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -90,6 +92,7 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
         if (cancelled) return
         clockOffsetRef.current = Date.now() - snap.serverNow
         questionStartedAtRef.current = snap.questionStartedAt
+        outlineRef.current = (snap.teacherExtras?.outline as LiveQuestionView[]) ?? []
         setState((s) => ({
           ...s,
           loading: false,
@@ -134,16 +137,19 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
           questionStartedAtRef.current = (p.startedAt as number) ?? Date.now()
           if (typeof p.serverNow === "number") clockOffsetRef.current = Date.now() - (p.serverNow as number)
           const q = p.question as LiveQuestionView
+          const idx = (p.index as number) ?? -1
+          const next = idx >= 0 && idx + 1 < outlineRef.current.length ? outlineRef.current[idx + 1] : null
           setState((s) => ({
             ...s,
             phase: "question",
-            currentIndex: (p.index as number) ?? s.currentIndex,
+            currentIndex: idx >= 0 ? idx : s.currentIndex,
             total: (p.total as number) ?? s.total,
             question: q,
             revealed: null,
             timeLimitSec: q?.timeLimitSec ?? null,
             answers: [],
             teacherCurrentAnswer: null,
+            teacherNext: next,
           }))
           break
         }

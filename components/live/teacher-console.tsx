@@ -1,6 +1,6 @@
 "use client"
 
-import { useTransition } from "react"
+import { useEffect, useRef, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
@@ -26,6 +26,19 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
   const correctCount = view.answers.filter((a) => a.correct).length
   const wrongStudents = view.answers.filter((a) => !a.correct)
   const answeredCount = view.answers.length
+
+  // Tự hiện đáp án khi hết giờ (theo yêu cầu: GV bấm hoặc tự hết giờ đều show đáp án).
+  const autoRevealedFor = useRef<number>(-1)
+  useEffect(() => {
+    if (
+      view.phase === "question" &&
+      view.remainingSec === 0 &&
+      autoRevealedFor.current !== view.currentIndex
+    ) {
+      autoRevealedFor.current = view.currentIndex
+      revealCurrent(sessionId).catch(() => {})
+    }
+  }, [view.phase, view.remainingSec, view.currentIndex, sessionId])
 
   function run(fn: () => Promise<unknown>) {
     startTransition(async () => {

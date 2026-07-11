@@ -118,6 +118,8 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
 
   const answered = answeredId === currentQid
   const q = view.question
+  const timeUp = view.phase === "question" && view.remainingSec === 0
+  const locked = answered || view.phase !== "question" || timeUp
 
   return (
     <div className="fixed inset-0 z-50 mx-auto flex max-w-2xl flex-col gap-5 overflow-y-auto bg-background p-4 pb-28">
@@ -157,7 +159,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
                   <button
                     key={o.id}
                     type="button"
-                    disabled={answered || view.phase !== "question"}
+                    disabled={locked}
                     onClick={() => setMcChoice(o.id)}
                     className={cn(
                       "flex items-center gap-3 rounded-xl border-2 px-4 py-3 text-left text-lg transition-colors disabled:cursor-not-allowed",
@@ -202,7 +204,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
                     <div className="flex shrink-0 gap-1">
                       <button
                         type="button"
-                        disabled={answered || view.phase !== "question"}
+                        disabled={locked}
                         onClick={() => setTfChoices((s) => ({ ...s, [o.id]: true }))}
                         className={cn(
                           "rounded-lg px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed",
@@ -213,7 +215,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
                       </button>
                       <button
                         type="button"
-                        disabled={answered || view.phase !== "question"}
+                        disabled={locked}
                         onClick={() => setTfChoices((s) => ({ ...s, [o.id]: false }))}
                         className={cn(
                           "rounded-lg px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed",
@@ -235,7 +237,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
               <Input
                 value={saText}
                 onChange={(e) => setSaText(e.target.value)}
-                disabled={answered || view.phase !== "question"}
+                disabled={locked}
                 placeholder="Nhập câu trả lời…"
                 className="text-lg"
               />
@@ -262,8 +264,15 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
         </>
       )}
 
+      {/* Hết giờ mà chưa trả lời */}
+      {q && !answered && timeUp && (
+        <p className="fixed inset-x-0 bottom-0 border-t bg-card p-4 text-center font-medium text-destructive">
+          Đã hết giờ trả lời câu này
+        </p>
+      )}
+
       {/* Nút gửi cố định dưới */}
-      {q && !answered && view.phase === "question" && (
+      {q && !answered && view.phase === "question" && !timeUp && (
         <div className="fixed inset-x-0 bottom-0 border-t bg-card p-3">
           <div className="mx-auto flex max-w-2xl">
             <Button
