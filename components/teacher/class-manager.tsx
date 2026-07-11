@@ -29,6 +29,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Plus, Users, MoreVertical, Pencil, Trash2, ArrowRight } from "lucide-react"
+import { buttonVariants } from "@/components/ui/button"
 
 type ClassRow = {
   id: string
@@ -178,16 +179,13 @@ export function ClassManager({ initialClasses }: { initialClasses: ClassRow[] })
                   </code>
                 </div>
 
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="mt-4 w-full justify-between"
-                  nativeButton={false}
-                  render={<Link href={`/teacher/classes/${cls.id}`} />}
+                <Link
+                  href={`/teacher/classes/${cls.id}`}
+                  className={buttonVariants({ variant: "ghost", size: "sm" }) + " mt-4 w-full justify-between"}
                 >
                   Xem chi tiết
                   <ArrowRight className="h-4 w-4" />
-                </Button>
+                </Link>
               </CardContent>
             </Card>
           ))}
