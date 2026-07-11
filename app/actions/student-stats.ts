@@ -181,6 +181,81 @@ export async function getStudentStats(): Promise<StudentStatsDto> {
   return { streak, totalReviewed, badges, weeklyProgress, lessonProgress }
 }
 
+export interface LessonAttemptProgress {
+  lessonId: string
+  title: string
+  chapterTitle: string
+  attempts: number
+  firstScore: number
+  latestScore: number
+  bestScore: number
+  improvement: number
+  lastAttemptAt: string
+}
+
+/**
+ * Lịch sử làm bài kiểm tra theo từng bài — LƯU MỌI LẦN LÀM.
+ * Dùng để đánh giá mức tiến bộ (điểm lần mới nhất so với lần đầu).
+ */
+export async function getQuizProgress(): Promise<LessonAttemptProgress[]> {
+  const student = await requireRole("student")
+
+  const rows = await db
+    .select({
+      lessonId: quizAttempts.lessonId,
+      title: lessons.title,
+      chapterTitle: chapters.title,
+      score: quizAttempts.score,
+      maxScore: quizAttempts.maxScore,
+      completedAt: quizAttempts.completedAt,
+    })
+    .from(quizAttempts)
+    .innerJoin(lessons, eq(lessons.id, quizAttempts.lessonId))
+    .innerJoin(chapters, eq(chapters.id, lessons.chapterId))
+    .where(and(eq(quizAttempts.studentId, student.id), isNotNull(quizAttempts.completedAt)))
+    .orderBy(asc(quizAttempts.completedAt))
+
+  // Gom theo bài, quy đổi điểm về thang 10
+  const byLesson = new Map<string, LessonAttemptProgress & { _scores: number[] }>()
+  for (const r of rows) {
+    if (r.score == null || r.maxScore == null || r.maxScore <= 0) continue
+    const score10 = Math.round((r.score / r.maxScore) * 100) / 10 // thang 10, 1 chữ số
+    const key = r.lessonId
+    const existing = byLesson.get(key)
+    if (existing) {
+      existing._scores.push(score10)
+      existing.attempts += 1
+      existing.latestScore = score10
+      existing.bestScore = Math.max(existing.bestScore, score10)
+      existing.lastAttemptAt = (r.completedAt as Date).toISOString()
+    } else {
+      byLesson.set(key, {
+        lessonId: r.lessonId,
+        title: r.title,
+        chapterTitle: r.chapterTitle,
+        attempts: 1,
+        firstScore: score10,
+        latestScore: score10,
+        bestScore: score10,
+        improvement: 0,
+        lastAttemptAt: (r.completedAt as Date).toISOString(),
+        _scores: [score10],
+      })
+    }
+  }
+
+  const result: LessonAttemptProgress[] = []
+  for (const v of byLesson.values()) {
+    v.improvement = Math.round((v.latestScore - v.firstScore) * 10) / 10
+    const { _scores, ...rest } = v
+    void _scores
+    result.push(rest)
+  }
+  // Bài làm gần nhất lên đầu
+  result.sort((a, b) => b.lastAttemptAt.localeCompare(a.lastAttemptAt))
+  return result
+}
+
 function computeBadges(input: {
   streak: number
   lessonsCompleted: number

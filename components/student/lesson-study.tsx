@@ -1,11 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useTransition } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
-import { ArrowLeft, Lock } from "lucide-react"
+import { ArrowLeft, Lock, RotateCcw } from "lucide-react"
 import type { KnowledgePointDto } from "@/types"
+import { Button } from "@/components/ui/button"
+import { resetLessonProgress } from "@/app/actions/student-learn"
 import { Tab1SelfAssess } from "./tab1-self-assess"
 import { Tab2FillIn } from "./tab2-fill-in"
 import { Tab3DragDrop } from "./tab3-drag-drop"
@@ -26,9 +28,26 @@ export function LessonStudy({
   tab1Locked: boolean
   savedAssessments: Record<string, "known" | "unknown">
 }) {
+  // Khoá tab 1 (đã hoàn thành bài) — quản lý cục bộ để "Làm lại từ đầu" mở lại ngay
+  const [locked, setLocked] = useState(tab1Locked)
   // Tab đã mở khoá: nếu Tab 1 đã nộp trước đó → mở hết
   const [unlocked, setUnlocked] = useState<TabIndex>(tab1Locked ? 4 : 1)
   const [current, setCurrent] = useState<TabIndex>(tab1Locked ? 2 : 1)
+  const [resetting, startReset] = useTransition()
+
+  const handleReset = () => {
+    startReset(async () => {
+      try {
+        await resetLessonProgress(lessonId)
+        setLocked(false)
+        setUnlocked(1)
+        setCurrent(1)
+        toast.success("Đã mở lại bài học. Em có thể làm lại từ đầu!")
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Không thể làm lại")
+      }
+    })
+  }
 
   const tabs: { index: TabIndex; label: string }[] = [
     { index: 1, label: "Nội dung" },
@@ -38,8 +57,8 @@ export function LessonStudy({
   ]
 
   const goTo = (index: TabIndex) => {
-    if (index === 1 && tab1Locked) {
-      toast.info("Tab 1 đã hoàn thành và được khoá lại")
+    if (index === 1 && locked) {
+      toast.info("Tab Nội dung đã hoàn thành. Nhấn \"Làm lại từ đầu\" để mở lại.")
       return
     }
     if (index > unlocked) {
@@ -64,19 +83,31 @@ export function LessonStudy({
         >
           <ArrowLeft className="h-4 w-4" />
         </Link>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="truncate text-xs text-muted-foreground">{lesson.chapterTitle}</p>
           <h1 className="truncate font-heading text-base font-bold text-foreground">
             {lesson.title}
           </h1>
         </div>
+        {locked && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 bg-transparent"
+            onClick={handleReset}
+            disabled={resetting}
+          >
+            <RotateCcw className="h-4 w-4" />
+            {resetting ? "Đang mở..." : "Làm lại từ đầu"}
+          </Button>
+        )}
       </div>
 
       {/* Tab bar */}
       <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1">
         {tabs.map((t) => {
           const active = current === t.index
-          const locked = t.index > unlocked || (t.index === 1 && tab1Locked)
+          const tabLocked = t.index > unlocked || (t.index === 1 && locked)
           return (
             <button
               key={t.index}
@@ -86,13 +117,13 @@ export function LessonStudy({
                 "flex flex-1 items-center justify-center gap-1 rounded-md px-1 py-2 text-xs font-medium transition-colors",
                 active
                   ? "bg-primary text-primary-foreground"
-                  : locked
+                  : tabLocked
                     ? "text-muted-foreground/50"
                     : "text-muted-foreground hover:bg-secondary",
               )}
               aria-current={active ? "page" : undefined}
             >
-              {locked && <Lock className="h-3 w-3" aria-hidden="true" />}
+              {tabLocked && <Lock className="h-3 w-3" aria-hidden="true" />}
               <span>{t.label}</span>
             </button>
           )

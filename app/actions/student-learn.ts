@@ -16,6 +16,7 @@ import {
   classes,
 } from "@/lib/db/schema"
 import { requireRole } from "@/lib/auth-helpers"
+import { revalidatePath } from "next/cache"
 import { and, asc, eq, inArray, sql } from "drizzle-orm"
 import {
   computeOverallStatus,
@@ -207,6 +208,28 @@ export async function submitTab1(lessonId: string, assessments: Record<string, "
 
   const knownCount = Object.values(assessments).filter((v) => v === "known").length
   return { knownCount, total: kpIds.length }
+}
+
+/**
+ * Mở khoá để HS làm lại toàn bộ bài học từ đầu.
+ * Xoá dấu khoá Tab 1 (studentTab1Submissions) để mở lại tab Nội dung.
+ * GIỮ LẠI lịch sử điểm (quizAttempts) để thống kê tiến bộ — mỗi lần làm vẫn được lưu.
+ */
+export async function resetLessonProgress(lessonId: string): Promise<{ success: true }> {
+  const student = await requireRole("student")
+  await assertLessonAccess(student.id, lessonId)
+
+  await db
+    .delete(studentTab1Submissions)
+    .where(
+      and(
+        eq(studentTab1Submissions.studentId, student.id),
+        eq(studentTab1Submissions.lessonId, lessonId),
+      ),
+    )
+
+  revalidatePath(`/student/learn/${lessonId}`)
+  return { success: true }
 }
 
 // ============ Tab 2 — Điền khuyết ============

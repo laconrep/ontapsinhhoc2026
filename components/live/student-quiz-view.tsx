@@ -14,6 +14,7 @@ const LETTERS = ["A", "B", "C", "D", "E", "F"]
 export function StudentQuizView({ sessionId }: { sessionId: string }) {
   const view = useLiveQuiz(sessionId)
   const [joined, setJoined] = useState(false)
+  const [joinError, setJoinError] = useState<string | null>(null)
   const [, startTransition] = useTransition()
 
   // Trạng thái trả lời cục bộ theo từng câu
@@ -61,13 +62,15 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
   }, [report])
 
   async function handleJoin() {
+    setJoinError(null)
     try {
       await document.documentElement.requestFullscreen?.().catch(() => {})
       await joinQuiz(sessionId)
       setJoined(true)
       report(!!document.fullscreenElement)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Không tham gia được")
+      // Không dùng toast đỏ gây kẹt — hiện màn thông báo thân thiện có nút thử lại/quay về.
+      setJoinError(err instanceof Error ? err.message : "Không tham gia được phiên này")
     }
   }
 
@@ -87,6 +90,22 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  // ---- Màn thông báo khi không tham gia được (thay cho lỗi đỏ kẹt màn hình) ----
+  if (joinError && !joined) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-background p-6 text-center">
+        <h1 className="font-heading text-xl font-bold text-balance">Chưa vào được phiên</h1>
+        <p className="max-w-sm text-pretty text-muted-foreground">{joinError}</p>
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={() => setJoinError(null)}>
+            Thử lại
+          </Button>
+          <Button onClick={() => (window.location.href = "/student")}>Về trang chủ</Button>
+        </div>
+      </div>
+    )
   }
 
   // ---- Màn chờ tham gia ----
