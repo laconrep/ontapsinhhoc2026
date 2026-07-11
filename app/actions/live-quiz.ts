@@ -218,6 +218,138 @@ export async function startQuizSession(input: {
   return { sessionId }
 }
 
+// ---- GV: soạn phiên nháp (để dạy sau) ----
+export async function createDraftSession(input: {
+  classId: string
+  lessonId: string
+  defaultTimeSec: number
+}): Promise<{ sessionId: string }> {
+  const teacher = await requireRole("teacher")
+  const [cls] = await db
+    .select()
+    .from(classes)
+    .where(and(eq(classes.id, input.classId), eq(classes.teacherId, teacher.id)))
+    .limit(1)
+  if (!cls) throw new Error("Không tìm thấy lớp học")
+
+  const defaultTimeSec = Math.max(5, Math.min(600, Math.round(input.defaultTimeSec || 30)))
+  const qs = await loadQuizQuestions(input.lessonId, defaultTimeSec)
+  if (qs.length === 0) throw new Error("Bài học chưa có câu hỏi trắc nghiệm để trình chiếu")
+
+  const sessionId = randomUUID()
+  // status='created' => HS KHÔNG thấy (chỉ query status='active'), GV có thể kích hoạt sau.
+  await db.insert(sessions).values({
+    id: sessionId,
+    classId: input.classId,
+    teacherId: teacher.id,
+    status: "created",
+    resumeSnapshot: { lessonId: input.lessonId, defaultTimeSec, currentIndex: -1, phase: "lobby" },
+  })
+  revalidatePath(`/teacher/classes/${input.classId}`)
+  return { sessionId }
+}
+
+// ---- GV: danh sách phiên nháp của lớp ----
+export interface DraftSessionDto {
+  id: string
+  lessonTitle: string
+  chapterTitle: string
+  questionCount: number
+  defaultTimeSec: number
+  createdAt: string
+}
+
+export async function getDraftSessions(classId: string): Promise<DraftSessionDto[]> {
+  const teacher = await requireRole("teacher")
+  const rows = await db
+    .select({
+      id: sessions.id,
+      snapshot: sessions.resumeSnapshot,
+      createdAt: sessions.createdAt,
+    })
+    .from(sessions)
+    .where(
+      and(
+        eq(sessions.classId, classId),
+        eq(sessions.teacherId, teacher.id),
+        eq(sessions.status, "created"),
+      ),
+    )
+    .orderBy(asc(sessions.createdAt))
+
+  const drafts: DraftSessionDto[] = []
+  for (const r of rows) {
+    const snap = (r.snapshot as { lessonId?: string; defaultTimeSec?: number } | null) ?? null
+    if (!snap?.lessonId) continue
+    const [lesson] = await db
+      .select({ title: lessons.title, chapterTitle: chapters.title })
+      .from(lessons)
+      .innerJoin(chapters, eq(chapters.id, lessons.chapterId))
+      .where(eq(lessons.id, snap.lessonId))
+      .limit(1)
+    if (!lesson) continue
+    const qs = await loadQuizQuestions(snap.lessonId, snap.defaultTimeSec ?? 30)
+    drafts.push({
+      id: r.id,
+      lessonTitle: lesson.title,
+      chapterTitle: lesson.chapterTitle,
+      questionCount: qs.length,
+      defaultTimeSec: snap.defaultTimeSec ?? 30,
+      createdAt: r.createdAt.toISOString(),
+    })
+  }
+  return drafts
+}
+
+// ---- GV: kích hoạt phiên nháp thành phiên đang dạy ----
+export async function activateDraftSession(sessionId: string): Promise<{ sessionId: string }> {
+  const teacher = await requireRole("teacher")
+  const [s] = await db
+    .select()
+    .from(sessions)
+    .where(and(eq(sessions.id, sessionId), eq(sessions.teacherId, teacher.id)))
+    .limit(1)
+  if (!s) throw new Error("Không tìm thấy phiên")
+  if (s.status !== "created") throw new Error("Phiên này không còn ở trạng thái nháp")
+
+  const snap = (s.resumeSnapshot as { lessonId?: string; defaultTimeSec?: number } | null) ?? null
+  if (!snap?.lessonId) throw new Error("Phiên nháp không hợp lệ")
+  const qs = await loadQuizQuestions(snap.lessonId, snap.defaultTimeSec ?? 30)
+  if (qs.length === 0) throw new Error("Bài học không còn câu hỏi để trình chiếu")
+
+  // Kết thúc phiên active cũ của lớp
+  await db
+    .update(sessions)
+    .set({ status: "ended", endedAt: new Date() })
+    .where(and(eq(sessions.classId, s.classId), eq(sessions.status, "active")))
+
+  await db
+    .update(sessions)
+    .set({
+      status: "active",
+      resumeSnapshot: { lessonId: snap.lessonId, defaultTimeSec: snap.defaultTimeSec ?? 30, currentIndex: -1, phase: "lobby" },
+      lastActivityAt: new Date(),
+    })
+    .where(eq(sessions.id, sessionId))
+  initLiveState(sessionId, qs)
+  revalidatePath(`/teacher/classes/${s.classId}`)
+  return { sessionId }
+}
+
+// ---- GV: xoá phiên nháp ----
+export async function deleteDraftSession(sessionId: string): Promise<void> {
+  const teacher = await requireRole("teacher")
+  const [s] = await db
+    .select({ classId: sessions.classId, status: sessions.status })
+    .from(sessions)
+    .where(and(eq(sessions.id, sessionId), eq(sessions.teacherId, teacher.id)))
+    .limit(1)
+  if (!s) throw new Error("Không tìm thấy phiên")
+  if (s.status !== "created") throw new Error("Chỉ xoá được phiên nháp")
+  await db.delete(sessions).where(eq(sessions.id, sessionId))
+  revalidatePath(`/teacher/classes/${s.classId}`)
+}
+
 // ---- Snapshot cho client khi kết nối ----
 export async function getLiveQuizSnapshot(sessionId: string) {
   const user = await getCurrentUser()

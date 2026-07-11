@@ -2,6 +2,7 @@ import { notFound } from "next/navigation"
 import { getClassDetail } from "@/app/actions/classes"
 import { getClassStats } from "@/app/actions/class-stats"
 import { getActiveSessionForClass } from "@/app/actions/sessions"
+import { getDraftSessions } from "@/app/actions/live-quiz"
 import { ClassDetail } from "@/components/teacher/class-detail"
 import { ClassStatsPanel } from "@/components/teacher/class-stats-panel"
 import { SessionControl } from "@/components/teacher/session-control"
@@ -15,15 +16,16 @@ export default async function ClassDetailPage({
 }) {
   const { id } = await params
   try {
-    const [cls, stats, activeSession] = await Promise.all([
+    const [cls, stats, activeSession, drafts] = await Promise.all([
       getClassDetail(id),
       getClassStats(id),
       getActiveSessionForClass(id),
+      getDraftSessions(id),
     ])
     return (
       <div className="flex flex-col gap-8">
         <ClassDetail cls={cls} />
-        <SessionControl classId={cls.id} activeSession={activeSession} />
+        <SessionControl classId={cls.id} activeSession={activeSession} drafts={drafts} />
         <ClassStatsPanel stats={stats} />
       </div>
     )
