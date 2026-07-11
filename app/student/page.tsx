@@ -1,36 +1,49 @@
-import { requireRole } from "@/lib/auth-helpers"
-import { SignOutButton } from "@/components/auth/sign-out-button"
-import { BookOpen } from "lucide-react"
+import { getMyClasses } from "@/app/actions/student-class"
+import { JoinClassCard } from "@/components/student/join-class-card"
+import { Users } from "lucide-react"
 
 export default async function StudentHomePage() {
-  const user = await requireRole("student")
+  const classes = await getMyClasses()
 
   return (
-    <div className="min-h-svh bg-background">
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-          <div className="flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <BookOpen className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="font-heading font-bold leading-tight text-foreground">EduSync</p>
-              <p className="text-xs text-muted-foreground">Khu vực học sinh</p>
-            </div>
-          </div>
-          <SignOutButton />
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-6xl px-4 py-10">
-        <h1 className="font-heading text-2xl font-bold text-foreground text-balance">
-          Chào bạn, {user.name}
-        </h1>
-        <p className="mt-2 max-w-xl text-muted-foreground leading-relaxed text-pretty">
-          Xác thực và phân quyền đã hoạt động. Chức năng tham gia lớp, ôn tập bài học và làm bài
-          kiểm tra sẽ được xây dựng ở các bước tiếp theo (B6–B7).
+    <div className="flex flex-col gap-6">
+      <div>
+        <h1 className="font-heading text-xl font-bold text-foreground text-balance">Trang chủ</h1>
+        <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
+          Tham gia lớp bằng mã mời để bắt đầu học.
         </p>
-      </main>
+      </div>
+
+      <JoinClassCard />
+
+      <section aria-labelledby="my-classes-heading" className="flex flex-col gap-3">
+        <h2 id="my-classes-heading" className="font-heading text-sm font-semibold text-foreground">
+          Lớp của tôi
+        </h2>
+        {classes.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border bg-card p-6 text-center">
+            <Users className="mx-auto h-8 w-8 text-muted-foreground" aria-hidden="true" />
+            <p className="mt-2 text-sm text-muted-foreground">
+              Bạn chưa tham gia lớp nào. Nhập mã mời phía trên.
+            </p>
+          </div>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {classes.map((c) => (
+              <li
+                key={c.id}
+                className="rounded-xl border border-border bg-card p-4"
+              >
+                <p className="font-heading font-semibold text-foreground">{c.name}</p>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  {c.subject} · {c.schoolYear}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">Giáo viên: {c.teacherName}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   )
 }
