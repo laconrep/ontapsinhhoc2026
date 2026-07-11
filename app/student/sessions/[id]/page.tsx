@@ -4,7 +4,7 @@ import { db } from "@/lib/db"
 import { classStudents } from "@/lib/db/schema"
 import { getSession } from "@/app/actions/sessions"
 import { getCurrentUser } from "@/lib/auth-helpers"
-import { StudentSession } from "@/components/student/student-session"
+import { StudentQuizView } from "@/components/live/student-quiz-view"
 
 export const dynamic = "force-dynamic"
 
@@ -28,11 +28,5 @@ export default async function StudentSessionPage({
     .limit(1)
   if (member.length === 0) notFound()
 
-  return (
-    <StudentSession
-      sessionId={session.id}
-      className={session.className}
-      status={session.status}
-    />
-  )
+  return <StudentQuizView sessionId={session.id} />
 }

@@ -92,7 +92,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
   // ---- Màn chờ tham gia ----
   if (!joined) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-6 p-6 text-center">
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-background p-6 text-center">
         <div>
           <h1 className="font-heading text-2xl font-bold">{view.className || "Phiên trình chiếu"}</h1>
           <p className="mt-2 text-muted-foreground">
@@ -109,7 +109,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
 
   if (view.phase === "ended") {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 p-6 text-center">
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-background p-6 text-center">
         <h1 className="font-heading text-2xl font-bold">Phiên đã kết thúc</h1>
         <p className="text-muted-foreground">Cảm ơn em đã tham gia!</p>
       </div>
@@ -120,7 +120,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
   const q = view.question
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-2xl flex-col gap-5 p-4 pb-24">
+    <div className="fixed inset-0 z-50 mx-auto flex max-w-2xl flex-col gap-5 overflow-y-auto bg-background p-4 pb-28">
       {/* Thanh trên: tiến độ + đồng hồ */}
       <div className="flex items-center justify-between">
         <span className="rounded-full bg-secondary px-3 py-1 text-sm font-medium text-secondary-foreground">
