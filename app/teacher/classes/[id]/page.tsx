@@ -15,12 +15,31 @@ export default async function ClassDetailPage({
 }) {
   const { id } = await params
   
+  // Get class (required)
   const cls = await getClassDetail(id)
-  const [stats, activeSession, drafts] = await Promise.all([
-    getClassStats(id),
-    getActiveSessionForClass(id),
-    getDraftSessions(id),
-  ])
+  
+  // Get optional data with fallbacks
+  let stats = { totalStudents: 0, averageScore: 0, completedQuizzes: 0 }
+  let activeSession = null
+  let drafts: any[] = []
+  
+  try {
+    stats = await getClassStats(id)
+  } catch (err) {
+    console.error("[v0] getClassStats error:", err)
+  }
+  
+  try {
+    activeSession = await getActiveSessionForClass(id)
+  } catch (err) {
+    console.error("[v0] getActiveSessionForClass error:", err)
+  }
+  
+  try {
+    drafts = await getDraftSessions(id)
+  } catch (err) {
+    console.error("[v0] getDraftSessions error:", err)
+  }
   
   return (
     <div className="flex flex-col gap-8">
