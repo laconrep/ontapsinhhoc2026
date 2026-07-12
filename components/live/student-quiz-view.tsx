@@ -112,15 +112,16 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
 
   // ---- Màn chờ tham gia ----
   if (!joined) {
+    const className = view.className || "Phiên trình chiếu"
     return (
       <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-background p-6 text-center">
         <div>
-          <h1 className="font-heading text-2xl font-bold">{view.className || "Phiên trình chiếu"}</h1>
+          <h1 className="font-heading text-2xl font-bold text-balance">{className}</h1>
           <p className="mt-2 text-muted-foreground">
             Nhấn để tham gia. Ứng dụng sẽ chuyển sang chế độ toàn màn hình để tập trung làm bài.
           </p>
         </div>
-        <Button size="lg" onClick={handleJoin} disabled={view.phase === "ended"}>
+        <Button size="lg" onClick={handleJoin} disabled={view?.phase === "ended"}>
           <Maximize className="h-5 w-5" />
           Tham gia & vào toàn màn hình
         </Button>
@@ -141,6 +142,16 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
   const q = view.question
   const timeUp = view.phase === "question" && view.remainingSec === 0
   const locked = answered || view.phase !== "question" || timeUp
+
+  // Safety check - không render quiz nếu không có câu hỏi khi đang trong phase question
+  if (view.phase === "question" && !q) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-background p-6 text-center">
+        <h1 className="font-heading text-xl font-bold">Đang tải câu hỏi...</h1>
+        <p className="text-muted-foreground">Vui lòng chờ giáo viên bắt đầu câu hỏi.</p>
+      </div>
+    )
+  }
 
   return (
     <>
