@@ -379,23 +379,50 @@ export async function getLiveQuizSnapshot(sessionId: string) {
     .limit(1)
   if (!s) throw new Error("Không tìm thấy phiên")
 
+  // state null = phiên không có câu hỏi hợp lệ (không phải "ended")
+  // Chỉ trả về "ended" nếu session status là "completed"
+  if (!state) {
+    if (s.status === "completed") {
+      return {
+        sessionId,
+        className: s.className,
+        status: s.status,
+        isTeacher: s.teacherId === user.id,
+        phase: "ended" as const,
+        currentIndex: -1,
+        total: 0,
+        questionStartedAt: null,
+        serverNow: Date.now(),
+        joinedCount: 0,
+        answers: [],
+        notFullscreen: [],
+        question: null,
+        revealed: null,
+        teacherExtras: null,
+      }
+    }
+    // status khác "completed" nhưng state null = lỗi
+    console.error("[v0] getLiveQuizSnapshot: state is null but status is", s.status)
+    throw new Error("Phiên không thể tải. Vui lòng kiểm tra lại.")
+  }
+
   const isTeacher = s.teacherId === user.id
-  const current = state && state.currentIndex >= 0 ? state.questions[state.currentIndex] : null
+  const current = state.currentIndex >= 0 ? state.questions[state.currentIndex] : null
 
   return {
     sessionId,
     className: s.className,
     status: s.status,
     isTeacher,
-    ...(state ? serializeState(state) : { phase: "ended" as const, currentIndex: -1, total: 0, questionStartedAt: null, serverNow: Date.now(), joinedCount: 0, answers: [], notFullscreen: [] }),
+    ...serializeState(state),
     // câu hiện tại (HS: che đáp án; GV: kèm đáp án + câu kế tiếp)
     question: current ? maskQuestion(current) : null,
     revealed:
-      state?.phase === "revealed" && current
+      state.phase === "revealed" && current
         ? { correctOptionIds: current.correctOptionIds, correctText: current.correctText }
         : null,
     teacherExtras:
-      isTeacher && state
+      isTeacher
         ? {
             current: current ? { correctOptionIds: current.correctOptionIds, correctText: current.correctText } : null,
             next: state.currentIndex + 1 < state.total ? maskQuestion(state.questions[state.currentIndex + 1]) : null,
@@ -429,7 +456,7 @@ export async function goToQuestion(sessionId: string, index: number): Promise<vo
   const snap = (session.resumeSnapshot as { lessonId: string; defaultTimeSec: number }) ?? { lessonId: "", defaultTimeSec: 30 }
   await persistSnapshot(sessionId, snap.lessonId, snap.defaultTimeSec, state)
   
-  // LUÔN await emit() để đảm bảo publish broadcast xong trước khi hàm return
+  // LUÔN await emit() để đ��m bảo publish broadcast xong trước khi hàm return
   await emit(sessionId, "question_changed", {
     questionId: q.id,
     payload: {
