@@ -1,4 +1,3 @@
-import { notFound } from "next/navigation"
 import { getClassDetail } from "@/app/actions/classes"
 import { getClassStats } from "@/app/actions/class-stats"
 import { getActiveSessionForClass } from "@/app/actions/sessions"
@@ -15,21 +14,19 @@ export default async function ClassDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  try {
-    const [cls, stats, activeSession, drafts] = await Promise.all([
-      getClassDetail(id),
-      getClassStats(id),
-      getActiveSessionForClass(id),
-      getDraftSessions(id),
-    ])
-    return (
-      <div className="flex flex-col gap-8">
-        <ClassDetail cls={cls} />
-        <SessionControl classId={cls.id} activeSession={activeSession} drafts={drafts} />
-        <ClassStatsPanel stats={stats} />
-      </div>
-    )
-  } catch {
-    notFound()
-  }
+  
+  const cls = await getClassDetail(id)
+  const [stats, activeSession, drafts] = await Promise.all([
+    getClassStats(id),
+    getActiveSessionForClass(id),
+    getDraftSessions(id),
+  ])
+  
+  return (
+    <div className="flex flex-col gap-8">
+      <ClassDetail cls={cls} />
+      <SessionControl classId={cls.id} activeSession={activeSession} drafts={drafts} />
+      <ClassStatsPanel stats={stats} />
+    </div>
+  )
 }
