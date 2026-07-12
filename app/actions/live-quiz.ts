@@ -130,12 +130,18 @@ async function ensureLiveState(sessionId: string): Promise<LiveSessionState | nu
   const snap = (s.resumeSnapshot as { lessonId?: string; defaultTimeSec?: number; currentIndex?: number; phase?: string } | null) ?? null
   if (!snap?.lessonId) return null
 
-  const qs = await loadQuizQuestions(snap.lessonId, snap.defaultTimeSec ?? 30)
-  const state = initLiveState(sessionId, qs)
-  state.currentIndex = snap.currentIndex ?? -1
-  state.phase = (snap.phase as LiveSessionState["phase"]) ?? "lobby"
-  if (state.currentIndex >= 0 && state.phase === "question") state.questionStartedAt = Date.now()
-  return state
+  try {
+    const qs = await loadQuizQuestions(snap.lessonId, snap.defaultTimeSec ?? 30)
+    if (!qs || qs.length === 0) return null
+    const state = initLiveState(sessionId, qs)
+    state.currentIndex = snap.currentIndex ?? -1
+    state.phase = (snap.phase as LiveSessionState["phase"]) ?? "lobby"
+    if (state.currentIndex >= 0 && state.phase === "question") state.questionStartedAt = Date.now()
+    return state
+  } catch (err) {
+    console.error("[v0] ensureLiveState error loading questions:", err)
+    return null
+  }
 }
 
 async function persistSnapshot(sessionId: string, lessonId: string, defaultTimeSec: number, state: LiveSessionState) {
@@ -422,6 +428,8 @@ export async function goToQuestion(sessionId: string, index: number): Promise<vo
   const q = state.questions[index]
   const snap = (session.resumeSnapshot as { lessonId: string; defaultTimeSec: number }) ?? { lessonId: "", defaultTimeSec: 30 }
   await persistSnapshot(sessionId, snap.lessonId, snap.defaultTimeSec, state)
+  
+  // LUÔN await emit() để đảm bảo publish broadcast xong trước khi hàm return
   await emit(sessionId, "question_changed", {
     questionId: q.id,
     payload: {
@@ -464,15 +472,18 @@ export async function endQuizSession(sessionId: string): Promise<void> {
 export async function joinQuiz(sessionId: string): Promise<void> {
   const student = await requireRole("student")
   const state = await ensureLiveState(sessionId)
-  if (!state) throw new Error("Phiên không hoạt động")
+  if (!state) {
+    console.error("[v0] joinQuiz: ensureLiveState returned null for", sessionId)
+    throw new Error("Phiên học không tồn tại hoặc đã kết thúc")
+  }
   // xác thực thuộc lớp
   const [ok] = await db
-    .select({ studentId: classStudents.studentId })
-    .from(sessions)
-    .innerJoin(classStudents, eq(classStudents.classId, sessions.classId))
-    .where(and(eq(sessions.id, sessionId), eq(classStudents.studentId, student.id)))
-    .limit(1)
-  if (!ok) throw new Error("Bạn không thuộc lớp của phiên này")
+  .select({ studentId: classStudents.studentId })
+  .from(sessions)
+  .innerJoin(classStudents, eq(classStudents.classId, sessions.classId))
+  .where(and(eq(sessions.id, sessionId), eq(classStudents.studentId, student.id)))
+  .limit(1)
+  if (!ok) throw new Error("Bạn không được phép vào phiên này. Vui lòng kiểm tra xem bạn có thuộc lớp không.")
 
   state.joined.set(student.id, { name: student.name, online: true })
   const joinedCount = [...state.joined.values()].filter((s) => s.online).length
