@@ -1,7 +1,7 @@
 "use server"
 
 import { randomUUID } from "crypto"
-import { and, asc, eq, inArray, isNotNull } from "drizzle-orm"
+import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { db } from "@/lib/db"
 import {
