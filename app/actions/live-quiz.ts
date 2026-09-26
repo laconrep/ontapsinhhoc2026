@@ -47,7 +47,7 @@ async function emit(
     studentId: opts.studentId ?? null,
     studentName: opts.studentName ?? null,
     questionId: opts.questionId ?? null,
-    type,
+    eventType: type,
     payload: opts.payload ?? null,
     createdAt,
   }
@@ -56,7 +56,7 @@ async function emit(
   // Phát event ngay đến tất cả subscriber (realtime in-memory)
   publish(sessionId, {
     id: event.id,
-    type: event.type,
+    type,
     studentId: event.studentId,
     studentName: event.studentName,
     questionId: event.questionId,
@@ -382,7 +382,7 @@ export async function getLiveQuizSnapshot(sessionId: string) {
   // state null = phiên không có câu hỏi hợp lệ (không phải "ended")
   // Chỉ trả về "ended" nếu session status là "completed"
   if (!state) {
-    if (s.status === "completed") {
+    if (s.status === "ended") {
       return {
         sessionId,
         className: s.className,

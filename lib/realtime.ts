@@ -7,6 +7,7 @@ export interface RealtimeEvent {
   type: string
   studentId?: string | null
   studentName?: string | null
+  questionId?: string | null
   payload?: Record<string, unknown> | null
   createdAt: string
 }
