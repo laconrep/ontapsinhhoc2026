@@ -394,6 +394,7 @@ export async function getLiveQuizSnapshot(sessionId: string) {
         questionStartedAt: null,
         serverNow: Date.now(),
         joinedCount: 0,
+        joined: [],
         answers: [],
         notFullscreen: [],
         question: null,

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useTransition } from "react"
+import { useEffect, useMemo, useRef, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
@@ -12,6 +12,7 @@ import {
   Square,
   Check,
   X,
+  Minus,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { QuizStage } from "./quiz-stage"
@@ -23,11 +24,19 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
   const view = useLiveQuiz(sessionId)
   const [pending, startTransition] = useTransition()
 
-  const correctCount = view.answers.filter((a) => a.correct).length
+  const correctStudents = view.answers.filter((a) => a.correct)
   const wrongStudents = view.answers.filter((a) => !a.correct)
-  const answeredCount = view.answers.length
+  const answeredIds = useMemo(
+    () => new Set(view.answers.map((a) => a.studentId)),
+    [view.answers],
+  )
+  const unansweredStudents = view.joined.filter((s) => !answeredIds.has(s.studentId))
+  const unansweredCount =
+    view.joined.length > 0
+      ? unansweredStudents.length
+      : Math.max(0, view.joinedCount - view.answers.length)
+  const followUpNames = [...wrongStudents, ...unansweredStudents]
 
-  // Tự hiện đáp án khi hết giờ (theo yêu cầu: GV bấm hoặc tự hết giờ đều show đáp án).
   const autoRevealedFor = useRef<number>(-1)
   useEffect(() => {
     if (
@@ -65,109 +74,65 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-background">
-      {/* Hàng trên: sân khấu + panel kết quả */}
-      <div className="flex min-h-0 flex-1">
-        <div className="min-h-0 flex-1">
-          <QuizStage view={view} />
-        </div>
+    <div className="flex h-full min-h-0 overflow-hidden bg-background">
+      <div className="relative min-h-0 min-w-0 flex-1">
+        <QuizStage view={view} />
 
-        {/* Panel đúng/sai (góc phải) */}
-        <aside className="flex w-72 shrink-0 flex-col border-l bg-card">
-          <div className="border-b p-4">
-            <p className="text-sm font-medium text-muted-foreground">{view.className}</p>
-            <p className="text-xs text-muted-foreground">
-              {view.connected ? "Đã kết nối" : "Đang kết nối…"} · {view.joinedCount} HS tham gia
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-2 p-4">
-            <div className="flex flex-col items-center rounded-lg bg-primary/10 py-3">
-              <span className="flex items-center gap-1 text-2xl font-bold text-primary">
-                <Check className="h-5 w-5" />
-                {correctCount}
-              </span>
-              <span className="text-xs text-muted-foreground">Đúng</span>
-            </div>
-            <div className="flex flex-col items-center rounded-lg bg-destructive/10 py-3">
-              <span className="flex items-center gap-1 text-2xl font-bold text-destructive">
-                <X className="h-5 w-5" />
-                {wrongStudents.length}
-              </span>
-              <span className="text-xs text-muted-foreground">Sai</span>
-            </div>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-            <p className="mb-2 text-xs font-medium text-muted-foreground">
-              Học sinh trả lời sai ({wrongStudents.length})
-            </p>
-            <ul className="flex flex-col gap-1">
-              {wrongStudents.map((s) => (
-                <li
-                  key={s.studentId}
-                  className="rounded-md bg-destructive/5 px-2 py-1 text-sm text-foreground"
-                >
-                  {s.name}
-                </li>
-              ))}
-              {wrongStudents.length === 0 && (
-                <li className="text-sm text-muted-foreground">
-                  {answeredCount > 0 ? "Chưa có ai trả lời sai" : "Chưa có câu trả lời"}
-                </li>
-              )}
-            </ul>
-          </div>
-        </aside>
-      </div>
-
-      {/* Hàng dưới: điều khiển (bên trái) + câu kế tiếp (bên dưới, góc phải) */}
-      <div className="grid shrink-0 grid-cols-[1fr_auto] gap-4 border-t bg-card px-4 py-3">
-        {/* Điều khiển (bên trái, chiếm full height) */}
-        <div className="flex shrink-0 flex-wrap items-center gap-2 self-center">
+        <div className="absolute inset-x-0 bottom-0 z-30 flex flex-wrap items-center justify-center gap-1.5 bg-gradient-to-t from-background/80 to-transparent px-3 pb-3 pt-8">
           <Button
+            size="sm"
             variant="outline"
             onClick={() => run(() => goToQuestion(sessionId, view.currentIndex - 1))}
             disabled={pending || atStart || notStarted}
           >
             <ChevronLeft className="h-4 w-4" />
-            Câu trước
+            Trước
           </Button>
 
           {view.phase === "question" && (
             <Button
+              size="sm"
               variant="secondary"
               onClick={() => run(() => revealCurrent(sessionId))}
               disabled={pending}
             >
               <Eye className="h-4 w-4" />
-              Hiện đáp án
+              Đáp án
             </Button>
           )}
 
           {notStarted ? (
-            <Button onClick={() => run(() => goToQuestion(sessionId, 0))} disabled={pending || view.total === 0}>
+            <Button
+              size="sm"
+              onClick={() => run(() => goToQuestion(sessionId, 0))}
+              disabled={pending || view.total === 0}
+            >
               <Play className="h-4 w-4" />
               Bắt đầu
             </Button>
           ) : (
             <Button
+              size="sm"
               onClick={() => run(() => goToQuestion(sessionId, view.currentIndex + 1))}
               disabled={pending || atEnd}
             >
-              Câu tiếp theo
+              Tiếp
               <ChevronRight className="h-4 w-4" />
             </Button>
           )}
 
           <Button
+            size="sm"
             variant="outline"
             nativeButton={false}
             render={<a href={`/teacher/sessions/${sessionId}/present`} target="_blank" rel="noreferrer" />}
           >
             <Monitor className="h-4 w-4" />
-            Màn hình trình chiếu
+            TV
           </Button>
 
           <Button
+            size="sm"
             variant="destructive"
             onClick={() => {
               if (confirm("Kết thúc phiên trình chiếu?")) run(() => endQuizSession(sessionId))
@@ -178,15 +143,104 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
             Kết thúc
           </Button>
         </div>
-
-        {/* Câu tiếp theo (góc dưới phải) */}
-        <div className="flex min-w-0 flex-col justify-end rounded-lg bg-muted px-4 py-3">
-          <p className="text-sm font-semibold text-muted-foreground">Câu tiếp theo</p>
-          <p className="line-clamp-3 text-sm leading-relaxed text-foreground">
-            {view.teacherNext ? view.teacherNext.content : atEnd ? "Đây là câu cuối cùng" : "—"}
-          </p>
-        </div>
       </div>
+
+      <aside className="flex w-36 shrink-0 flex-col border-l bg-card">
+        <div className="flex min-h-0 flex-[2] flex-col overflow-hidden">
+          <div className="border-b px-2 py-1.5">
+            <p className="truncate text-[11px] font-medium text-muted-foreground">{view.className}</p>
+            <p className="text-[10px] text-muted-foreground">
+              {view.connected ? "Đã kết nối" : "Đang kết nối…"} · {view.joinedCount} HS
+            </p>
+          </div>
+
+          <div className="grid grid-cols-3 gap-1 px-1.5 py-1.5">
+            <div className="flex flex-col items-center rounded-md bg-primary/10 py-1">
+              <span className="flex items-center gap-0.5 text-sm font-bold text-primary">
+                <Check className="h-3 w-3" />
+                {correctStudents.length}
+              </span>
+              <span className="text-[9px] text-muted-foreground">Đúng</span>
+            </div>
+            <div className="flex flex-col items-center rounded-md bg-destructive/10 py-1">
+              <span className="flex items-center gap-0.5 text-sm font-bold text-destructive">
+                <X className="h-3 w-3" />
+                {wrongStudents.length}
+              </span>
+              <span className="text-[9px] text-muted-foreground">Sai</span>
+            </div>
+            <div className="flex flex-col items-center rounded-md bg-muted py-1">
+              <span className="flex items-center gap-0.5 text-sm font-bold text-muted-foreground">
+                <Minus className="h-3 w-3" />
+                {unansweredCount}
+              </span>
+              <span className="text-[9px] text-muted-foreground">Chưa</span>
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
+            <p className="mb-1 text-[10px] font-medium text-muted-foreground">
+              Sai / chưa trả lời ({followUpNames.length})
+            </p>
+            <ul className="flex flex-col gap-0.5">
+              {wrongStudents.map((s) => (
+                <li
+                  key={`w-${s.studentId}`}
+                  className="truncate rounded bg-destructive/5 px-1.5 py-0.5 text-[11px] text-foreground"
+                  title={s.name}
+                >
+                  {s.name}
+                </li>
+              ))}
+              {unansweredStudents.map((s) => (
+                <li
+                  key={`u-${s.studentId}`}
+                  className="truncate rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
+                  title={s.name}
+                >
+                  {s.name}
+                </li>
+              ))}
+              {followUpNames.length === 0 && (
+                <li className="text-[11px] text-muted-foreground">
+                  {view.answers.length > 0 ? "Tất cả đã đúng" : "Chưa có câu trả lời"}
+                </li>
+              )}
+            </ul>
+          </div>
+        </div>
+
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t bg-muted/70 p-1.5">
+          <p className="mb-1 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+            Câu tiếp theo
+          </p>
+          <div className="min-h-0 flex-1 overflow-hidden rounded-md border border-border/60 bg-background p-1.5 shadow-inner">
+            {view.teacherNext ? (
+              <div className="flex h-full flex-col gap-1 overflow-hidden">
+                <span className="w-fit rounded-full bg-primary/15 px-1.5 py-px text-[9px] font-semibold text-primary">
+                  Câu {view.currentIndex + 2}/{view.total}
+                </span>
+                <p className="line-clamp-4 text-[11px] leading-snug font-medium text-foreground">
+                  {view.teacherNext.content}
+                </p>
+                {view.teacherNext.type !== "SA" && view.teacherNext.options.length > 0 && (
+                  <ul className="mt-auto space-y-0.5 overflow-hidden">
+                    {view.teacherNext.options.slice(0, 4).map((o, i) => (
+                      <li key={o.id} className="truncate text-[9px] text-muted-foreground">
+                        {["A", "B", "C", "D"][i]}. {o.content}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">
+                {atEnd ? "Đây là câu cuối cùng" : "—"}
+              </p>
+            )}
+          </div>
+        </div>
+      </aside>
     </div>
   )
 }

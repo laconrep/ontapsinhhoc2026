@@ -102,6 +102,11 @@ export function serializeState(state: LiveSessionState) {
     questionStartedAt: state.questionStartedAt,
     serverNow: Date.now(),
     joinedCount: [...state.joined.values()].filter((s) => s.online).length,
+    joined: [...state.joined.entries()].map(([studentId, s]) => ({
+      studentId,
+      name: s.name,
+      online: s.online,
+    })),
     answers: [...state.answers.values()].map((a) => ({
       studentId: a.studentId,
       name: a.name,

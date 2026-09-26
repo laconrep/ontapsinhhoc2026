@@ -19,6 +19,12 @@ export interface AnswerTally {
   correct: boolean
 }
 
+export interface JoinedStudent {
+  studentId: string
+  name: string
+  online: boolean
+}
+
 export interface RevealInfo {
   correctOptionIds: string[]
   correctText: string | null
@@ -37,6 +43,7 @@ export interface LiveQuizView {
   remainingSec: number | null
   timeLimitSec: number | null
   joinedCount: number
+  joined: JoinedStudent[]
   showJoinBadge: boolean
   answers: AnswerTally[]
   notFullscreen: { studentId: string; name: string }[]
@@ -61,6 +68,7 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
     revealed: null,
     timeLimitSec: null,
     joinedCount: 0,
+    joined: [],
     showJoinBadge: false,
     answers: [],
     notFullscreen: [],
@@ -105,6 +113,7 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
           revealed: snap.revealed,
           timeLimitSec: snap.question?.timeLimitSec ?? null,
           joinedCount: snap.joinedCount,
+          joined: snap.joined ?? [],
           answers: snap.answers,
           notFullscreen: snap.notFullscreen,
           teacherNext: snap.teacherExtras?.next ?? null,
@@ -169,7 +178,19 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
           break
         }
         case "student_joined": {
-          setState((s) => ({ ...s, joinedCount: (p.joinedCount as number) ?? s.joinedCount + 1 }))
+          setState((s) => {
+            const id = ev.studentId
+            const name = ev.studentName ?? "Học sinh"
+            const rest = id ? s.joined.filter((j) => j.studentId !== id) : s.joined
+            const joined = id
+              ? [...rest, { studentId: id, name, online: true }]
+              : s.joined
+            return {
+              ...s,
+              joinedCount: (p.joinedCount as number) ?? joined.filter((j) => j.online).length,
+              joined,
+            }
+          })
           flashJoinBadge()
           break
         }
@@ -177,9 +198,15 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
           if (!ev.studentId) break
           setState((s) => {
             const rest = s.answers.filter((a) => a.studentId !== ev.studentId)
+            const name = ev.studentName ?? "Học sinh"
+            const joined = s.joined.some((j) => j.studentId === ev.studentId)
+              ? s.joined
+              : [...s.joined, { studentId: ev.studentId!, name, online: true }]
             return {
               ...s,
-              answers: [...rest, { studentId: ev.studentId!, name: ev.studentName ?? "Học sinh", correct: !!p.correct }],
+              joined,
+              joinedCount: Math.max(s.joinedCount, joined.length),
+              answers: [...rest, { studentId: ev.studentId!, name, correct: !!p.correct }],
             }
           })
           break
