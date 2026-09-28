@@ -1,31 +1,46 @@
 {Chương I - Cơ sở vật chất di truyền}
 [ADN và ARN]
 - ADN là đại phân tử cấu tạo theo nguyên tắc __đa phân__, đơn phân là __nucleotide__.
-# ADN có cấu trúc không gian dạng gì?
-+ *Xoắn kép
-+ Mạch thẳng
-+ Vòng tròn
-+ Xoắn ba
-## Chọn đúng/sai cho các phát biểu sau về ADN:
-+ a) ADN có cấu trúc gồm hai mạch = Đúng
-+ b) Đơn phân của ADN là axit amin = Sai
-+ c) ADN có trong nhân tế bào = Đúng
-+ d) ADN chỉ có một mạch đơn = Sai
-### Đơn phân của ADN được gọi là gì? = nucleotide
+#
+cau: ADN có cấu trúc không gian dạng gì?
+A. Mạch thẳng
+__B. Xoắn kép__
+C. Vòng tròn
+D. Xoắn ba
+
+##
+cau: Chọn đúng/sai về ADN:
+a. ADN có hai mạch
+__b. Đơn phân của ADN là nucleotide__
+c. ADN chỉ có một mạch đơn
+d. ADN không có trong nhân
+
+###
+cau: Đơn phân của ADN được gọi là gì?
+dap an: nucleotide
 - Hai mạch của ADN liên kết theo nguyên tắc "bổ sung", trong đó A liên kết với "T" và G liên kết với "X".
 
 // ============================================================
-// HƯỚNG DẪN CÚ PHÁP (các dòng bắt đầu bằng // sẽ được bỏ qua)
+// HUONG DAN CU PHAP (cac dong bat dau bang // se duoc bo qua)
 // ============================================================
-// {Tên chương}                -> Tiêu đề chương
-// [Tên bài]                   -> Tiêu đề bài (bắt buộc)
-// - Nội dung kiến thức...     -> Một điểm kiến thức
-// __từ__                      -> Ô điền khuyết cố định
-// "từ"                        -> Ô điền khuyết hoán đổi (các "từ" liền nhau trong cùng câu có thể tráo chỗ)
-// __"từ"__                    -> Vừa gạch chân vừa hoán đổi
-// # Câu hỏi trắc nghiệm?      -> Câu trắc nghiệm (MC)
-//   + *Đáp án đúng            -> Lựa chọn đúng đánh dấu bằng dấu *
-//   + Đáp án sai              -> Các lựa chọn còn lại (cần đúng 4 lựa chọn)
-// ## Câu hỏi đúng/sai?        -> Câu đúng/sai (TF)
-//   + a) Ý phát biểu = Đúng   -> Mỗi ý ghi = Đúng hoặc = Sai (cần đúng 4 ý)
-// ### Câu hỏi trả lời ngắn? = đáp án   -> Câu trả lời ngắn (SA), đáp án sau dấu =
+// {Ten chuong}                -> Tieu de chuong
+// [Ten bai]                   -> Tieu de bai (bat buoc)
+// - Noi dung kien thuc...     -> Mot diem kien thuc
+// __tu__                      -> O dien khuyet co dinh
+// "tu"                        -> O dien khuyet hoan doi (cac "tu" lien nhau trong cung cau co the trao cho)
+// __"tu"__                    -> Vua gach chan vua hoan doi
+//
+// #                           -> Cau trac nghiem (MC)
+// cau: ...                    -> De cau
+// A. ...  B. ...  C. ...  D.  -> 4 lua chon (nhan a. a) A. A) deu duoc)
+// __B. Xoan kep__             -> Gach chan ca dong hoac chu cai dau = dap an dung (dung 1 dong dung)
+// Khong dung dau + va dau *
+//
+// ##                          -> Cau dung/sai (TF)
+// cau: ...                    -> De cau
+// a. ...  b. ...  c. ...  d.  -> 4 y
+// __b. ...__                  -> Gach chan = dung; khong gach chan = sai
+//
+// ###                         -> Cau tra loi ngan (SA)
+// cau: ...                    -> De cau
+// dap an: ...                 -> Dap an (tu hoac so). Chap nhan "Đáp án:"

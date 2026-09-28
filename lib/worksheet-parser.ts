@@ -346,33 +346,18 @@ export function parseTextContent(text: string): ParseResult {
       return
     }
 
-    // + không còn dùng cho MC/TF
     if (line.startsWith("+")) {
-      if (!curQuestion) {
-        errors.push({ line: lineNo, message: "Lựa chọn (+) phải nằm sau một câu hỏi (#, ## hoặc ###)" })
-        return
-      }
-      if (curQuestion.type === "MC") {
-        errors.push({
-          line: lineNo,
-          message: "Câu trắc nghiệm không dùng dấu +. Dùng A. B. C. D. và gạch chân đáp án đúng",
-        })
-        return
-      }
-      if (curQuestion.type === "TF") {
-        errors.push({
-          line: lineNo,
-          message: "Câu Đúng/Sai không dùng dấu + và = Dung/Sai. Dùng a. b. c. d. và gạch chân ý đúng",
-        })
-        return
-      }
-      if (curQuestion.type === "SA") {
-        errors.push({
-          line: lineNo,
-          message: "Câu trả lời ngắn không có lựa chọn. Dùng cau: và dap an:",
-        })
-        return
-      }
+      errors.push({
+        line: lineNo,
+        message: "Không dùng dấu +. Dùng A. B. C. D. (MC) hoặc a. b. c. d. (TF) và gạch chân đáp án đúng",
+      })
+      return
+    }
+    if (line.startsWith("*")) {
+      errors.push({
+        line: lineNo,
+        message: "Không dùng dấu *. Gạch chân đáp án đúng (MC/TF) hoặc dùng cau: / dap an: (SA)",
+      })
       return
     }
 
@@ -460,7 +445,7 @@ export function validateDocument(result: ParseResult): ValidationResult {
             errors.push({ line: q.line, message: `Câu trắc nghiệm phải có đúng 4 lựa chọn (hiện có ${q.options.length})` })
           }
           if (q.options.filter((o) => o.isCorrect).length !== 1) {
-            errors.push({ line: q.line, message: "Câu trắc nghiệm phải có đúng 1 đáp án đúng (đánh dấu *)" })
+            errors.push({ line: q.line, message: "Câu trắc nghiệm phải có đúng 1 đáp án đúng (gạch chân)" })
           }
         } else if (q.type === "TF") {
           if (q.options.length !== 4) {

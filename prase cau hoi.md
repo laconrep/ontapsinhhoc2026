@@ -184,7 +184,17 @@ Giao vien soan dung mau moi. Import bao loi cu phap cu neu con dung `+` `*`.
 ### Bao cao phien 4 (dien sau khi code)
 
 - Da lam:
+  - Viet lai `mau-cau-hoi.txt` theo MC/TF/SA moi + huong dan `//`. File mau parse isValid.
+  - Cap nhat `scripts/gen-docx-template.mjs` va tao lai `mau-cau-hoi.docx` (gach chan Word). Docx parse isValid.
+  - Cap nhat huong dan UI trong `worksheet-importer.tsx`.
+  - Dong `+` / `*` con sot bao loi kem so dong.
+  - Kiem tra: thieu gach chan MC, thieu dap an SA ra dung loi.
 - File da sua/tao:
+  - `public/templates/mau-cau-hoi.txt`
+  - `public/templates/mau-cau-hoi.docx`
+  - `scripts/gen-docx-template.mjs`
+  - `components/teacher/worksheet-importer.tsx`
+  - `lib/worksheet-parser.ts`
 - Viec tiep theo: khong. Parse cau hoi xong.
 
 ---
@@ -197,14 +207,14 @@ Giao vien soan dung mau moi. Import bao loi cu phap cu neu con dung `+` `*`.
 
 ## Trang thai
 
-- Phien hien tai: xong phien 3, cho phien 4
+- Phien hien tai: xong phien 4
 - Phien 1: xong
 - Phien 2: xong
 - Phien 3: xong
-- Phien 4: chua
+- Phien 4: xong
 
-Diem moc sau phien 3:
+Diem moc sau phien 4:
 - MC moi: `#` / `cau:` / A.B.C.D gach chan = dung
 - TF moi: `##` / `cau:` / a) b) c) d) gach chan = dung
 - SA moi: `###` / `cau:` / `dap an:`
-- Helper dung chung nam tren `parseTextContent` trong `lib/worksheet-parser.ts`
+- Mau txt/docx + UI da cap nhat. Dong `+` `*` bao loi. Parse cau hoi xong.

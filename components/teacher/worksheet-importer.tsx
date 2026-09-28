@@ -92,7 +92,7 @@ export function WorksheetImporter() {
         <h1 className="font-heading text-2xl font-bold text-foreground">Nạp câu hỏi từ file</h1>
         <p className="mt-1 text-muted-foreground">
           Tải lên tài liệu .docx, .pdf hoặc .txt được soạn theo cú pháp mẫu. Hệ thống sẽ tự tách
-          chương, bài, điểm kiến thức và sinh câu hỏi.
+          chương, bài, điểm kiến thức và sinh câu hỏi. Không dùng dấu + hay *.
         </p>
       </div>
 
@@ -101,23 +101,43 @@ export function WorksheetImporter() {
         <CardHeader>
           <CardTitle className="text-base">1. Tải file mẫu và soạn nội dung</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-3">
-          <a
-            href="/templates/mau-cau-hoi.docx"
-            download
-            className={buttonVariants({ variant: "outline" })}
-          >
-            <Download className="h-4 w-4" />
-            Mẫu Word (.docx)
-          </a>
-          <a
-            href="/templates/mau-cau-hoi.txt"
-            download
-            className={buttonVariants({ variant: "outline" })}
-          >
-            <Download className="h-4 w-4" />
-            Mẫu văn bản (.txt)
-          </a>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-3">
+            <a
+              href="/templates/mau-cau-hoi.docx"
+              download
+              className={buttonVariants({ variant: "outline" })}
+            >
+              <Download className="h-4 w-4" />
+              Mẫu Word (.docx)
+            </a>
+            <a
+              href="/templates/mau-cau-hoi.txt"
+              download
+              className={buttonVariants({ variant: "outline" })}
+            >
+              <Download className="h-4 w-4" />
+              Mẫu văn bản (.txt)
+            </a>
+          </div>
+          <ul className="space-y-1 text-sm text-muted-foreground">
+            <li>
+              Trắc nghiệm: dòng <code className="text-foreground">#</code> rồi{" "}
+              <code className="text-foreground">cau:</code>, 4 lựa chọn A. B. C. D., gạch chân đáp án đúng.
+            </li>
+            <li>
+              Đúng/Sai: dòng <code className="text-foreground">##</code> rồi{" "}
+              <code className="text-foreground">cau:</code>, 4 ý a. b. c. d., gạch chân ý đúng.
+            </li>
+            <li>
+              Trả lời ngắn: dòng <code className="text-foreground">###</code> rồi{" "}
+              <code className="text-foreground">cau:</code> và <code className="text-foreground">dap an:</code>.
+            </li>
+            <li>
+              Trong .txt/.pdf dùng <code className="text-foreground">__...__</code> để gạch chân. Trong Word dùng
+              gạch chân thật.
+            </li>
+          </ul>
         </CardContent>
       </Card>
 
