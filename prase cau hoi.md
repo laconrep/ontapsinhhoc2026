@@ -90,8 +90,14 @@ Bo `+`/`*` o MC. Nhan `cau:` + dong a/b/c/d. Gach chan = dung. Chuan hoa nhan `A
 ### Bao cao phien 1 (dien sau khi code)
 
 - Da lam:
+  - Them helper `stripUnderline`, `hasUnderline`, `parseChoiceLine` (nhan `a.` `a)` `A.` `A)` va chu cai dau `__B__ noi dung`).
+  - Parse MC: `#` hoac `# cau: ...`; dong `cau:` ben duoi dien de neu `#` dung mot minh.
+  - Option MC khong con `+`/`*`; gach chan (`__...__`) = dung; content chuan hoa `A. B. C. D.`
+  - Dong `+` sau MC bao loi cu phap. TF/SA van parse cu (phien 2/3).
+  - Validate MC giu: 4 lua chon, dung 1 dung.
 - File da sua/tao:
-- Viec tiep theo (phien 2): parse TF theo format `cau:` + a/b/c/d, gach chan = dung, chuan hoa `a)` `b)` `c)` `d)`.
+  - `lib/worksheet-parser.ts`
+- Viec tiep theo (phien 2): parse TF theo format `cau:` + a/b/c/d, gach chan = dung, chuan hoa `a)` `b)` `c)` `d)`. Tai su dung helper da export. Khong doc lai toan parser; chi sua nhanh `##` + option TF, bo `+ = Dung/Sai`.
 
 ---
 
@@ -180,8 +186,14 @@ Giao vien soan dung mau moi. Import bao loi cu phap cu neu con dung `+` `*`.
 
 ## Trang thai
 
-- Phien hien tai: chua bat dau (moi tao ke hoach)
-- Phien 1: chua
+- Phien hien tai: xong phien 1, cho phien 2
+- Phien 1: xong
 - Phien 2: chua
 - Phien 3: chua
 - Phien 4: chua
+
+Diem moc sau phien 1:
+- MC moi: `#` / `cau:` / A.B.C.D gach chan = dung
+- TF cu: `##` + dong `+ y = Dung/Sai`
+- SA cu: `### de = dap an`
+- Helper dung chung nam tren `parseTextContent` trong `lib/worksheet-parser.ts`

@@ -175,6 +175,35 @@ export function extractBlanks(raw: string): {
   return { content: content.trim(), underlinedTerms: terms }
 }
 
+// ============ Helper parse lựa chọn MC/TF ============
+
+const CAU_RE = /^(câu|cau)\s*:\s*(.*)$/i
+const CHOICE_RE = /^([a-dA-D])[.)]\s*(.*)$/
+
+export function stripUnderline(s: string): string {
+  return s.replace(/__/g, "").trim()
+}
+
+export function hasUnderline(s: string): boolean {
+  return /__/.test(s)
+}
+
+export function parseChoiceLine(line: string): { letter: string; text: string } | null {
+  const stripped = stripUnderline(line)
+  const m = stripped.match(CHOICE_RE) ?? stripped.match(/^([a-dA-D])\s+(.*)$/)
+  if (!m) return null
+  return { letter: m[1].toUpperCase(), text: m[2].trim() }
+}
+
+function parseCauLine(line: string): string | null {
+  const m = line.match(CAU_RE)
+  return m ? m[2].trim() : null
+}
+
+function mcOptionContent(letter: string, text: string): string {
+  return `${letter}. ${text}`.trim()
+}
+
 // ============ Parser văn bản thuần ============
 
 export function parseTextContent(text: string): ParseResult {
@@ -254,19 +283,38 @@ export function parseTextContent(text: string): ParseResult {
       return
     }
 
-    // # MC
+    // # MC — đề trên cùng dòng, hoặc dòng sau `câu:`; lựa chọn A. B. C. D. (gạch chân = đúng)
     if (line.startsWith("#")) {
-      const content = line.slice(1).trim()
+      let body = line.slice(1).trim()
+      const cauOnSame = parseCauLine(body)
+      if (cauOnSame != null) body = cauOnSame
       if (!curKp) {
         errors.push({ line: lineNo, message: "Câu hỏi phải nằm trong một điểm kiến thức (bắt đầu bằng '-')" })
         return
       }
-      curQuestion = { type: "MC", content, options: [], line: lineNo }
+      curQuestion = { type: "MC", content: body, options: [], line: lineNo }
       curKp.questions.push(curQuestion)
       return
     }
 
-    // + Lựa chọn (thuộc câu hỏi hiện tại)
+    // Dòng `câu:` điền đề cho câu MC đang mở (khi # đứng một mình)
+    const cauBody = parseCauLine(line)
+    if (cauBody != null && curQuestion?.type === "MC") {
+      if (!curQuestion.content) curQuestion.content = cauBody
+      return
+    }
+
+    // Lựa chọn MC: a. / a) / A. / A) — gạch chân cả dòng hoặc chữ cái đầu = đúng
+    const choice = parseChoiceLine(line)
+    if (choice && curQuestion?.type === "MC") {
+      curQuestion.options.push({
+        content: mcOptionContent(choice.letter, choice.text),
+        isCorrect: hasUnderline(line),
+      })
+      return
+    }
+
+    // + Lựa chọn (TF phiên 1 vẫn dùng; MC không còn +)
     if (line.startsWith("+")) {
       const body = line.slice(1).trim()
       if (!curQuestion) {
@@ -274,11 +322,13 @@ export function parseTextContent(text: string): ParseResult {
         return
       }
       if (curQuestion.type === "MC") {
-        const isCorrect = body.startsWith("*")
-        const content = (isCorrect ? body.slice(1) : body).trim()
-        curQuestion.options.push({ content, isCorrect })
-      } else if (curQuestion.type === "TF") {
-        // dạng: a) nội dung = Đúng/Sai
+        errors.push({
+          line: lineNo,
+          message: "Câu trắc nghiệm không dùng dấu +. Dùng A. B. C. D. và gạch chân đáp án đúng",
+        })
+        return
+      }
+      if (curQuestion.type === "TF") {
         const eq = body.lastIndexOf("=")
         const stmt = (eq >= 0 ? body.slice(0, eq) : body).replace(/^[a-dA-D][).]\s*/, "").trim()
         const verdict = eq >= 0 ? body.slice(eq + 1).trim().toLowerCase() : ""
