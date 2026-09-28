@@ -204,6 +204,10 @@ function mcOptionContent(letter: string, text: string): string {
   return `${letter}. ${text}`.trim()
 }
 
+function tfOptionContent(letter: string, text: string): string {
+  return `${letter.toLowerCase()}) ${text}`.trim()
+}
+
 // ============ Parser văn bản thuần ============
 
 export function parseTextContent(text: string): ParseResult {
@@ -271,14 +275,16 @@ export function parseTextContent(text: string): ParseResult {
       return
     }
 
-    // ## TF
+    // ## TF — đề trên cùng dòng, hoặc dòng sau `câu:`; lựa chọn a) b) c) d) (gạch chân = đúng)
     if (line.startsWith("##")) {
-      const content = line.slice(2).trim()
+      let body = line.slice(2).trim()
+      const cauOnSame = parseCauLine(body)
+      if (cauOnSame != null) body = cauOnSame
       if (!curKp) {
         errors.push({ line: lineNo, message: "Câu hỏi phải nằm trong một điểm kiến thức (bắt đầu bằng '-')" })
         return
       }
-      curQuestion = { type: "TF", content, options: [], line: lineNo }
+      curQuestion = { type: "TF", content: body, options: [], line: lineNo }
       curKp.questions.push(curQuestion)
       return
     }
@@ -297,14 +303,14 @@ export function parseTextContent(text: string): ParseResult {
       return
     }
 
-    // Dòng `câu:` điền đề cho câu MC đang mở (khi # đứng một mình)
+    // Dòng `câu:` điền đề cho câu MC/TF đang mở (khi # hoặc ## đứng một mình)
     const cauBody = parseCauLine(line)
-    if (cauBody != null && curQuestion?.type === "MC") {
+    if (cauBody != null && (curQuestion?.type === "MC" || curQuestion?.type === "TF")) {
       if (!curQuestion.content) curQuestion.content = cauBody
       return
     }
 
-    // Lựa chọn MC: a. / a) / A. / A) — gạch chân cả dòng hoặc chữ cái đầu = đúng
+    // Lựa chọn MC/TF: a. / a) / A. / A) — gạch chân cả dòng hoặc chữ cái đầu = đúng
     const choice = parseChoiceLine(line)
     if (choice && curQuestion?.type === "MC") {
       curQuestion.options.push({
@@ -313,10 +319,16 @@ export function parseTextContent(text: string): ParseResult {
       })
       return
     }
+    if (choice && curQuestion?.type === "TF") {
+      curQuestion.options.push({
+        content: tfOptionContent(choice.letter, choice.text),
+        isCorrect: hasUnderline(line),
+      })
+      return
+    }
 
-    // + Lựa chọn (TF phiên 1 vẫn dùng; MC không còn +)
+    // + không còn dùng cho MC/TF
     if (line.startsWith("+")) {
-      const body = line.slice(1).trim()
       if (!curQuestion) {
         errors.push({ line: lineNo, message: "Lựa chọn (+) phải nằm sau một câu hỏi (#, ## hoặc ###)" })
         return
@@ -329,11 +341,11 @@ export function parseTextContent(text: string): ParseResult {
         return
       }
       if (curQuestion.type === "TF") {
-        const eq = body.lastIndexOf("=")
-        const stmt = (eq >= 0 ? body.slice(0, eq) : body).replace(/^[a-dA-D][).]\s*/, "").trim()
-        const verdict = eq >= 0 ? body.slice(eq + 1).trim().toLowerCase() : ""
-        const isCorrect = /^(đúng|dung|true|đ|d)$/i.test(verdict)
-        curQuestion.options.push({ content: stmt, isCorrect })
+        errors.push({
+          line: lineNo,
+          message: "Câu Đúng/Sai không dùng dấu + và = Dung/Sai. Dùng a. b. c. d. và gạch chân ý đúng",
+        })
+        return
       }
       return
     }

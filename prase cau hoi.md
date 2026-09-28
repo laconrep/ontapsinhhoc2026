@@ -119,7 +119,13 @@ TF nhap giong MC (khong `+`, khong `= Dung/Sai`). Gach chan = dung. Sau parse nh
 ### Bao cao phien 2 (dien sau khi code)
 
 - Da lam:
+  - Parse TF: `##` hoac `## cau: ...`; dong `cau:` ben duoi dien de neu `##` dung mot minh.
+  - Option TF dung helper phien 1 (`parseChoiceLine` + `hasUnderline`); khong con `+` / `= Dung/Sai`.
+  - Content option chuan hoa `a) b) c) d)` (chu thuong + dau `)`).
+  - Dong `+` sau TF bao loi cu phap. SA van parse cu (phien 3).
+  - Validate TF giu: dung 4 y.
 - File da sua/tao:
+  - `lib/worksheet-parser.ts`
 - Viec tiep theo (phien 3): parse SA 2 dong `cau:` / `dap an:`.
 
 ---
@@ -186,14 +192,14 @@ Giao vien soan dung mau moi. Import bao loi cu phap cu neu con dung `+` `*`.
 
 ## Trang thai
 
-- Phien hien tai: xong phien 1, cho phien 2
+- Phien hien tai: xong phien 2, cho phien 3
 - Phien 1: xong
-- Phien 2: chua
+- Phien 2: xong
 - Phien 3: chua
 - Phien 4: chua
 
-Diem moc sau phien 1:
+Diem moc sau phien 2:
 - MC moi: `#` / `cau:` / A.B.C.D gach chan = dung
-- TF cu: `##` + dong `+ y = Dung/Sai`
+- TF moi: `##` / `cau:` / a) b) c) d) gach chan = dung
 - SA cu: `### de = dap an`
 - Helper dung chung nam tren `parseTextContent` trong `lib/worksheet-parser.ts`
