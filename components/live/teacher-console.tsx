@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
@@ -26,6 +26,72 @@ import { cn } from "@/lib/utils"
 const LEFT_REVEAL_MS = 1500
 const LEFT_EDGE_PX = 24
 const LEFT_PANEL_PX = 160
+
+function NextQuestionPreview({
+  indexLabel,
+  content,
+  options,
+}: {
+  indexLabel: string
+  content: string
+  options: { id: string; content: string }[]
+}) {
+  const boxRef = useRef<HTMLDivElement>(null)
+  const innerRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    const box = boxRef.current
+    const inner = innerRef.current
+    if (!box || !inner) return
+
+    function fit() {
+      if (!box || !inner) return
+      const maxH = box.clientHeight
+      const maxW = box.clientWidth
+      if (maxH < 8 || maxW < 8) return
+      let lo = 6
+      let hi = 12
+      let best = 6
+      for (let i = 0; i < 12; i++) {
+        const mid = (lo + hi) / 2
+        inner.style.fontSize = `${mid}px`
+        const overflow = inner.scrollHeight > maxH + 1 || inner.scrollWidth > maxW + 1
+        if (overflow) {
+          hi = mid
+        } else {
+          best = mid
+          lo = mid
+        }
+      }
+      inner.style.fontSize = `${best}px`
+    }
+
+    fit()
+    const ro = new ResizeObserver(fit)
+    ro.observe(box)
+    return () => ro.disconnect()
+  }, [content, options, indexLabel])
+
+  return (
+    <div ref={boxRef} className="min-h-0 flex-1 overflow-hidden rounded-md border border-border/60 bg-background p-1.5 shadow-inner">
+      <div ref={innerRef} className="flex w-full flex-col gap-1 leading-tight">
+        <span className="w-fit rounded-full bg-primary/15 px-1.5 py-px text-[0.85em] font-semibold text-primary">
+          {indexLabel}
+        </span>
+        <p className="font-medium break-words text-foreground">{content}</p>
+        {options.length > 0 && (
+          <ul className="space-y-0.5 text-[0.85em] text-muted-foreground">
+            {options.map((o, i) => (
+              <li key={o.id} className="break-words">
+                {["A", "B", "C", "D", "E", "F"][i] ?? i + 1}. {o.content}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export function TeacherConsole({ sessionId }: { sessionId: string }) {
   const router = useRouter()
@@ -329,31 +395,19 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
           <p className="mb-1 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
             Câu tiếp theo
           </p>
-          <div className="min-h-0 flex-1 overflow-hidden rounded-md border border-border/60 bg-background p-1.5 shadow-inner">
-            {view.teacherNext ? (
-              <div className="flex h-full flex-col gap-1 overflow-hidden">
-                <span className="w-fit rounded-full bg-primary/15 px-1.5 py-px text-[9px] font-semibold text-primary">
-                  Câu {view.currentIndex + 2}/{view.total}
-                </span>
-                <p className="line-clamp-4 text-[11px] leading-snug font-medium text-foreground">
-                  {view.teacherNext.content}
-                </p>
-                {view.teacherNext.type !== "SA" && view.teacherNext.options.length > 0 && (
-                  <ul className="mt-auto space-y-0.5 overflow-hidden">
-                    {view.teacherNext.options.slice(0, 4).map((o, i) => (
-                      <li key={o.id} className="truncate text-[9px] text-muted-foreground">
-                        {["A", "B", "C", "D"][i]}. {o.content}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ) : (
+          {view.teacherNext ? (
+            <NextQuestionPreview
+              indexLabel={`Câu ${view.currentIndex + 2}/${view.total}`}
+              content={view.teacherNext.content}
+              options={view.teacherNext.type === "SA" ? [] : view.teacherNext.options}
+            />
+          ) : (
+            <div className="min-h-0 flex-1 overflow-hidden rounded-md border border-border/60 bg-background p-1.5 shadow-inner">
               <p className="text-[11px] text-muted-foreground">
                 {atEnd ? "Đây là câu cuối cùng" : "—"}
               </p>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </aside>
     </div>
