@@ -24,6 +24,8 @@ import { goToQuestion, revealCurrent, endQuizSession } from "@/app/actions/live-
 import { cn } from "@/lib/utils"
 
 const LEFT_REVEAL_MS = 1500
+const LEFT_EDGE_PX = 24
+const LEFT_PANEL_PX = 160
 
 export function TeacherConsole({ sessionId }: { sessionId: string }) {
   const router = useRouter()
@@ -31,6 +33,7 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
   const [pending, startTransition] = useTransition()
   const [headerOpen, setHeaderOpen] = useState(false)
   const [leftOpen, setLeftOpen] = useState(false)
+  const leftOpenRef = useRef(false)
   const leftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const correctStudents = view.answers.filter((a) => a.correct)
@@ -59,32 +62,70 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
   }, [view.phase, view.remainingSec, view.currentIndex, sessionId])
 
   useEffect(() => {
+    leftOpenRef.current = leftOpen
+  }, [leftOpen])
+
+  useEffect(() => {
+    function onMove(e: MouseEvent) {
+      const x = e.clientX
+      if (leftOpenRef.current) {
+        if (x > LEFT_PANEL_PX) {
+          if (leftTimer.current) {
+            clearTimeout(leftTimer.current)
+            leftTimer.current = null
+          }
+          leftOpenRef.current = false
+          setLeftOpen(false)
+        }
+        return
+      }
+      if (x <= LEFT_EDGE_PX) {
+        if (!leftTimer.current) {
+          leftTimer.current = setTimeout(() => {
+            leftTimer.current = null
+            leftOpenRef.current = true
+            setLeftOpen(true)
+          }, LEFT_REVEAL_MS)
+        }
+      } else if (leftTimer.current) {
+        clearTimeout(leftTimer.current)
+        leftTimer.current = null
+      }
+    }
+    window.addEventListener("mousemove", onMove)
     return () => {
+      window.removeEventListener("mousemove", onMove)
       if (leftTimer.current) clearTimeout(leftTimer.current)
     }
   }, [])
 
-  function clearLeftTimer() {
-    if (leftTimer.current) {
-      clearTimeout(leftTimer.current)
-      leftTimer.current = null
-    }
-  }
-
-  function onLeftEnter() {
-    clearLeftTimer()
-    leftTimer.current = setTimeout(() => setLeftOpen(true), LEFT_REVEAL_MS)
-  }
-
-  function onLeftLeave() {
-    clearLeftTimer()
-    setLeftOpen(false)
-  }
-
   function run(fn: () => Promise<unknown>) {
     startTransition(async () => {
       try {
-        await fn()
+        const result = await fn()
+        if (result && typeof result === "object") {
+          if ("question" in result && "index" in result) {
+            const payload = result as {
+              index: number
+              total: number
+              question: NonNullable<typeof view.question>
+              next: typeof view.teacherNext
+              startedAt: number | null
+              serverNow: number
+            }
+            view.applyQuestion(payload)
+          } else if ("revealed" in result && result.revealed === true) {
+            const payload = result as {
+              revealed: true
+              correctOptionIds: string[]
+              correctText: string | null
+            }
+            view.applyReveal({
+              correctOptionIds: payload.correctOptionIds,
+              correctText: payload.correctText,
+            })
+          }
+        }
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Có lỗi xảy ra")
       }
@@ -131,31 +172,27 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
         </header>
       </div>
 
-      <div
-        className={cn("absolute top-0 left-0 z-[85] h-full", leftOpen ? "w-40" : "w-3")}
-        onMouseEnter={onLeftEnter}
-        onMouseLeave={onLeftLeave}
+      <aside
+        className={cn(
+          "pointer-events-none absolute top-0 bottom-12 left-0 z-[90] w-40 border-r border-border/50 bg-card pt-8 shadow-lg transition-transform duration-200",
+          leftOpen ? "pointer-events-auto translate-x-0" : "-translate-x-full",
+        )}
+        aria-hidden={!leftOpen}
       >
-        <div className="absolute inset-y-0 left-0 w-1 bg-primary/50" />
-        <aside
-          className={cn(
-            "absolute inset-y-0 left-0 w-40 border-r border-border/50 bg-card/95 pt-8 shadow-lg transition-transform duration-200",
-            leftOpen ? "translate-x-0" : "-translate-x-full",
-          )}
-        >
-          <div className="flex h-full flex-col gap-2 overflow-y-auto px-2 pb-3">
-            <p className="px-2 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-              Menu
-            </p>
-            <TeacherNav />
-          </div>
-        </aside>
-      </div>
+        <div className="flex h-full flex-col gap-2 overflow-y-auto px-2 pb-3">
+          <p className="px-2 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+            Menu
+          </p>
+          <TeacherNav />
+        </div>
+      </aside>
 
-      <div className="relative min-h-0 min-w-0 flex-1">
-        <QuizStage view={view} />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="min-h-0 min-w-0 flex-1">
+          <QuizStage view={view} />
+        </div>
 
-        <div className="absolute inset-x-0 bottom-0 z-30 flex flex-wrap items-center justify-center gap-1.5 bg-gradient-to-t from-background/80 to-transparent px-3 pb-3 pt-8">
+        <div className="relative z-[100] flex shrink-0 flex-wrap items-center justify-center gap-1.5 border-t bg-card px-3 py-2">
           <Button
             size="sm"
             variant="outline"
@@ -201,8 +238,9 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
           <Button
             size="sm"
             variant="outline"
-            nativeButton={false}
-            render={<a href={`/teacher/sessions/${sessionId}/present`} target="_blank" rel="noreferrer" />}
+            onClick={() => {
+              window.open(`/teacher/sessions/${sessionId}/present`, "_blank", "noopener,noreferrer")
+            }}
           >
             <Monitor className="h-4 w-4" />
             TV

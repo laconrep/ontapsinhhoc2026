@@ -442,7 +442,7 @@ async function requireOwner(sessionId: string) {
 }
 
 // ---- GV: chuyển tới câu hỏi thứ index ----
-export async function goToQuestion(sessionId: string, index: number): Promise<void> {
+export async function goToQuestion(sessionId: string, index: number) {
   const { session } = await requireOwner(sessionId)
   const state = await ensureLiveState(sessionId)
   if (!state) throw new Error("Phiên không hoạt động")
@@ -457,21 +457,31 @@ export async function goToQuestion(sessionId: string, index: number): Promise<vo
   const snap = (session.resumeSnapshot as { lessonId: string; defaultTimeSec: number }) ?? { lessonId: "", defaultTimeSec: 30 }
   await persistSnapshot(sessionId, snap.lessonId, snap.defaultTimeSec, state)
   
-  // LUÔN await emit() để đ��m bảo publish broadcast xong trước khi hàm return
+  const question = maskQuestion(q)
+  const startedAt = state.questionStartedAt
+  const serverNow = Date.now()
   await emit(sessionId, "question_changed", {
     questionId: q.id,
     payload: {
       index,
       total: state.total,
-      question: maskQuestion(q),
-      startedAt: state.questionStartedAt,
-      serverNow: Date.now(),
+      question,
+      startedAt,
+      serverNow,
     },
   })
+  return {
+    index,
+    total: state.total,
+    question,
+    next: index + 1 < state.total ? maskQuestion(state.questions[index + 1]) : null,
+    startedAt,
+    serverNow,
+  }
 }
 
 // ---- GV: hiện đáp án câu hiện tại ----
-export async function revealCurrent(sessionId: string): Promise<void> {
+export async function revealCurrent(sessionId: string) {
   const { session } = await requireOwner(sessionId)
   const state = await ensureLiveState(sessionId)
   if (!state || state.currentIndex < 0) throw new Error("Chưa có câu hỏi")
@@ -479,10 +489,12 @@ export async function revealCurrent(sessionId: string): Promise<void> {
   const q = state.questions[state.currentIndex]
   const snap = (session.resumeSnapshot as { lessonId: string; defaultTimeSec: number }) ?? { lessonId: "", defaultTimeSec: 30 }
   await persistSnapshot(sessionId, snap.lessonId, snap.defaultTimeSec, state)
+  const revealed = { correctOptionIds: q.correctOptionIds, correctText: q.correctText }
   await emit(sessionId, "revealed", {
     questionId: q.id,
-    payload: { index: state.currentIndex, correctOptionIds: q.correctOptionIds, correctText: q.correctText },
+    payload: { index: state.currentIndex, ...revealed },
   })
+  return { revealed: true as const, ...revealed }
 }
 
 // ---- GV: kết thúc phiên ----

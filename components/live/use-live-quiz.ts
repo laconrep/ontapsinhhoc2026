@@ -49,14 +49,26 @@ export interface LiveQuizView {
   notFullscreen: { studentId: string; name: string }[]
   teacherNext: LiveQuestionView | null
   teacherCurrentAnswer: RevealInfo | null
+  refresh: () => Promise<void>
+  applyQuestion: (payload: {
+    index: number
+    total: number
+    question: LiveQuestionView
+    next: LiveQuestionView | null
+    startedAt: number | null
+    serverNow: number
+  }) => void
+  applyReveal: (payload: RevealInfo) => void
 }
 
 /**
  * Hook kết nối SSE + đồng bộ trạng thái phiên trình chiếu quiz.
  * Dùng chung cho màn hình GV, màn hình trình chiếu (TV) và màn hình HS.
  */
+type LiveQuizState = Omit<LiveQuizView, "remainingSec" | "refresh" | "applyQuestion" | "applyReveal">
+
 export function useLiveQuiz(sessionId: string): LiveQuizView {
-  const [state, setState] = useState<Omit<LiveQuizView, "remainingSec">>({
+  const [state, setState] = useState<LiveQuizState>({
     connected: false,
     loading: true,
     phase: "lobby",
@@ -235,6 +247,72 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
     return () => es.close()
   }, [sessionId, flashJoinBadge])
 
+  const applyQuestion = useCallback(
+    (payload: {
+      index: number
+      total: number
+      question: LiveQuestionView
+      next: LiveQuestionView | null
+      startedAt: number | null
+      serverNow: number
+    }) => {
+      questionStartedAtRef.current = payload.startedAt ?? Date.now()
+      clockOffsetRef.current = Date.now() - payload.serverNow
+      const next =
+        payload.next ??
+        (payload.index >= 0 && payload.index + 1 < outlineRef.current.length
+          ? outlineRef.current[payload.index + 1]
+          : null)
+      setState((s) => ({
+        ...s,
+        phase: "question",
+        currentIndex: payload.index,
+        total: payload.total,
+        question: payload.question,
+        revealed: null,
+        timeLimitSec: payload.question?.timeLimitSec ?? null,
+        answers: [],
+        teacherCurrentAnswer: null,
+        teacherNext: next,
+      }))
+    },
+    [],
+  )
+
+  const applyReveal = useCallback((payload: RevealInfo) => {
+    setState((s) => ({
+      ...s,
+      phase: "revealed",
+      revealed: payload,
+      teacherCurrentAnswer: payload,
+    }))
+  }, [])
+
+  const refresh = useCallback(async () => {
+    const snap = await getLiveQuizSnapshot(sessionId)
+    clockOffsetRef.current = Date.now() - snap.serverNow
+    questionStartedAtRef.current = snap.questionStartedAt
+    outlineRef.current = (snap.teacherExtras?.outline as LiveQuestionView[]) ?? []
+    setState((s) => ({
+      ...s,
+      loading: false,
+      phase: snap.phase as LiveQuizView["phase"],
+      className: snap.className,
+      isTeacher: snap.isTeacher,
+      currentIndex: snap.currentIndex,
+      total: snap.total,
+      question: snap.question,
+      revealed: snap.revealed,
+      timeLimitSec: snap.question?.timeLimitSec ?? null,
+      joinedCount: snap.joinedCount,
+      joined: snap.joined ?? s.joined,
+      answers: snap.answers,
+      notFullscreen: snap.notFullscreen,
+      teacherNext: snap.teacherExtras?.next ?? null,
+      teacherCurrentAnswer: snap.teacherExtras?.current ?? null,
+    }))
+  }, [sessionId])
+
   // Đồng hồ đếm ngược cục bộ
   useEffect(() => {
     const tick = () => {
@@ -253,5 +331,5 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
     return () => clearInterval(iv)
   }, [state.phase, state.timeLimitSec])
 
-  return { ...state, remainingSec }
+  return { ...state, remainingSec, refresh, applyQuestion, applyReveal }
 }
