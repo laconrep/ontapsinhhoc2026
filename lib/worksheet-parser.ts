@@ -178,6 +178,7 @@ export function extractBlanks(raw: string): {
 // ============ Helper parse lựa chọn MC/TF ============
 
 const CAU_RE = /^(câu|cau)\s*:\s*(.*)$/i
+const DAP_AN_RE = /^(đáp\s*án|dap\s*an)\s*:\s*(.*)$/i
 const CHOICE_RE = /^([a-dA-D])[.)]\s*(.*)$/
 
 export function stripUnderline(s: string): string {
@@ -197,6 +198,11 @@ export function parseChoiceLine(line: string): { letter: string; text: string } 
 
 function parseCauLine(line: string): string | null {
   const m = line.match(CAU_RE)
+  return m ? m[2].trim() : null
+}
+
+function parseDapAnLine(line: string): string | null {
+  const m = line.match(DAP_AN_RE)
   return m ? m[2].trim() : null
 }
 
@@ -257,20 +263,23 @@ export function parseTextContent(text: string): ParseResult {
       return
     }
 
-    // ### SA
+    // ### SA — đề trên cùng dòng hoặc dòng sau `câu:`; đáp án dòng `dap an:` / `Đáp án:`
     if (line.startsWith("###")) {
-      const body = line.slice(3).trim()
-      const eq = body.indexOf("=")
-      const content = (eq >= 0 ? body.slice(0, eq) : body).trim()
-      const answer = eq >= 0 ? body.slice(eq + 1).trim() : ""
+      let body = line.slice(3).trim()
+      const cauOnSame = parseCauLine(body)
+      if (cauOnSame != null) body = cauOnSame
+      const dapOnSame = parseDapAnLine(body)
       if (!curKp) {
         errors.push({ line: lineNo, message: "Câu hỏi phải nằm trong một điểm kiến thức (bắt đầu bằng '-')" })
         return
       }
-      if (!answer) {
-        errors.push({ line: lineNo, message: "Câu trả lời ngắn (###) phải có đáp án sau dấu '='" })
+      curQuestion = {
+        type: "SA",
+        content: dapOnSame != null ? "" : body,
+        options: [],
+        correctAnswer: dapOnSame ?? "",
+        line: lineNo,
       }
-      curQuestion = { type: "SA", content, options: [], correctAnswer: answer, line: lineNo }
       curKp.questions.push(curQuestion)
       return
     }
@@ -303,10 +312,20 @@ export function parseTextContent(text: string): ParseResult {
       return
     }
 
-    // Dòng `câu:` điền đề cho câu MC/TF đang mở (khi # hoặc ## đứng một mình)
+    // Dòng `câu:` điền đề cho câu MC/TF/SA đang mở (khi #, ## hoặc ### đứng một mình)
     const cauBody = parseCauLine(line)
-    if (cauBody != null && (curQuestion?.type === "MC" || curQuestion?.type === "TF")) {
+    if (cauBody != null && (curQuestion?.type === "MC" || curQuestion?.type === "TF" || curQuestion?.type === "SA")) {
       if (!curQuestion.content) curQuestion.content = cauBody
+      return
+    }
+
+    // Dòng `dap an:` / `Đáp án:` điền đáp án cho câu SA đang mở
+    const dapAnBody = parseDapAnLine(line)
+    if (dapAnBody != null && curQuestion?.type === "SA") {
+      curQuestion.correctAnswer = dapAnBody
+      if (!dapAnBody) {
+        errors.push({ line: lineNo, message: "Câu trả lời ngắn thiếu đáp án sau 'dap an:'" })
+      }
       return
     }
 
@@ -344,6 +363,13 @@ export function parseTextContent(text: string): ParseResult {
         errors.push({
           line: lineNo,
           message: "Câu Đúng/Sai không dùng dấu + và = Dung/Sai. Dùng a. b. c. d. và gạch chân ý đúng",
+        })
+        return
+      }
+      if (curQuestion.type === "SA") {
+        errors.push({
+          line: lineNo,
+          message: "Câu trả lời ngắn không có lựa chọn. Dùng cau: và dap an:",
         })
         return
       }
@@ -442,7 +468,7 @@ export function validateDocument(result: ParseResult): ValidationResult {
           }
         } else if (q.type === "SA") {
           if (!q.correctAnswer) {
-            errors.push({ line: q.line, message: "Câu trả lời ngắn phải có đáp án sau dấu '='" })
+            errors.push({ line: q.line, message: "Câu trả lời ngắn phải có đáp án sau 'dap an:'" })
           }
         }
       }

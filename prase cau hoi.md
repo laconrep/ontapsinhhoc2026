@@ -153,7 +153,12 @@ dap an: ........
 ### Bao cao phien 3 (dien sau khi code)
 
 - Da lam:
+  - Parse SA: `###` hoac `### cau: ...`; dong `cau:` ben duoi dien de; dong `dap an:` / `Đáp án:` dien `correctAnswer`.
+  - Bo `### de = dap an` 1 dong. Format cu khong con parse dap an (bao thieu `dap an:`).
+  - Thieu `dap an:` hoac rong: loi kem so dong (parse + validate).
+  - Dong `+` sau SA bao loi cu phap. SA khong co option.
 - File da sua/tao:
+  - `lib/worksheet-parser.ts`
 - Viec tiep theo (phien 4): cap nhat file mau + huong dan UI + kiem tra validate/import.
 
 ---
@@ -192,14 +197,14 @@ Giao vien soan dung mau moi. Import bao loi cu phap cu neu con dung `+` `*`.
 
 ## Trang thai
 
-- Phien hien tai: xong phien 2, cho phien 3
+- Phien hien tai: xong phien 3, cho phien 4
 - Phien 1: xong
 - Phien 2: xong
-- Phien 3: chua
+- Phien 3: xong
 - Phien 4: chua
 
-Diem moc sau phien 2:
+Diem moc sau phien 3:
 - MC moi: `#` / `cau:` / A.B.C.D gach chan = dung
 - TF moi: `##` / `cau:` / a) b) c) d) gach chan = dung
-- SA cu: `### de = dap an`
+- SA moi: `###` / `cau:` / `dap an:`
 - Helper dung chung nam tren `parseTextContent` trong `lib/worksheet-parser.ts`
