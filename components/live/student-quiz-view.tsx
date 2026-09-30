@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useLiveQuiz } from "./use-live-quiz"
 import { joinQuiz, submitLiveAnswer, reportFullscreen } from "@/app/actions/live-quiz"
+import { QuestionStem } from "@/components/question/question-stem"
 
 const LETTERS = ["A", "B", "C", "D", "E", "F"]
 
@@ -192,7 +193,12 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
         </div>
       ) : (
         <>
-          <h1 className="text-balance font-heading text-2xl font-bold leading-snug">{q.content}</h1>
+          <QuestionStem
+            content={q.content}
+            bodyHtml={q.bodyHtml}
+            className="text-balance font-heading text-2xl font-bold leading-snug"
+            maxHeightClass="max-h-[36vh]"
+          />
 
           {/* MC */}
           {q.type === "MC" && (

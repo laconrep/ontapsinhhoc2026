@@ -8,6 +8,7 @@ export interface LiveQuestionView {
   index: number
   type: "MC" | "TF" | "SA"
   content: string
+  bodyHtml?: string | null
   knowledgePointContent: string
   options: { id: string; content: string; order: number }[]
   timeLimitSec: number | null

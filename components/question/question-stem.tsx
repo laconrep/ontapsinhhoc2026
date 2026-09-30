@@ -1,0 +1,56 @@
+"use client"
+
+import { cn } from "@/lib/utils"
+
+function sanitizeStemHtml(raw: string): string {
+  let s = raw.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+  s = s.replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+  s = s.replace(/<img\b[^>]*>/gi, (tag) => {
+    const src = tag.match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1] ?? ""
+    if (!/^data:image\/[a-zA-Z0-9.+-]+;base64,/i.test(src) && !src.startsWith("/")) return ""
+    const alt = (tag.match(/\balt\s*=\s*["']([^"']*)["']/i)?.[1] ?? "").replace(/[<>"']/g, "")
+    return `<img src="${src}" alt="${alt}">`
+  })
+  s = s.replace(/<(?!\/?(img|table|thead|tbody|tfoot|tr|th|td|caption|br|p|u)\b)[^>]+>/gi, "")
+  s = s.replace(/<(table|thead|tbody|tfoot|tr|th|td|caption|br|p|u)(\s[^>]*)?>/gi, (_, name: string, attrs?: string) => {
+    const tag = name.toLowerCase()
+    if (!attrs) return `<${tag}>`
+    if (tag !== "th" && tag !== "td") return `<${tag}>`
+    const span: string[] = []
+    const cs = attrs.match(/\bcolspan\s*=\s*["']?(\d+)/i)
+    const rs = attrs.match(/\browspan\s*=\s*["']?(\d+)/i)
+    if (cs) span.push(`colspan="${cs[1]}"`)
+    if (rs) span.push(`rowspan="${rs[1]}"`)
+    return span.length ? `<${tag} ${span.join(" ")}>` : `<${tag}>`
+  })
+  return s
+}
+
+export function QuestionStem({
+  content,
+  bodyHtml,
+  className,
+  maxHeightClass = "max-h-[40vh]",
+}: {
+  content: string
+  bodyHtml?: string | null
+  className?: string
+  maxHeightClass?: string
+}) {
+  const html = bodyHtml ? sanitizeStemHtml(bodyHtml) : null
+  return (
+    <div className={cn(maxHeightClass, "overflow-y-auto")}>
+      {html ? (
+        <div
+          className={cn(
+            "leading-relaxed text-foreground [&_img]:mx-auto [&_img]:my-2 [&_img]:max-h-48 [&_img]:max-w-full [&_table]:my-2 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-border [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-border [&_th]:px-2 [&_th]:py-1",
+            className,
+          )}
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      ) : (
+        <p className={cn("whitespace-pre-wrap leading-relaxed text-foreground", className)}>{content}</p>
+      )}
+    </div>
+  )
+}

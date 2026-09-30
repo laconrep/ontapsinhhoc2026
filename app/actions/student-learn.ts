@@ -479,6 +479,7 @@ type QuizQuestionForClient = {
   id: string
   type: "MC" | "TF" | "SA"
   content: string
+  bodyHtml?: string | null
   knowledgePointId: string
   options: { id: string; content: string }[] // MC/TF (không lộ isCorrect)
 }
@@ -543,6 +544,7 @@ export async function startQuiz(lessonId: string): Promise<{
         id: q.id,
         type: "MC",
         content: q.content,
+        bodyHtml: q.bodyHtml ?? null,
         knowledgePointId: q.knowledgePointId,
         options: seededShuffle(opts, rng).map((o) => ({ id: o.id, content: o.content })),
       }
@@ -553,6 +555,7 @@ export async function startQuiz(lessonId: string): Promise<{
         id: q.id,
         type: "TF",
         content: q.content,
+        bodyHtml: q.bodyHtml ?? null,
         knowledgePointId: q.knowledgePointId,
         options: opts.map((o) => ({ id: o.id, content: o.content })),
       }
@@ -563,6 +566,7 @@ export async function startQuiz(lessonId: string): Promise<{
       id: q.id,
       type: "SA",
       content: q.content,
+      bodyHtml: q.bodyHtml ?? null,
       knowledgePointId: q.knowledgePointId,
       options: [],
     }

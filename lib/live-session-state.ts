@@ -9,6 +9,7 @@ export interface LiveQuestion {
   index: number
   type: "MC" | "TF" | "SA"
   content: string
+  bodyHtml?: string | null
   knowledgePointContent: string
   // Lựa chọn hiển thị (không kèm cờ đúng/sai để tránh lộ đáp án cho HS)
   options: { id: string; content: string; order: number }[]
@@ -52,6 +53,7 @@ export function maskQuestion(q: LiveQuestionFull): LiveQuestion {
     index: q.index,
     type: q.type,
     content: q.content,
+    bodyHtml: q.bodyHtml ?? null,
     knowledgePointContent: q.knowledgePointContent,
     options: q.options,
     timeLimitSec: q.timeLimitSec,

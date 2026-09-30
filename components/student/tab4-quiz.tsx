@@ -8,11 +8,13 @@ import { Input } from "@/components/ui/input"
 import { startQuiz, submitQuiz, getLatestQuizResult } from "@/app/actions/student-learn"
 import { Award, RotateCcw } from "lucide-react"
 import type { QuizResultDto } from "@/types"
+import { QuestionStem } from "@/components/question/question-stem"
 
 type QuizQuestion = {
   id: string
   type: "MC" | "TF" | "SA"
   content: string
+  bodyHtml?: string | null
   knowledgePointId: string
   options: { id: string; content: string }[]
 }
@@ -115,7 +117,7 @@ export function Tab4Quiz({ lessonId }: { lessonId: string }) {
       </div>
 
       <div className="rounded-xl border border-border bg-card p-4">
-        <p className="text-sm font-medium leading-relaxed text-foreground">{question.content}</p>
+        <QuestionStem content={question.content} bodyHtml={question.bodyHtml} className="text-sm font-medium" />
 
         <div className="mt-4">
           {question.type === "MC" && (

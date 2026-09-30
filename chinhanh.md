@@ -224,7 +224,17 @@ HS thay du de da dong, hinh, bang. De dai co thanh cuon, khong che 4 lua chon.
 ### Bao cao phien 5 (dien sau khi code)
 
 - Da lam:
+  - Tao `QuestionStem`: neu `bodyHtml` thi sanitize (img data:/, table, p/br/u, bo script/on*) roi render HTML; khong thi `whitespace-pre-wrap` `content`. Wrapper `overflow-y-auto` + `max-h-[40vh]` (live HS `36vh`).
+  - Tab 4 quiz + live HS dung stem. Lua chon A-D nam ngoai vung cuon de.
+  - Dua `bodyHtml` xuong client: `startQuiz`, `LiveQuestion`/`maskQuestion`, `loadQuizQuestions`, `LiveQuestionView`.
 - File da sua/tao:
+  - `components/question/question-stem.tsx`
+  - `components/student/tab4-quiz.tsx`
+  - `components/live/student-quiz-view.tsx`
+  - `components/live/use-live-quiz.ts`
+  - `app/actions/student-learn.ts`
+  - `app/actions/live-quiz.ts`
+  - `lib/live-session-state.ts`
 - Viec tiep theo (phien 6): man chieu GV + preview editor + chot.
 
 ---
@@ -265,19 +275,21 @@ Man chieu GV cuon duoc de dai; editor GV preview HTML; import that su luu `bodyH
 
 ## Trang thai
 
-- Phien hien tai: xong phien 4, cho phien 5
+- Phien hien tai: xong phien 5, cho phien 6
 - Phien 1: xong
 - Phien 2: xong
 - Phien 3: xong
 - Phien 4: xong
-- Phien 5: chua
+- Phien 5: xong
 - Phien 6: chua
 
-Diem moc sau phien 4:
+Diem moc sau phien 5:
 - Parse MC/TF/SA moi da xong (`prase cau hoi.md`)
 - De da dong: y `(1)` `(2)` ghep vao `content` bang `\n`; A.B.C.D van la option
 - Helper `appendStem` / `canAppendStem` nam tren `parseTextContent`
 - Docx: mammoth `convertImage` base64. `parseHtmlContent` giu `<img>` (`@@IMGn@@`) va `<table>` (`@@TBLn@@`) roi gan `ParsedQuestion.bodyHtml`. Sanitize table/script/on*.
 - Schema co `questions.bodyHtml` nullable; DTO + import/CRUD da kem field
-- UI chi in text `content`, khong thanh cuon rieng cho de (phien 5)
+- Man HS: `QuestionStem` (`components/question/question-stem.tsx`) — bodyHtml sanitize hoac content pre-wrap; cuon `max-h-[40vh]` (live HS 36vh). Tab4 + live student-quiz-view da dung. Lua chon ngoai vung cuon.
+- `bodyHtml` da di qua startQuiz + LiveQuestion/maskQuestion + loadQuizQuestions + LiveQuestionView
+- Man chieu GV (`quiz-stage.tsx`) va editor GV chua dung stem (phien 6)
 - Can ALTER TABLE them cot `bodyHtml` tren DB that (drizzle schema da ghi; khong co thu muc migrate trong repo)
