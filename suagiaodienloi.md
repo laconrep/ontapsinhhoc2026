@@ -149,7 +149,10 @@ Click 1 loi co `line` -> cot phai cuon toi dong do, highlight. Loi khong `line`:
 ### Bao cao phien 3 (dien sau khi code)
 
 - Da lam:
+  - Click loi co `line`: `setSelectionRange` theo offset dong + `scrollTop = lineHeight * (line-1)` (cach A). Loi khong `line`: chi set active, khong nhay.
+  - `activeErrorIndex` + item trai `button`, active `bg-destructive/15`. Go trong textarea khong xoa active.
 - File da sua/tao:
+  - `components/teacher/import-error-fix.tsx`
 - Viec tiep theo (phien 4): debounce parse lai khi sua xong cau.
 
 ---
@@ -250,10 +253,10 @@ Click loi nhay dung hon (khoi cau chu khong chi 1 dong). Xu ly meo. Cap nhat bao
 
 ## Trang thai
 
-- Phien hien tai: xong phien 2, cho phien 3
+- Phien hien tai: xong phien 3, cho phien 4
 - Phien 1: xong
 - Phien 2: xong
-- Phien 3: chua
+- Phien 3: xong
 - Phien 4: chua
 - Phien 5: chua
 - Phien 6: chua

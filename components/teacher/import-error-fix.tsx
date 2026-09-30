@@ -1,5 +1,6 @@
 "use client"
 
+import { useRef, useState } from "react"
 import { AlertTriangle } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { ValidationError } from "@/lib/worksheet-parser"
@@ -10,7 +11,32 @@ interface ImportErrorFixProps {
   onSourceChange?: (text: string) => void
 }
 
+function lineRange(text: string, line: number): { start: number; end: number } {
+  const lines = text.split("\n")
+  const idx = Math.max(1, Math.min(line, lines.length)) - 1
+  let start = 0
+  for (let i = 0; i < idx; i++) start += lines[i].length + 1
+  return { start, end: start + (lines[idx]?.length ?? 0) }
+}
+
 export function ImportErrorFix({ errors, sourceText, onSourceChange }: ImportErrorFixProps) {
+  const [activeErrorIndex, setActiveErrorIndex] = useState<number | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  function selectError(i: number) {
+    setActiveErrorIndex(i)
+    const e = errors[i]
+    if (!e?.line) return
+    const ta = textareaRef.current
+    if (!ta) return
+    const { start, end } = lineRange(sourceText, e.line)
+    ta.focus()
+    ta.setSelectionRange(start, end)
+    const lineCount = Math.max(sourceText.split("\n").length, 1)
+    const lineHeight = ta.scrollHeight / lineCount
+    ta.scrollTop = lineHeight * (e.line - 1)
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -27,7 +53,10 @@ export function ImportErrorFix({ errors, sourceText, onSourceChange }: ImportErr
                 <li key={i}>
                   <button
                     type="button"
-                    className="flex w-full gap-2 rounded-md px-2 py-1.5 text-left text-destructive"
+                    onClick={() => selectError(i)}
+                    className={`flex w-full gap-2 rounded-md px-2 py-1.5 text-left text-destructive ${
+                      activeErrorIndex === i ? "bg-destructive/15" : "hover:bg-destructive/10"
+                    }`}
                   >
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                     <span>
@@ -39,12 +68,13 @@ export function ImportErrorFix({ errors, sourceText, onSourceChange }: ImportErr
               ))}
             </ul>
           </div>
-          <div className="min-h-[420px] max-h-[70vh] overflow-auto rounded-lg border">
+          <div className="min-h-[420px] max-h-[70vh] overflow-hidden rounded-lg border">
             <textarea
+              ref={textareaRef}
               value={sourceText}
               onChange={(ev) => onSourceChange?.(ev.target.value)}
               spellCheck={false}
-              className="h-full min-h-[420px] w-full resize-none bg-transparent p-3 font-mono text-sm whitespace-pre outline-none"
+              className="block h-full min-h-[420px] max-h-[70vh] w-full resize-none overflow-auto bg-transparent p-3 font-mono text-sm leading-5 whitespace-pre outline-none"
             />
           </div>
         </div>
