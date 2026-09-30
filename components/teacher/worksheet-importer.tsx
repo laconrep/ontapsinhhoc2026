@@ -18,6 +18,7 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ImportErrorFix, type RevalidatedPreview } from "@/components/teacher/import-error-fix"
+import { QuestionStem } from "@/components/question/question-stem"
 import type { ParseResult, ValidationError } from "@/lib/worksheet-parser"
 
 interface WorksheetPreview {
@@ -26,6 +27,8 @@ interface WorksheetPreview {
   isValid: boolean
   summary: { chapters: number; lessons: number; kps: number; questions: number }
   sourceText: string
+  images?: string[]
+  tables?: string[]
 }
 
 interface SaveResult {
@@ -169,16 +172,16 @@ export function WorksheetImporter() {
           </div>
           <ul className="space-y-1 text-sm text-muted-foreground">
             <li>
-              Trắc nghiệm: dòng <code className="text-foreground">#</code> rồi{" "}
-              <code className="text-foreground">cau:</code>, 4 lựa chọn A. B. C. D., gạch chân đáp án đúng.
+              Trắc nghiệm: dòng <code className="text-foreground">#</code> rồi đề{" "}
+              <code className="text-foreground">cau:</code> / <code className="text-foreground">Câu 1.</code> /{" "}
+              <code className="text-foreground">câu 1:</code>, 4 lựa chọn A. B. C. D., gạch chân đáp án đúng.
             </li>
             <li>
-              Đúng/Sai: dòng <code className="text-foreground">##</code> rồi{" "}
-              <code className="text-foreground">cau:</code>, 4 ý a. b. c. d., gạch chân ý đúng.
+              Đúng/Sai: dòng <code className="text-foreground">##</code> rồi đề tương tự, 4 ý a. b. c. d., gạch chân ý đúng.
             </li>
             <li>
-              Trả lời ngắn: dòng <code className="text-foreground">###</code> rồi{" "}
-              <code className="text-foreground">cau:</code> và <code className="text-foreground">dap an:</code>.
+              Trả lời ngắn: dòng <code className="text-foreground">###</code> rồi đề và{" "}
+              <code className="text-foreground">dap an:</code>. Sau khi nạp, hệ thống tự đánh số lại Câu 1, Câu 2...
             </li>
             <li>
               Trong .txt/.pdf dùng <code className="text-foreground">__...__</code> để gạch chân. Trong Word dùng
@@ -257,6 +260,8 @@ export function WorksheetImporter() {
         <ImportErrorFix
           errors={preview.errors}
           sourceText={draftText}
+          images={preview.images}
+          tables={preview.tables}
           onSourceChange={setDraftText}
           onRevalidated={handleRevalidated}
         />
@@ -268,6 +273,7 @@ export function WorksheetImporter() {
 
 function PreviewPanel({ preview }: { preview: WorksheetPreview }) {
   const { summary, errors, isValid, parseResult } = preview
+  let qIndex = 0
   return (
     <Card>
       <CardHeader>
@@ -322,12 +328,45 @@ function PreviewPanel({ preview }: { preview: WorksheetPreview }) {
                         <li key={ki} className="rounded-md bg-muted/40 p-2 text-sm">
                           <p className="text-foreground">{highlightBlanks(kp.content, kp.underlinedTerms)}</p>
                           {kp.questions.length > 0 && (
-                            <div className="mt-1.5 flex flex-wrap gap-1.5">
-                              {kp.questions.map((q, qi) => (
-                                <Badge key={qi} variant="outline" className="text-xs">
-                                  {TYPE_LABEL[q.type] ?? q.type}
-                                </Badge>
-                              ))}
+                            <div className="mt-2 space-y-3">
+                              {kp.questions.map((q, qi) => {
+                                qIndex += 1
+                                return (
+                                  <div key={qi} className="rounded-md border bg-background p-2">
+                                    <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                                      <Badge variant="outline" className="text-xs">
+                                        Câu {qIndex}
+                                      </Badge>
+                                      <Badge variant="outline" className="text-xs">
+                                        {TYPE_LABEL[q.type] ?? q.type}
+                                      </Badge>
+                                    </div>
+                                    <QuestionStem
+                                      content={q.content}
+                                      bodyHtml={q.bodyHtml}
+                                      className="text-sm"
+                                      maxHeightClass="max-h-64"
+                                    />
+                                    {q.options.length > 0 && (
+                                      <ul className="mt-2 space-y-1 text-sm">
+                                        {q.options.map((o, oi) => (
+                                          <li
+                                            key={oi}
+                                            className={o.isCorrect ? "font-medium text-primary" : "text-foreground"}
+                                          >
+                                            {o.content}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                    {q.type === "SA" && q.correctAnswer ? (
+                                      <p className="mt-1 text-sm text-muted-foreground">
+                                        Đáp án: {q.correctAnswer}
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                )
+                              })}
                             </div>
                           )}
                         </li>

@@ -179,7 +179,7 @@ export function extractBlanks(raw: string): {
 
 // ============ Helper parse lựa chọn MC/TF ============
 
-const CAU_RE = /^(câu|cau)\s*:\s*(.*)$/i
+const CAU_RE = /^(câu|cau)\s*(?:(\d+)\s*)?[.:]\s*(.*)$/i
 const DAP_AN_RE = /^(đáp\s*án|dap\s*an)\s*:\s*(.*)$/i
 const CHOICE_RE = /^([a-dA-D])[.)]\s*(.*)$/
 const BULLET_RE = /^[•●◦·▪▸►]\s*/
@@ -213,9 +213,13 @@ export function parseChoiceLine(line: string): { letter: string; text: string } 
   return null
 }
 
-function parseCauLine(line: string): string | null {
+export function parseCauLine(line: string): string | null {
   const m = line.match(CAU_RE)
-  return m ? m[2].trim() : null
+  return m ? m[3].trim() : null
+}
+
+export function isCauHeading(line: string): boolean {
+  return CAU_RE.test(line.trim())
 }
 
 function parseDapAnLine(line: string): string | null {
@@ -352,10 +356,25 @@ export function parseTextContent(text: string): ParseResult {
       return
     }
 
-    // Dòng `câu:` điền đề cho câu MC/TF/SA đang mở (khi #, ## hoặc ### đứng một mình)
+    // Dòng `câu:` / `Câu 1.` / `câu 1:` — điền đề câu đang mở, hoặc mở câu mới cùng loại
     const cauBody = parseCauLine(line)
-    if (cauBody != null && (curQuestion?.type === "MC" || curQuestion?.type === "TF" || curQuestion?.type === "SA")) {
-      if (!curQuestion.content) curQuestion.content = cauBody
+    if (cauBody != null) {
+      if (curQuestion && !curQuestion.content && (curQuestion.type === "MC" || curQuestion.type === "TF" || curQuestion.type === "SA")) {
+        curQuestion.content = cauBody
+        return
+      }
+      if (!curKp) {
+        errors.push({ line: lineNo, message: "Câu hỏi phải nằm trong một điểm kiến thức (bắt đầu bằng '-')" })
+        return
+      }
+      const nextType = curQuestion?.type ?? "MC"
+      curQuestion = {
+        type: nextType,
+        content: cauBody,
+        options: [],
+        line: lineNo,
+      }
+      curKp.questions.push(curQuestion)
       return
     }
 
@@ -552,7 +571,7 @@ function convertHtmlLists(html: string): string {
   return out
 }
 
-function attachBodyHtml(result: ParseResult, images: string[], tables: string[]) {
+export function attachBodyHtml(result: ParseResult, images: string[], tables: string[]) {
   if (images.length === 0 && tables.length === 0) return
   for (const ch of result.chapters) {
     for (const lesson of ch.lessons) {
@@ -571,12 +590,24 @@ function attachBodyHtml(result: ParseResult, images: string[], tables: string[])
   }
 }
 
+export function sourceTextToPreviewHtml(text: string, images: string[], tables: string[]): string {
+  return text
+    .split(/\r?\n/)
+    .map((ln) => lineWithRichToHtml(ln, images, tables) || "&nbsp;")
+    .join("<br>\n")
+}
+
 /**
  * Chuyển HTML (mammoth) thành text có delimiter: <u>...</u> → __...__, giữ nguyên
  * "..." để đánh dấu hoán đổi, rồi tái sử dụng parseTextContent.
  * Thẻ <img> / <table> giữ qua placeholder rồi gắn `bodyHtml` trên câu hỏi.
  */
-export function parseHtmlToResultAndText(html: string): { parseResult: ParseResult; sourceText: string } {
+export function parseHtmlToResultAndText(html: string): {
+  parseResult: ParseResult
+  sourceText: string
+  images: string[]
+  tables: string[]
+} {
   const images: string[] = []
   const tables: string[] = []
   const withoutScripts = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
@@ -592,7 +623,7 @@ export function parseHtmlToResultAndText(html: string): { parseResult: ParseResu
   const sourceText = normalizeParseText(decodeEntities(stripped))
   const parseResult = parseTextContent(sourceText)
   attachBodyHtml(parseResult, images, tables)
-  return { parseResult, sourceText }
+  return { parseResult, sourceText, images, tables }
 }
 
 export function parseHtmlContent(html: string): ParseResult {

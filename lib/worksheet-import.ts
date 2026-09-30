@@ -14,6 +14,8 @@ export interface WorksheetPreview {
   isValid: boolean
   summary: { chapters: number; lessons: number; kps: number; questions: number }
   sourceText: string
+  images: string[]
+  tables: string[]
 }
 
 export interface SaveResult {
@@ -38,6 +40,7 @@ export function previewParseResult(result: ParseResult): ParseResult {
             content: q.content,
             options: q.options,
             correctAnswer: q.correctAnswer,
+            bodyHtml: q.bodyHtml,
             line: q.line,
           })),
         })),
@@ -54,7 +57,7 @@ export async function bufferFromFormData(formData: FormData): Promise<{ buffer: 
 }
 
 export async function validateWorksheetBuffer(buffer: Buffer, filename: string): Promise<WorksheetPreview> {
-  const { parseResult, sourceText } = await extractAndParse(buffer, filename)
+  const { parseResult, sourceText, images, tables } = await extractAndParse(buffer, filename)
   const validation = validateDocument(parseResult)
   return {
     parseResult: previewParseResult(parseResult),
@@ -62,6 +65,8 @@ export async function validateWorksheetBuffer(buffer: Buffer, filename: string):
     isValid: validation.isValid,
     summary: summarize(parseResult),
     sourceText,
+    images,
+    tables,
   }
 }
 

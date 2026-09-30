@@ -8,6 +8,8 @@ export type FileKind = "txt" | "pdf" | "docx"
 export interface ExtractResult {
   parseResult: ParseResult
   sourceText: string
+  images: string[]
+  tables: string[]
 }
 
 /** Nhận diện loại file bằng magic bytes + phần mở rộng, không tin tên file tuyệt đối. */
@@ -43,7 +45,7 @@ export async function extractAndParse(buffer: Buffer, filename: string): Promise
 
   if (kind === "txt") {
     const sourceText = buffer.toString("utf8")
-    return { parseResult: parseTextContent(sourceText), sourceText }
+    return { parseResult: parseTextContent(sourceText), sourceText, images: [], tables: [] }
   }
 
   if (kind === "docx") {
@@ -65,7 +67,7 @@ export async function extractAndParse(buffer: Buffer, filename: string): Promise
   try {
     const res = await parser.getText()
     const sourceText = res.text
-    return { parseResult: parseTextContent(sourceText), sourceText }
+    return { parseResult: parseTextContent(sourceText), sourceText, images: [], tables: [] }
   } finally {
     await parser.destroy()
   }

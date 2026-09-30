@@ -5,7 +5,10 @@ import { AlertTriangle } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
+  attachBodyHtml,
+  isCauHeading,
   parseTextContent,
+  sourceTextToPreviewHtml,
   summarize,
   validateDocument,
   type ParseResult,
@@ -23,6 +26,8 @@ export interface RevalidatedPreview {
 interface ImportErrorFixProps {
   errors: ValidationError[]
   sourceText: string
+  images?: string[]
+  tables?: string[]
   onSourceChange?: (text: string) => void
   onRevalidated?: (payload: RevalidatedPreview) => void
 }
@@ -32,7 +37,7 @@ function questionBlockRange(text: string, line: number): { startLine: number; en
   if (lines.length === 0) return { startLine: 1, endLine: 1 }
   const idx = Math.max(1, Math.min(line, lines.length)) - 1
   const t = (i: number) => lines[i]?.trim() ?? ""
-  const isQStart = (s: string) => /^#{1,3}(\s|$)/.test(s) || /^cau:/i.test(s)
+  const isQStart = (s: string) => /^#{1,3}(\s|$)/.test(s) || isCauHeading(s)
   const isNewBlock = (s: string) =>
     s.startsWith("#") ||
     s.startsWith("{") ||
@@ -46,10 +51,15 @@ function questionBlockRange(text: string, line: number): { startLine: number; en
   while (start > 0 && !isQStart(t(start))) start -= 1
   if (!isQStart(t(start))) start = idx
 
+  let seenCau = isCauHeading(t(start))
   let end = idx
   for (let i = start + 1; i < lines.length; i++) {
     const s = t(i)
     if (s && isNewBlock(s)) break
+    if (s && isCauHeading(s)) {
+      if (seenCau) break
+      seenCau = true
+    }
     end = i
   }
   if (end < idx) end = idx
@@ -73,6 +83,8 @@ function offsetRange(text: string, startLine: number, endLine: number): { start:
 export function ImportErrorFix({
   errors,
   sourceText,
+  images = [],
+  tables = [],
   onSourceChange,
   onRevalidated,
 }: ImportErrorFixProps) {
@@ -89,6 +101,7 @@ export function ImportErrorFix({
     const selEnd = ta?.selectionEnd
     setChecking(false)
     const parseResult = parseTextContent(text)
+    attachBodyHtml(parseResult, images, tables)
     const { isValid, errors: next } = validateDocument(parseResult)
     const summary = summarize(parseResult)
     setActiveErrorIndex((prev) => {
@@ -178,7 +191,7 @@ export function ImportErrorFix({
               ))}
             </ul>
           </div>
-          <div className="min-h-[420px] max-h-[70vh] overflow-hidden rounded-lg border">
+          <div className="flex min-h-[420px] max-h-[70vh] flex-col overflow-hidden rounded-lg border">
             <textarea
               ref={textareaRef}
               value={sourceText}
@@ -189,8 +202,20 @@ export function ImportErrorFix({
               }}
               onBlur={flushRevalidate}
               spellCheck={false}
-              className="block h-full min-h-[420px] max-h-[70vh] w-full resize-none overflow-auto bg-transparent p-3 font-mono text-sm leading-5 whitespace-pre outline-none"
+              className={`block w-full resize-none overflow-auto bg-transparent p-3 font-mono text-sm leading-5 whitespace-pre outline-none ${
+                images.length > 0 || tables.length > 0
+                  ? "min-h-[200px] max-h-[35vh]"
+                  : "h-full min-h-[420px] max-h-[70vh]"
+              }`}
             />
+            {images.length > 0 || tables.length > 0 ? (
+              <div
+                className="min-h-[180px] max-h-[35vh] overflow-auto border-t bg-muted/30 p-3 text-sm leading-relaxed [&_img]:mx-auto [&_img]:my-2 [&_img]:max-h-48 [&_img]:max-w-full [&_table]:my-2 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-border [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-border [&_th]:px-2 [&_th]:py-1"
+                dangerouslySetInnerHTML={{
+                  __html: sourceTextToPreviewHtml(sourceText, images, tables),
+                }}
+              />
+            ) : null}
           </div>
         </div>
       </CardContent>
