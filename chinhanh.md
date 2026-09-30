@@ -195,7 +195,12 @@ Bang Word khong vo cau truc. Bang nam trong de, hien sau nay qua `bodyHtml`.
 ### Bao cao phien 4 (dien sau khi code)
 
 - Da lam:
+  - `parseHtmlContent`: giu `<table>` qua placeholder `@@TBLn@@` (giong anh). Bang nam trong de (truoc A/B/C/D) vao `bodyHtml`.
+  - Sanitize: bo `script`, bo `on*` attr; chi giu table/thead/tbody/tfoot/tr/th/td/caption/br/p/u; `th`/`td` giu colspan/rowspan.
+  - Token bang ngoai de dang mo: bo qua, khong fail. File khong bang van isValid. Anh + bang cung luc ok.
+  - `content` van plain text (bo token). Khong doi UI.
 - File da sua/tao:
+  - `lib/worksheet-parser.ts`
 - Viec tiep theo (phien 5): render de+anh+bang tren man HS, thanh cuon.
 
 ---
@@ -260,19 +265,19 @@ Man chieu GV cuon duoc de dai; editor GV preview HTML; import that su luu `bodyH
 
 ## Trang thai
 
-- Phien hien tai: xong phien 3, cho phien 4
+- Phien hien tai: xong phien 4, cho phien 5
 - Phien 1: xong
 - Phien 2: xong
 - Phien 3: xong
-- Phien 4: chua
+- Phien 4: xong
 - Phien 5: chua
 - Phien 6: chua
 
-Diem moc sau phien 3:
+Diem moc sau phien 4:
 - Parse MC/TF/SA moi da xong (`prase cau hoi.md`)
 - De da dong: y `(1)` `(2)` ghep vao `content` bang `\n`; A.B.C.D van la option
 - Helper `appendStem` / `canAppendStem` nam tren `parseTextContent`
-- Docx: mammoth `convertImage` base64. `parseHtmlContent` giu `<img>` qua `@@IMGn@@` roi gan `ParsedQuestion.bodyHtml`. Table van bi strip (phien 4).
+- Docx: mammoth `convertImage` base64. `parseHtmlContent` giu `<img>` (`@@IMGn@@`) va `<table>` (`@@TBLn@@`) roi gan `ParsedQuestion.bodyHtml`. Sanitize table/script/on*.
 - Schema co `questions.bodyHtml` nullable; DTO + import/CRUD da kem field
-- UI chi in text `content`, khong thanh cuon rieng cho de
+- UI chi in text `content`, khong thanh cuon rieng cho de (phien 5)
 - Can ALTER TABLE them cot `bodyHtml` tren DB that (drizzle schema da ghi; khong co thu muc migrate trong repo)

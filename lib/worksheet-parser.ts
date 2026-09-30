@@ -389,8 +389,8 @@ export function parseTextContent(text: string): ParseResult {
       return
     }
 
-    // Token anh (tu parseHtmlContent) ngoai de dang mo: bo qua, khong fail file
-    if (/^@@IMG\d+@@$/.test(line) && !(curQuestion && canAppendStem(curQuestion))) {
+    // Token anh/bang (tu parseHtmlContent) ngoai de dang mo: bo qua, khong fail file
+    if (/^@@(IMG|TBL)\d+@@$/.test(line) && !(curQuestion && canAppendStem(curQuestion))) {
       return
     }
 
@@ -441,31 +441,60 @@ function imgTagToPlaceholder(tag: string, images: string[]): string {
   return `\n@@IMG${i}@@\n`
 }
 
-function lineWithImagesToHtml(line: string, images: string[]): string {
+function sanitizeTableHtml(raw: string): string {
+  let s = raw.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+  s = s.replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+  s = s.replace(/<(?!\/?(table|thead|tbody|tfoot|tr|th|td|caption|br|p|u)\b)[^>]+>/gi, "")
+  s = s.replace(/<(table|thead|tbody|tfoot|tr|th|td|caption|br|p|u)(\s[^>]*)?>/gi, (_, name: string, attrs?: string) => {
+    const tag = name.toLowerCase()
+    if (!attrs) return `<${tag}>`
+    if (tag !== "th" && tag !== "td") return `<${tag}>`
+    const span: string[] = []
+    const cs = attrs.match(/\bcolspan\s*=\s*["']?(\d+)/i)
+    const rs = attrs.match(/\browspan\s*=\s*["']?(\d+)/i)
+    if (cs) span.push(`colspan="${cs[1]}"`)
+    if (rs) span.push(`rowspan="${rs[1]}"`)
+    return span.length ? `<${tag} ${span.join(" ")}>` : `<${tag}>`
+  })
+  return s
+}
+
+function tableToPlaceholder(html: string, tables: string[]): string {
+  return html.replace(/<table\b[^>]*>[\s\S]*?<\/table>/gi, (block) => {
+    const cleaned = sanitizeTableHtml(block)
+    if (!cleaned) return "\n"
+    const i = tables.length
+    tables.push(cleaned)
+    return `\n@@TBL${i}@@\n`
+  })
+}
+
+function lineWithRichToHtml(line: string, images: string[], tables: string[]): string {
   const parts: string[] = []
   let last = 0
-  const re = /@@IMG(\d+)@@/g
+  const re = /@@(IMG|TBL)(\d+)@@/g
   let m: RegExpExecArray | null
   while ((m = re.exec(line)) !== null) {
     if (m.index > last) parts.push(escapeHtmlText(line.slice(last, m.index)))
-    parts.push(images[Number(m[1])] ?? "")
+    const idx = Number(m[2])
+    parts.push(m[1] === "IMG" ? (images[idx] ?? "") : (tables[idx] ?? ""))
     last = m.index + m[0].length
   }
   if (last < line.length) parts.push(escapeHtmlText(line.slice(last)))
   return parts.join("")
 }
 
-function attachBodyHtmlFromImages(result: ParseResult, images: string[]) {
-  if (images.length === 0) return
+function attachBodyHtml(result: ParseResult, images: string[], tables: string[]) {
+  if (images.length === 0 && tables.length === 0) return
   for (const ch of result.chapters) {
     for (const lesson of ch.lessons) {
       for (const kp of lesson.knowledgePoints) {
         for (const q of kp.questions) {
-          if (!q.content.includes("@@IMG")) continue
+          if (!q.content.includes("@@IMG") && !q.content.includes("@@TBL")) continue
           const lines = q.content.split("\n")
-          q.bodyHtml = lines.map((ln) => lineWithImagesToHtml(ln, images)).join("<br>\n")
+          q.bodyHtml = lines.map((ln) => lineWithRichToHtml(ln, images, tables)).join("<br>\n")
           q.content = lines
-            .map((ln) => ln.replace(/@@IMG(\d+)@@/g, "").trim())
+            .map((ln) => ln.replace(/@@(IMG|TBL)\d+@@/g, "").trim())
             .filter((ln) => ln.length > 0)
             .join("\n")
         }
@@ -477,20 +506,23 @@ function attachBodyHtmlFromImages(result: ParseResult, images: string[]) {
 /**
  * Chuyển HTML (mammoth) thành text có delimiter: <u>...</u> → __...__, giữ nguyên
  * "..." để đánh dấu hoán đổi, rồi tái sử dụng parseTextContent.
- * Thẻ <img> (data URI) giữ qua placeholder rồi gắn `bodyHtml` trên câu hỏi.
+ * Thẻ <img> / <table> giữ qua placeholder rồi gắn `bodyHtml` trên câu hỏi.
  */
 export function parseHtmlContent(html: string): ParseResult {
   const images: string[] = []
-  const normalized = normalizeHtml(html)
+  const tables: string[] = []
+  const withoutScripts = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+  const normalized = normalizeHtml(withoutScripts)
   const withImgs = normalized.replace(/<img\b[^>]*>/gi, (tag) => imgTagToPlaceholder(tag, images))
-  const withBreaks = withImgs
+  const withTables = tableToPlaceholder(withImgs, tables)
+  const withBreaks = withTables
     .replace(/<\/(p|div|li|h[1-6])>/gi, "\n")
     .replace(/<br\s*\/?>/gi, "\n")
   const withUnderline = withBreaks.replace(/<u>([\s\S]*?)<\/u>/gi, "__$1__")
   const stripped = withUnderline.replace(/<[^>]+>/g, "")
   const text = decodeEntities(stripped)
   const result = parseTextContent(text)
-  attachBodyHtmlFromImages(result, images)
+  attachBodyHtml(result, images, tables)
   return result
 }
 
