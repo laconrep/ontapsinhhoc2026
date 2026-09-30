@@ -3,7 +3,7 @@ import { chapters, lessons, knowledgePoints, questions, questionOptions } from "
 import { and, eq, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { extractAndParse } from "@/lib/extract-file"
-import { validateDocument, summarize, type ParseResult, type ValidationError } from "@/lib/worksheet-parser"
+import { validateDocument, summarize, parseTextContent, type ParseResult, type ValidationError } from "@/lib/worksheet-parser"
 import type { SessionUser } from "@/lib/auth-helpers"
 
 export type { ParseResult, ValidationError }
@@ -65,13 +65,16 @@ export async function validateWorksheetBuffer(buffer: Buffer, filename: string):
   }
 }
 
-export async function saveWorksheetBuffer(
+function toTxtFilename(filename: string) {
+  return filename.replace(/\.[^.]+$/, "") + ".txt"
+}
+
+async function persistParseResult(
   user: SessionUser,
-  buffer: Buffer,
+  parseResult: ParseResult,
   filename: string,
 ): Promise<SaveResult> {
   await ensureSchema()
-  const { parseResult } = await extractAndParse(buffer, filename)
   const validation = validateDocument(parseResult)
   if (!validation.isValid) {
     throw new Error("Tài liệu chưa hợp lệ, không thể lưu. Vui lòng kiểm tra lại.")
@@ -191,4 +194,22 @@ export async function saveWorksheetBuffer(
   revalidatePath("/teacher/lessons")
   revalidatePath("/teacher/questions")
   return result
+}
+
+export async function saveWorksheetBuffer(
+  user: SessionUser,
+  buffer: Buffer,
+  filename: string,
+): Promise<SaveResult> {
+  const { parseResult } = await extractAndParse(buffer, filename)
+  return persistParseResult(user, parseResult, filename)
+}
+
+export async function saveWorksheetFromText(
+  user: SessionUser,
+  text: string,
+  filename: string,
+): Promise<SaveResult> {
+  const parseResult = parseTextContent(text)
+  return persistParseResult(user, parseResult, toTxtFilename(filename))
 }

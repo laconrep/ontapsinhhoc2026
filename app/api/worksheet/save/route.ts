@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth-helpers"
-import { bufferFromFormData, saveWorksheetBuffer } from "@/lib/worksheet-import"
+import { bufferFromFormData, saveWorksheetBuffer, saveWorksheetFromText } from "@/lib/worksheet-import"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -13,6 +13,13 @@ export async function POST(req: Request) {
 
   try {
     const formData = await req.formData()
+    const text = formData.get("text")
+    if (typeof text === "string") {
+      const rawName = formData.get("filename")
+      const filename = typeof rawName === "string" && rawName ? rawName : "draft.txt"
+      const result = await saveWorksheetFromText(user, text, filename)
+      return NextResponse.json(result)
+    }
     const { buffer, filename } = await bufferFromFormData(formData)
     const result = await saveWorksheetBuffer(user, buffer, filename)
     return NextResponse.json(result)

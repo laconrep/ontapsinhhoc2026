@@ -34,13 +34,17 @@ interface SaveResult {
   createdQuestions: number
 }
 
-async function postWorksheet<T>(url: string, file: File): Promise<T> {
-  const fd = new FormData()
-  fd.append("file", file)
+async function postForm<T>(url: string, fd: FormData): Promise<T> {
   const res = await fetch(url, { method: "POST", body: fd })
   const data = (await res.json().catch(() => ({}))) as T & { error?: string }
   if (!res.ok) throw new Error(data.error || `Lỗi server (${res.status})`)
   return data
+}
+
+async function postWorksheet<T>(url: string, file: File): Promise<T> {
+  const fd = new FormData()
+  fd.append("file", file)
+  return postForm<T>(url, fd)
 }
 
 const TYPE_LABEL: Record<string, string> = { MC: "Trắc nghiệm", TF: "Đúng/Sai", SA: "Trả lời ngắn" }
@@ -99,16 +103,25 @@ export function WorksheetImporter() {
   }
 
   function handleRevalidated(payload: RevalidatedPreview) {
+    const wasInvalid = preview && !preview.isValid
     setPreview((prev) => (prev ? { ...prev, ...payload } : prev))
+    if (wasInvalid && payload.isValid) toast.success("Hết lỗi, có thể lưu")
   }
 
   const draftDirty = draftText !== originalSource
 
   function doSave() {
-    if (!file || !preview?.isValid || draftDirty) return
+    if (!file || !preview?.isValid) return
     startSave(async () => {
       try {
-        const res = await postWorksheet<SaveResult>("/api/worksheet/save", file)
+        const fd = new FormData()
+        if (draftDirty) {
+          fd.append("text", draftText)
+          fd.append("filename", file.name)
+        } else {
+          fd.append("file", file)
+        }
+        const res = await postForm<SaveResult>("/api/worksheet/save", fd)
         toast.success(
           `Đã lưu: ${res.createdLessons} bài, ${res.createdKps} kiến thức, ${res.createdQuestions} câu hỏi`,
         )
@@ -230,7 +243,7 @@ export function WorksheetImporter() {
             <Button
               variant="default"
               onClick={doSave}
-              disabled={!preview?.isValid || draftDirty || isSaving}
+              disabled={!preview?.isValid || isSaving}
               className="bg-primary"
             >
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}

@@ -213,7 +213,13 @@ Het sua 1 cau -> chay `parseTextContent` + `validateDocument` tren **toan bo dra
 ### Bao cao phien 5 (dien sau khi code)
 
 - Da lam:
+  - `saveWorksheetFromText`: parse draft bang `parseTextContent` (khong mammoth), persist giong save file. Filename doi `.txt`.
+  - `POST /api/worksheet/save`: FormData `text` + `filename` -> save from text; khong co `text` thi `file` nhu cu.
+  - Client: `draftDirty` -> gui `text`; khong dirty -> gui file goc (docx giu anh). Nut Luu enable khi `preview.isValid`. Toast "Het loi, co the luu" khi revalidate het loi.
 - File da sua/tao:
+  - `lib/worksheet-import.ts`
+  - `app/api/worksheet/save/route.ts`
+  - `components/teacher/worksheet-importer.tsx`
 - Viec tiep theo (phien 6): tinh lai khoi cau, polish, chot.
 
 ---
@@ -258,12 +264,12 @@ Click loi nhay dung hon (khoi cau chu khong chi 1 dong). Xu ly meo. Cap nhat bao
 
 ## Trang thai
 
-- Phien hien tai: xong phien 4, cho phien 5
+- Phien hien tai: xong phien 5, cho phien 6
 - Phien 1: xong
 - Phien 2: xong
 - Phien 3: xong
 - Phien 4: xong
-- Phien 5: chua
+- Phien 5: xong
 - Phien 6: chua
 
 Diem moc sau phien 1:
