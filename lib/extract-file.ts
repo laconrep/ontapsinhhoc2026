@@ -1,9 +1,14 @@
 import mammoth from "mammoth"
-import { parseTextContent, parseHtmlContent, type ParseResult } from "./worksheet-parser"
+import { parseTextContent, parseHtmlToResultAndText, type ParseResult } from "./worksheet-parser"
 
 export const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 
 export type FileKind = "txt" | "pdf" | "docx"
+
+export interface ExtractResult {
+  parseResult: ParseResult
+  sourceText: string
+}
 
 /** Nhận diện loại file bằng magic bytes + phần mở rộng, không tin tên file tuyệt đối. */
 export function detectKind(buffer: Buffer, filename: string): FileKind | null {
@@ -26,8 +31,8 @@ export function detectKind(buffer: Buffer, filename: string): FileKind | null {
   return null
 }
 
-/** Trích xuất và parse nội dung file thành ParseResult. */
-export async function extractAndParse(buffer: Buffer, filename: string): Promise<ParseResult> {
+/** Trích xuất và parse nội dung file. sourceText cung dong voi errors[].line. */
+export async function extractAndParse(buffer: Buffer, filename: string): Promise<ExtractResult> {
   const kind = detectKind(buffer, filename)
   if (!kind) {
     throw new Error("Loại file không hỗ trợ. Chỉ chấp nhận .txt, .docx, .pdf")
@@ -37,7 +42,8 @@ export async function extractAndParse(buffer: Buffer, filename: string): Promise
   }
 
   if (kind === "txt") {
-    return parseTextContent(buffer.toString("utf8"))
+    const sourceText = buffer.toString("utf8")
+    return { parseResult: parseTextContent(sourceText), sourceText }
   }
 
   if (kind === "docx") {
@@ -51,15 +57,15 @@ export async function extractAndParse(buffer: Buffer, filename: string): Promise
         }),
       },
     )
-    return parseHtmlContent(html)
+    return parseHtmlToResultAndText(html)
   }
 
-  // pdf
   const { PDFParse } = await import("pdf-parse")
   const parser = new PDFParse({ data: new Uint8Array(buffer) })
   try {
     const res = await parser.getText()
-    return parseTextContent(res.text)
+    const sourceText = res.text
+    return { parseResult: parseTextContent(sourceText), sourceText }
   } finally {
     await parser.destroy()
   }

@@ -81,7 +81,15 @@ API validate tra van ban da trich, line trung voi `errors[].line`. Chua doi layo
 ### Bao cao phien 1 (dien sau khi code)
 
 - Da lam:
+  - `extractAndParse` tra `{ parseResult, sourceText }`. txt/pdf: sourceText = chuoi dua vao `parseTextContent`. docx: `parseHtmlToResultAndText` (cung text parser dung, giu `@@IMGn@@` `@@TBLn@@`).
+  - `validateWorksheetBuffer` kem `sourceText` tren `WorksheetPreview`. `saveWorksheetBuffer` chi lay `parseResult`.
+  - Client type preview them `sourceText`. PreviewPanel 1 cot giu nguyen, chua textarea. Khong doi save API.
+  - `parseHtmlContent` van giu (wrapper), logic parse khong doi.
 - File da sua/tao:
+  - `lib/extract-file.ts`
+  - `lib/worksheet-parser.ts` (chi tach `parseHtmlToResultAndText`, khong doi rule)
+  - `lib/worksheet-import.ts`
+  - `components/teacher/worksheet-importer.tsx`
 - Viec tiep theo (phien 2): layout 2 cot, chua click/nhay dong.
 
 ---
@@ -237,17 +245,17 @@ Click loi nhay dung hon (khoi cau chu khong chi 1 dong). Xu ly meo. Cap nhat bao
 
 ## Trang thai
 
-- Phien hien tai: cho phien 1
-- Phien 1: chua
+- Phien hien tai: xong phien 1, cho phien 2
+- Phien 1: xong
 - Phien 2: chua
 - Phien 3: chua
 - Phien 4: chua
 - Phien 5: chua
 - Phien 6: chua
 
-Diem moc truoc phien 1:
+Diem moc sau phien 1:
 - Validate/save qua `/api/worksheet/*`, FormData `file`
-- Preview khong co `sourceText`
-- PreviewPanel 1 cot: loi (khong click) + cay parse
-- Parser `parseTextContent` + `validateDocument` on dinh, line 1-based
-- Khong sua parser / man HS / man chieu
+- `extractAndParse` -> `{ parseResult, sourceText }`; preview JSON co `sourceText` (trung line voi errors)
+- PreviewPanel 1 cot: loi (khong click) + cay parse. Chua textarea / 2 cot
+- Parser rule khong doi. `parseHtmlToResultAndText` dung chung voi `parseHtmlContent`
+- Khong dam man HS / man chieu. Save van gui file goc

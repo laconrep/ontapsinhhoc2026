@@ -24,6 +24,7 @@ interface WorksheetPreview {
   errors: ValidationError[]
   isValid: boolean
   summary: { chapters: number; lessons: number; kps: number; questions: number }
+  sourceText: string
 }
 
 interface SaveResult {

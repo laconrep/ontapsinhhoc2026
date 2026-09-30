@@ -13,6 +13,7 @@ export interface WorksheetPreview {
   errors: ValidationError[]
   isValid: boolean
   summary: { chapters: number; lessons: number; kps: number; questions: number }
+  sourceText: string
 }
 
 export interface SaveResult {
@@ -53,13 +54,14 @@ export async function bufferFromFormData(formData: FormData): Promise<{ buffer: 
 }
 
 export async function validateWorksheetBuffer(buffer: Buffer, filename: string): Promise<WorksheetPreview> {
-  const parseResult = await extractAndParse(buffer, filename)
+  const { parseResult, sourceText } = await extractAndParse(buffer, filename)
   const validation = validateDocument(parseResult)
   return {
     parseResult: previewParseResult(parseResult),
     errors: validation.errors,
     isValid: validation.isValid,
     summary: summarize(parseResult),
+    sourceText,
   }
 }
 
@@ -69,7 +71,7 @@ export async function saveWorksheetBuffer(
   filename: string,
 ): Promise<SaveResult> {
   await ensureSchema()
-  const parseResult = await extractAndParse(buffer, filename)
+  const { parseResult } = await extractAndParse(buffer, filename)
   const validation = validateDocument(parseResult)
   if (!validation.isValid) {
     throw new Error("Tài liệu chưa hợp lệ, không thể lưu. Vui lòng kiểm tra lại.")

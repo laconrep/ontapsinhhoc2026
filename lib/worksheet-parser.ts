@@ -508,7 +508,7 @@ function attachBodyHtml(result: ParseResult, images: string[], tables: string[])
  * "..." để đánh dấu hoán đổi, rồi tái sử dụng parseTextContent.
  * Thẻ <img> / <table> giữ qua placeholder rồi gắn `bodyHtml` trên câu hỏi.
  */
-export function parseHtmlContent(html: string): ParseResult {
+export function parseHtmlToResultAndText(html: string): { parseResult: ParseResult; sourceText: string } {
   const images: string[] = []
   const tables: string[] = []
   const withoutScripts = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
@@ -520,10 +520,14 @@ export function parseHtmlContent(html: string): ParseResult {
     .replace(/<br\s*\/?>/gi, "\n")
   const withUnderline = withBreaks.replace(/<u>([\s\S]*?)<\/u>/gi, "__$1__")
   const stripped = withUnderline.replace(/<[^>]+>/g, "")
-  const text = decodeEntities(stripped)
-  const result = parseTextContent(text)
-  attachBodyHtml(result, images, tables)
-  return result
+  const sourceText = decodeEntities(stripped)
+  const parseResult = parseTextContent(sourceText)
+  attachBodyHtml(parseResult, images, tables)
+  return { parseResult, sourceText }
+}
+
+export function parseHtmlContent(html: string): ParseResult {
+  return parseHtmlToResultAndText(html).parseResult
 }
 
 // ============ Validate ============
