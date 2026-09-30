@@ -79,6 +79,7 @@ export interface QuestionDto {
   knowledgePointId: string
   type: "MC" | "TF" | "SA" | "FILL" | "DRAG"
   content: string
+  bodyHtml?: string | null
   options?: QuestionOptionDto[]
   correctAnswer?: string
 }

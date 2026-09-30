@@ -135,7 +135,13 @@ export async function saveWorksheet(formData: FormData): Promise<SaveResult> {
         for (const pQ of pKp.questions) {
           const [qRow] = await db
             .insert(questions)
-            .values({ knowledgePointId: kpRow.id, type: pQ.type, content: pQ.content, difficulty: 1 })
+            .values({
+              knowledgePointId: kpRow.id,
+              type: pQ.type,
+              content: pQ.content,
+              bodyHtml: pQ.bodyHtml ?? null,
+              difficulty: 1,
+            })
             .returning({ id: questions.id })
           result.createdQuestions += 1
 

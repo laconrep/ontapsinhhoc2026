@@ -145,6 +145,7 @@ export const questions = pgTable("questions", {
     .references(() => knowledgePoints.id, { onDelete: "cascade" }),
   type: text("type", { enum: ["MC", "TF", "SA", "FILL", "DRAG"] }).notNull(),
   content: text("content").notNull(),
+  bodyHtml: text("bodyHtml"),
   difficulty: integer("difficulty").notNull().default(1),
   timeLimitSec: integer("timeLimitSec"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),

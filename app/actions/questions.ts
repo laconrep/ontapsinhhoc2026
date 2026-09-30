@@ -107,6 +107,7 @@ export async function getQuestionsByKp(knowledgePointId: string): Promise<Questi
       knowledgePointId: q.knowledgePointId,
       type: q.type as QuestionType,
       content: q.content,
+      bodyHtml: q.bodyHtml ?? null,
       options: qOpts,
       correctAnswer: q.type === "SA" ? qOpts.find((o) => o.isCorrect)?.content : undefined,
     }
@@ -130,6 +131,7 @@ export async function createQuestion(input: {
   knowledgePointId: string
   type: QuestionType
   content: string
+  bodyHtml?: string | null
   difficulty?: number
   options: OptionInput[]
 }): Promise<{ id: string }> {
@@ -144,6 +146,7 @@ export async function createQuestion(input: {
       knowledgePointId: input.knowledgePointId,
       type: input.type,
       content: input.content.trim(),
+      bodyHtml: input.bodyHtml ?? null,
       difficulty: input.difficulty ?? 1,
     })
     .returning({ id: questions.id })
@@ -166,6 +169,7 @@ export async function createQuestion(input: {
 export async function updateQuestion(input: {
   id: string
   content: string
+  bodyHtml?: string | null
   difficulty?: number
   options: OptionInput[]
 }): Promise<void> {
@@ -181,7 +185,11 @@ export async function updateQuestion(input: {
 
   await db
     .update(questions)
-    .set({ content: input.content.trim(), difficulty: input.difficulty ?? 1 })
+    .set({
+      content: input.content.trim(),
+      bodyHtml: input.bodyHtml === undefined ? undefined : input.bodyHtml,
+      difficulty: input.difficulty ?? 1,
+    })
     .where(eq(questions.id, input.id))
 
   // replace options

@@ -15,6 +15,8 @@ export interface ParsedQuestion {
   options: ParsedOption[]
   /** đáp án đúng dạng text (SA) */
   correctAnswer?: string
+  /** HTML de (anh/bang); phien 3+ moi gan */
+  bodyHtml?: string
   line: number
 }
 
