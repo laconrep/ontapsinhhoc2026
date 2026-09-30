@@ -17,7 +17,7 @@ import {
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ImportErrorFix } from "@/components/teacher/import-error-fix"
+import { ImportErrorFix, type RevalidatedPreview } from "@/components/teacher/import-error-fix"
 import type { ParseResult, ValidationError } from "@/lib/worksheet-parser"
 
 interface WorksheetPreview {
@@ -52,6 +52,7 @@ export function WorksheetImporter() {
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<WorksheetPreview | null>(null)
   const [draftText, setDraftText] = useState("")
+  const [originalSource, setOriginalSource] = useState("")
   const [dragOver, setDragOver] = useState(false)
   const [isValidating, startValidate] = useTransition()
   const [isSaving, startSave] = useTransition()
@@ -70,12 +71,14 @@ export function WorksheetImporter() {
     setFile(f)
     setPreview(null)
     setDraftText("")
+    setOriginalSource("")
   }
 
   function reset() {
     setFile(null)
     setPreview(null)
     setDraftText("")
+    setOriginalSource("")
     if (inputRef.current) inputRef.current.value = ""
   }
 
@@ -86,6 +89,7 @@ export function WorksheetImporter() {
         const res = await postWorksheet<WorksheetPreview>("/api/worksheet/validate", file)
         setPreview(res)
         setDraftText(res.sourceText)
+        setOriginalSource(res.sourceText)
         if (res.isValid) toast.success("Tài liệu hợp lệ, sẵn sàng để lưu")
         else toast.error(`Phát hiện ${res.errors.length} lỗi cần sửa`)
       } catch (e) {
@@ -94,8 +98,14 @@ export function WorksheetImporter() {
     })
   }
 
+  function handleRevalidated(payload: RevalidatedPreview) {
+    setPreview((prev) => (prev ? { ...prev, ...payload } : prev))
+  }
+
+  const draftDirty = draftText !== originalSource
+
   function doSave() {
-    if (!file || !preview?.isValid) return
+    if (!file || !preview?.isValid || draftDirty) return
     startSave(async () => {
       try {
         const res = await postWorksheet<SaveResult>("/api/worksheet/save", file)
@@ -220,7 +230,7 @@ export function WorksheetImporter() {
             <Button
               variant="default"
               onClick={doSave}
-              disabled={!preview?.isValid || isSaving}
+              disabled={!preview?.isValid || draftDirty || isSaving}
               className="bg-primary"
             >
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -231,7 +241,12 @@ export function WorksheetImporter() {
       </Card>
 
       {preview && !preview.isValid && (
-        <ImportErrorFix errors={preview.errors} sourceText={draftText} onSourceChange={setDraftText} />
+        <ImportErrorFix
+          errors={preview.errors}
+          sourceText={draftText}
+          onSourceChange={setDraftText}
+          onRevalidated={handleRevalidated}
+        />
       )}
       {preview && preview.isValid && <PreviewPanel preview={preview} />}
     </div>

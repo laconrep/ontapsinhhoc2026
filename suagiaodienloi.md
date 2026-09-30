@@ -180,7 +180,12 @@ Het sua 1 cau -> chay `parseTextContent` + `validateDocument` tren **toan bo dra
 ### Bao cao phien 4 (dien sau khi code)
 
 - Da lam:
+  - Client parse `parseTextContent` + `validateDocument` + `summarize` tren toan bo draft. Debounce 1000ms sau onChange va onBlur.
+  - `onRevalidated` cap nhat preview (kem sourceText draft). Giu active neu `line` con; khong thi chon loi dau hoac bo active. Badge "Dang kiem tra...".
+  - Nut Luu disable khi `draftDirty` (tranh luu file goc sai). Chua gui text len server.
 - File da sua/tao:
+  - `components/teacher/import-error-fix.tsx`
+  - `components/teacher/worksheet-importer.tsx`
 - Viec tiep theo (phien 5): luu ban nhap + API save tu text.
 
 ---
@@ -253,11 +258,11 @@ Click loi nhay dung hon (khoi cau chu khong chi 1 dong). Xu ly meo. Cap nhat bao
 
 ## Trang thai
 
-- Phien hien tai: xong phien 3, cho phien 4
+- Phien hien tai: xong phien 4, cho phien 5
 - Phien 1: xong
 - Phien 2: xong
 - Phien 3: xong
-- Phien 4: chua
+- Phien 4: xong
 - Phien 5: chua
 - Phien 6: chua
 
