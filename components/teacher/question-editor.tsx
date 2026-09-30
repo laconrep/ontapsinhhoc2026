@@ -21,6 +21,7 @@ import {
   updateQuestion,
   deleteQuestion,
 } from "@/app/actions/questions"
+import { QuestionStem } from "@/components/question/question-stem"
 import type { QuestionDto } from "@/types"
 
 type QType = "MC" | "TF" | "SA"
@@ -172,7 +173,12 @@ export function QuestionEditor({
                   {TYPE_LABEL[q.type as QType] ?? q.type}
                 </Badge>
                 <div className="flex-1">
-                  <p className="text-sm text-foreground">{q.content}</p>
+                  <QuestionStem
+                    content={q.content}
+                    bodyHtml={q.bodyHtml}
+                    className="text-sm text-foreground"
+                    maxHeightClass="max-h-32"
+                  />
                   <div className="mt-1 space-y-0.5">
                     {q.type === "SA" ? (
                       <p className="text-xs text-muted-foreground">
@@ -256,9 +262,20 @@ export function QuestionEditor({
                 id="q-content"
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                rows={2}
+                rows={6}
                 placeholder="Nhập nội dung câu hỏi"
               />
+              {dialog?.q?.bodyHtml ? (
+                <div className="space-y-1 rounded-md border bg-muted/40 p-2">
+                  <p className="text-xs font-medium text-muted-foreground">Xem trước hình / bảng</p>
+                  <QuestionStem
+                    content={content}
+                    bodyHtml={dialog.q.bodyHtml}
+                    className="text-sm"
+                    maxHeightClass="max-h-48"
+                  />
+                </div>
+              ) : null}
             </div>
 
             {type === "MC" && (

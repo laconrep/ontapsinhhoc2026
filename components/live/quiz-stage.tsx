@@ -2,6 +2,7 @@
 
 import { Check, Users } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { QuestionStem } from "@/components/question/question-stem"
 import type { LiveQuizView } from "./use-live-quiz"
 
 const LETTERS = ["A", "B", "C", "D", "E", "F"]
@@ -57,9 +58,12 @@ export function QuizStage({ view }: { view: LiveQuizView }) {
               </span>
             </div>
 
-            <h1 className="text-balance text-center font-heading text-4xl font-bold leading-tight md:text-5xl">
-              {question.content}
-            </h1>
+            <QuestionStem
+              content={question.content}
+              bodyHtml={question.bodyHtml}
+              className="text-balance text-center font-heading text-4xl font-bold leading-tight md:text-5xl"
+              maxHeightClass="max-h-[40vh] w-full"
+            />
 
             {/* Lựa chọn */}
             {question.type === "SA" ? (

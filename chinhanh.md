@@ -262,7 +262,14 @@ Man chieu GV cuon duoc de dai; editor GV preview HTML; import that su luu `bodyH
 ### Bao cao phien 6 (dien sau khi code)
 
 - Da lam:
+  - Man chieu GV (`quiz-stage.tsx`): khoi de dung `QuestionStem` (bodyHtml sanitize hoac content pre-wrap), cuon `max-h-[40vh]`. Lua chon A-D nam ngoai vung cuon.
+  - Editor GV: list + dialog preview HTML neu co `bodyHtml`; Textarea van sua `content` (khong mat text). Khong ghi de `bodyHtml` khi chi sua text.
+  - Import worksheet da insert `bodyHtml` (phien 2). Khong doi file mau txt.
+  - Kiem tra parser: de 6 y ghep `\n` vao content, 4 option, 1 dung (D); dong `+` `*` van loi; cau khong HTML `bodyHtml` null, isValid, fallback content.
 - File da sua/tao:
+  - `components/live/quiz-stage.tsx`
+  - `components/teacher/question-editor.tsx`
+  - `chinhanh.md`
 - Viec tiep theo: khong. Hinh/bang/de da dong xong.
 
 ---
@@ -275,15 +282,15 @@ Man chieu GV cuon duoc de dai; editor GV preview HTML; import that su luu `bodyH
 
 ## Trang thai
 
-- Phien hien tai: xong phien 5, cho phien 6
+- Phien hien tai: xong phien 6
 - Phien 1: xong
 - Phien 2: xong
 - Phien 3: xong
 - Phien 4: xong
 - Phien 5: xong
-- Phien 6: chua
+- Phien 6: xong
 
-Diem moc sau phien 5:
+Diem moc sau phien 6:
 - Parse MC/TF/SA moi da xong (`prase cau hoi.md`)
 - De da dong: y `(1)` `(2)` ghep vao `content` bang `\n`; A.B.C.D van la option
 - Helper `appendStem` / `canAppendStem` nam tren `parseTextContent`
@@ -291,5 +298,7 @@ Diem moc sau phien 5:
 - Schema co `questions.bodyHtml` nullable; DTO + import/CRUD da kem field
 - Man HS: `QuestionStem` (`components/question/question-stem.tsx`) — bodyHtml sanitize hoac content pre-wrap; cuon `max-h-[40vh]` (live HS 36vh). Tab4 + live student-quiz-view da dung. Lua chon ngoai vung cuon.
 - `bodyHtml` da di qua startQuiz + LiveQuestion/maskQuestion + loadQuizQuestions + LiveQuestionView
-- Man chieu GV (`quiz-stage.tsx`) va editor GV chua dung stem (phien 6)
+- Man chieu GV (`quiz-stage.tsx`) dung `QuestionStem`, cuon de `max-h-[40vh]`; lua chon ngoai vung cuon
+- Editor GV: preview `bodyHtml` (list + dialog), van edit `content` text
+- Import da luu `bodyHtml`. Cau khong HTML fallback `content`
 - Can ALTER TABLE them cot `bodyHtml` tren DB that (drizzle schema da ghi; khong co thu muc migrate trong repo)
