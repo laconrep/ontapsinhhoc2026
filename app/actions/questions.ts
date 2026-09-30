@@ -1,6 +1,6 @@
 "use server"
 
-import { db } from "@/lib/db"
+import { db, ensureSchema } from "@/lib/db"
 import { questions, questionOptions, knowledgePoints, lessons } from "@/lib/db/schema"
 import { requireRole } from "@/lib/auth-helpers"
 import { and, asc, eq } from "drizzle-orm"
@@ -85,6 +85,7 @@ async function assertKpOwner(knowledgePointId: string, teacherId: string): Promi
 
 export async function getQuestionsByKp(knowledgePointId: string): Promise<QuestionDto[]> {
   const user = await requireRole("teacher")
+  await ensureSchema()
   await assertKpOwner(knowledgePointId, user.id)
 
   const qs = await db
@@ -136,6 +137,7 @@ export async function createQuestion(input: {
   options: OptionInput[]
 }): Promise<{ id: string }> {
   const user = await requireRole("teacher")
+  await ensureSchema()
   const lessonId = await assertKpOwner(input.knowledgePointId, user.id)
   if (!input.content.trim()) throw new Error("Nội dung câu hỏi không được để trống")
   validateOptions(input.type, input.options)
@@ -174,6 +176,7 @@ export async function updateQuestion(input: {
   options: OptionInput[]
 }): Promise<void> {
   const user = await requireRole("teacher")
+  await ensureSchema()
   const [q] = await db
     .select({ id: questions.id, type: questions.type, kpId: questions.knowledgePointId })
     .from(questions)

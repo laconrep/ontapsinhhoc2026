@@ -1,6 +1,6 @@
 "use server"
 
-import { db } from "@/lib/db"
+import { db, ensureSchema } from "@/lib/db"
 import {
   chapters,
   lessons,
@@ -491,6 +491,7 @@ export async function startQuiz(lessonId: string): Promise<{
   pointPerSlot: number
 }> {
   const student = await requireRole("student")
+  await ensureSchema()
   await assertLessonAccess(student.id, lessonId)
 
   const kpIds = await getKpIdsOfLesson(lessonId)

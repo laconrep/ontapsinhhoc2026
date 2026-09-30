@@ -3,7 +3,7 @@
 import { randomUUID } from "crypto"
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
-import { db } from "@/lib/db"
+import { db, ensureSchema } from "@/lib/db"
 import {
   classes,
   classStudents,
@@ -79,6 +79,7 @@ function publishLight(sessionId: string, type: string, payload: Record<string, u
 
 // ---- Nạp câu hỏi cho quiz từ một bài ----
 async function loadQuizQuestions(lessonId: string, defaultTimeSec: number): Promise<LiveQuestionFull[]> {
+  await ensureSchema()
   const rows = await db
     .select({
       id: questions.id,

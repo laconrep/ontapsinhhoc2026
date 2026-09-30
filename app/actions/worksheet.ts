@@ -1,12 +1,43 @@
 "use server"
 
-import { db } from "@/lib/db"
+import { db, ensureSchema } from "@/lib/db"
 import { chapters, lessons, knowledgePoints, questions, questionOptions } from "@/lib/db/schema"
 import { requireRole } from "@/lib/auth-helpers"
-import { and, asc, eq, sql } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { extractAndParse } from "@/lib/extract-file"
 import { validateDocument, summarize, type ParseResult, type ValidationError } from "@/lib/worksheet-parser"
+
+function toUserError(e: unknown, fallback: string): Error {
+  if (e && typeof e === "object" && "digest" in e) throw e
+  if (e instanceof Error && e.message && !/unexpected response/i.test(e.message)) {
+    return new Error(e.message)
+  }
+  return new Error(fallback)
+}
+
+/** Preview khong can base64 anh/bang — tranh payload Server Action qua lon. */
+function previewParseResult(result: ParseResult): ParseResult {
+  return {
+    ...result,
+    chapters: result.chapters.map((ch) => ({
+      ...ch,
+      lessons: ch.lessons.map((l) => ({
+        ...l,
+        knowledgePoints: l.knowledgePoints.map((kp) => ({
+          ...kp,
+          questions: kp.questions.map((q) => ({
+            type: q.type,
+            content: q.content,
+            options: q.options,
+            correctAnswer: q.correctAnswer,
+            line: q.line,
+          })),
+        })),
+      })),
+    })),
+  }
+}
 
 export interface WorksheetPreview {
   parseResult: ParseResult
@@ -25,14 +56,18 @@ async function formDataToBuffer(formData: FormData): Promise<{ buffer: Buffer; f
 /** BƯỚC 2: Kiểm tra tài liệu — parse + validate, trả preview. Không lưu DB. */
 export async function validateWorksheet(formData: FormData): Promise<WorksheetPreview> {
   await requireRole("teacher")
-  const { buffer, filename } = await formDataToBuffer(formData)
-  const parseResult = await extractAndParse(buffer, filename)
-  const validation = validateDocument(parseResult)
-  return {
-    parseResult,
-    errors: validation.errors,
-    isValid: validation.isValid,
-    summary: summarize(parseResult),
+  try {
+    const { buffer, filename } = await formDataToBuffer(formData)
+    const parseResult = await extractAndParse(buffer, filename)
+    const validation = validateDocument(parseResult)
+    return {
+      parseResult: previewParseResult(parseResult),
+      errors: validation.errors,
+      isValid: validation.isValid,
+      summary: summarize(parseResult),
+    }
+  } catch (e) {
+    throw toUserError(e, "Không đọc được file. Thử file nhỏ hơn hoặc định dạng .txt/.docx/.pdf")
   }
 }
 
@@ -47,8 +82,16 @@ export interface SaveResult {
 /** BƯỚC 3: Lưu tài liệu — parse lại, ghi DB, đặt status='ready'. */
 export async function saveWorksheet(formData: FormData): Promise<SaveResult> {
   const user = await requireRole("teacher")
-  const { buffer, filename } = await formDataToBuffer(formData)
-  const parseResult = await extractAndParse(buffer, filename)
+  let parseResult: ParseResult
+  let filename = ""
+  try {
+    await ensureSchema()
+    const got = await formDataToBuffer(formData)
+    filename = got.filename
+    parseResult = await extractAndParse(got.buffer, filename)
+  } catch (e) {
+    throw toUserError(e, "Không đọc được file. Thử file nhỏ hơn hoặc định dạng .txt/.docx/.pdf")
+  }
   const validation = validateDocument(parseResult)
   if (!validation.isValid) {
     throw new Error("Tài liệu chưa hợp lệ, không thể lưu. Vui lòng kiểm tra lại.")
@@ -62,6 +105,7 @@ export async function saveWorksheet(formData: FormData): Promise<SaveResult> {
     lessonIds: [],
   }
 
+  try {
   for (const pChapter of parseResult.chapters) {
     // tìm chương cùng tên hoặc tạo mới
     const [existingChapter] = await db
@@ -167,7 +211,10 @@ export async function saveWorksheet(formData: FormData): Promise<SaveResult> {
     }
   }
 
-  revalidatePath("/teacher/lessons")
-  revalidatePath("/teacher/questions")
-  return result
+    revalidatePath("/teacher/lessons")
+    revalidatePath("/teacher/questions")
+    return result
+  } catch (e) {
+    throw toUserError(e, "Lưu thất bại. Kiểm tra kết nối hoặc thử lại.")
+  }
 }

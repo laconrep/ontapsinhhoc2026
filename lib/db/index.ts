@@ -11,3 +11,19 @@ export const pool = new Pool({
 })
 
 export const db = drizzle(pool, { schema })
+
+let schemaReady: Promise<void> | null = null
+
+/** Cot bodyHtml them o phien 2, repo khong co migrate — dam bao DB that co cot. */
+export function ensureSchema(): Promise<void> {
+  if (!schemaReady) {
+    schemaReady = pool
+      .query(`ALTER TABLE questions ADD COLUMN IF NOT EXISTS "bodyHtml" text`)
+      .then(() => undefined)
+      .catch((e) => {
+        schemaReady = null
+        throw e
+      })
+  }
+  return schemaReady
+}

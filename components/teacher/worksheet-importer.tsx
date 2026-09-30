@@ -63,7 +63,8 @@ export function WorksheetImporter() {
         if (res.isValid) toast.success("Tài liệu hợp lệ, sẵn sàng để lưu")
         else toast.error(`Phát hiện ${res.errors.length} lỗi cần sửa`)
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Không đọc được file")
+        const msg = e instanceof Error ? e.message : "Không đọc được file"
+        toast.error(/unexpected response/i.test(msg) ? "Server không nhận được file. Thử file nhỏ hơn (dưới 10MB) hoặc .txt" : msg)
       }
     })
   }
@@ -81,7 +82,8 @@ export function WorksheetImporter() {
         router.push("/teacher/lessons")
         router.refresh()
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Lưu thất bại")
+        const msg = e instanceof Error ? e.message : "Lưu thất bại"
+        toast.error(/unexpected response/i.test(msg) ? "Lưu thất bại. File có thể quá lớn hoặc thiếu cột DB. Thử lại." : msg)
       }
     })
   }
