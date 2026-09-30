@@ -119,7 +119,12 @@ Khi `preview && !preview.isValid`: thay PreviewPanel 1 cot bang 2 cot. Khi hop l
 ### Bao cao phien 2 (dien sau khi code)
 
 - Da lam:
+  - Tao `ImportErrorFix`: grid 2 cot khi co loi. Trai: list loi (button, chua nhay dong). Phai: textarea mono, `value={sourceText}`, `onChange` -> `onSourceChange`.
+  - Importer: `draftText` set tu `res.sourceText` sau validate. `!isValid` -> `ImportErrorFix`; `isValid` -> `PreviewPanel` cu. Nut Luu van `disabled={!preview?.isValid}`.
+  - Khong parse lai, khong highlight, khong luu DB.
 - File da sua/tao:
+  - `components/teacher/import-error-fix.tsx` (tao)
+  - `components/teacher/worksheet-importer.tsx`
 - Viec tiep theo (phien 3): click loi -> nhay + highlight dong.
 
 ---
@@ -245,9 +250,9 @@ Click loi nhay dung hon (khoi cau chu khong chi 1 dong). Xu ly meo. Cap nhat bao
 
 ## Trang thai
 
-- Phien hien tai: xong phien 1, cho phien 2
+- Phien hien tai: xong phien 2, cho phien 3
 - Phien 1: xong
-- Phien 2: chua
+- Phien 2: xong
 - Phien 3: chua
 - Phien 4: chua
 - Phien 5: chua

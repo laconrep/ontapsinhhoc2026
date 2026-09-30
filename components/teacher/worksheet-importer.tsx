@@ -17,6 +17,7 @@ import {
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ImportErrorFix } from "@/components/teacher/import-error-fix"
 import type { ParseResult, ValidationError } from "@/lib/worksheet-parser"
 
 interface WorksheetPreview {
@@ -50,6 +51,7 @@ export function WorksheetImporter() {
   const inputRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<WorksheetPreview | null>(null)
+  const [draftText, setDraftText] = useState("")
   const [dragOver, setDragOver] = useState(false)
   const [isValidating, startValidate] = useTransition()
   const [isSaving, startSave] = useTransition()
@@ -67,11 +69,13 @@ export function WorksheetImporter() {
     }
     setFile(f)
     setPreview(null)
+    setDraftText("")
   }
 
   function reset() {
     setFile(null)
     setPreview(null)
+    setDraftText("")
     if (inputRef.current) inputRef.current.value = ""
   }
 
@@ -81,6 +85,7 @@ export function WorksheetImporter() {
       try {
         const res = await postWorksheet<WorksheetPreview>("/api/worksheet/validate", file)
         setPreview(res)
+        setDraftText(res.sourceText)
         if (res.isValid) toast.success("Tài liệu hợp lệ, sẵn sàng để lưu")
         else toast.error(`Phát hiện ${res.errors.length} lỗi cần sửa`)
       } catch (e) {
@@ -106,7 +111,7 @@ export function WorksheetImporter() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className={`mx-auto space-y-6 ${preview && !preview.isValid ? "max-w-5xl" : "max-w-3xl"}`}>
       <div>
         <h1 className="font-heading text-2xl font-bold text-foreground">Nạp câu hỏi từ file</h1>
         <p className="mt-1 text-muted-foreground">
@@ -225,8 +230,10 @@ export function WorksheetImporter() {
         </CardContent>
       </Card>
 
-      {/* Kết quả */}
-      {preview && <PreviewPanel preview={preview} />}
+      {preview && !preview.isValid && (
+        <ImportErrorFix errors={preview.errors} sourceText={draftText} onSourceChange={setDraftText} />
+      )}
+      {preview && preview.isValid && <PreviewPanel preview={preview} />}
     </div>
   )
 }
