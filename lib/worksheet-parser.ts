@@ -214,6 +214,17 @@ function tfOptionContent(letter: string, text: string): string {
   return `${letter.toLowerCase()}) ${text}`.trim()
 }
 
+function appendStem(q: ParsedQuestion, extra: string) {
+  const t = extra.trim()
+  if (!t) return
+  q.content = q.content ? `${q.content}\n${t}` : t
+}
+
+function canAppendStem(q: ParsedQuestion): boolean {
+  if (q.type === "SA") return !q.correctAnswer
+  return q.options.length === 0
+}
+
 // ============ Parser văn bản thuần ============
 
 export function parseTextContent(text: string): ParseResult {
@@ -373,6 +384,12 @@ export function parseTextContent(text: string): ParseResult {
       curKp = { content, underlinedTerms, questions: [], line: lineNo }
       curLesson.knowledgePoints.push(curKp)
       curQuestion = null
+      return
+    }
+
+    // De da dong: (1) (2) ... thuoc de khi dang mo cau, chua co lua chon / dap an
+    if (curQuestion && canAppendStem(curQuestion)) {
+      appendStem(curQuestion, line)
       return
     }
 

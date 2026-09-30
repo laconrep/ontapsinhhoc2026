@@ -101,7 +101,12 @@ Y `(1)` `(2)` ... thuoc de. Chi `A.` `B.` `C.` `D.` (hoac a/b/c/d TF) la lua cho
 ### Bao cao phien 1 (dien sau khi code)
 
 - Da lam:
+  - Sau `#`/`##`/`###` + `cau:`, dong khong phai choice / `dap an:` / marker moi (`{` `[` `-` `#` `+` `*` `//`) append vao `content` bang `\n`.
+  - Y `(1)` `(2)` ... thuoc de. Chi `parseChoiceLine` (A.B.C.D / a.b.c.d) la lua chon.
+  - Ghep de dung khi chua co option (MC/TF) hoac chua co `correctAnswer` (SA).
+  - Dong `-` KP moi van cat cau dang mo. Mau txt van isValid. Dong `+` van loi.
 - File da sua/tao:
+  - `lib/worksheet-parser.ts`
 - Viec tiep theo (phien 2): them cot `bodyHtml` + type, khong render UI.
 
 ---
@@ -238,16 +243,18 @@ Man chieu GV cuon duoc de dai; editor GV preview HTML; import that su luu `bodyH
 
 ## Trang thai
 
-- Phien hien tai: cho phien 1
-- Phien 1: chua
+- Phien hien tai: xong phien 1, cho phien 2
+- Phien 1: xong
 - Phien 2: chua
 - Phien 3: chua
 - Phien 4: chua
 - Phien 5: chua
 - Phien 6: chua
 
-Diem moc truoc phien 1:
+Diem moc sau phien 1:
 - Parse MC/TF/SA moi da xong (`prase cau hoi.md`)
-- De 1 dong; dong (1)(2) bi bao loi cu phap
-- HTML strip het img/table
+- De da dong: y `(1)` `(2)` ghep vao `content` bang `\n`; A.B.C.D van la option
+- Helper `appendStem` / `canAppendStem` nam tren `parseTextContent`
+- HTML van strip het img/table
+- Schema chua co `bodyHtml`
 - UI chi in text `content`, khong thanh cuon rieng cho de
