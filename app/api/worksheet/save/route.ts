@@ -1,0 +1,23 @@
+import { NextResponse } from "next/server"
+import { getCurrentUser } from "@/lib/auth-helpers"
+import { bufferFromFormData, saveWorksheetBuffer } from "@/lib/worksheet-import"
+
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+
+export async function POST(req: Request) {
+  const user = await getCurrentUser()
+  if (!user) return NextResponse.json({ error: "Cần đăng nhập" }, { status: 401 })
+  if (user.role !== "teacher") return NextResponse.json({ error: "Chỉ giáo viên được nạp file" }, { status: 403 })
+  if (!user.isOnboarded) return NextResponse.json({ error: "Cần hoàn tất đăng ký" }, { status: 403 })
+
+  try {
+    const formData = await req.formData()
+    const { buffer, filename } = await bufferFromFormData(formData)
+    const result = await saveWorksheetBuffer(user, buffer, filename)
+    return NextResponse.json(result)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Lưu thất bại"
+    return NextResponse.json({ error: msg }, { status: 400 })
+  }
+}

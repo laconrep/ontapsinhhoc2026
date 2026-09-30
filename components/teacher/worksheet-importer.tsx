@@ -17,7 +17,29 @@ import {
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { validateWorksheet, saveWorksheet, type WorksheetPreview } from "@/app/actions/worksheet"
+import type { ParseResult, ValidationError } from "@/lib/worksheet-parser"
+
+interface WorksheetPreview {
+  parseResult: ParseResult
+  errors: ValidationError[]
+  isValid: boolean
+  summary: { chapters: number; lessons: number; kps: number; questions: number }
+}
+
+interface SaveResult {
+  createdLessons: number
+  createdKps: number
+  createdQuestions: number
+}
+
+async function postWorksheet<T>(url: string, file: File): Promise<T> {
+  const fd = new FormData()
+  fd.append("file", file)
+  const res = await fetch(url, { method: "POST", body: fd })
+  const data = (await res.json().catch(() => ({}))) as T & { error?: string }
+  if (!res.ok) throw new Error(data.error || `Lỗi server (${res.status})`)
+  return data
+}
 
 const TYPE_LABEL: Record<string, string> = { MC: "Trắc nghiệm", TF: "Đúng/Sai", SA: "Trả lời ngắn" }
 const ACCEPT = ".txt,.docx,.pdf"
@@ -54,36 +76,30 @@ export function WorksheetImporter() {
 
   function doValidate() {
     if (!file) return
-    const fd = new FormData()
-    fd.append("file", file)
     startValidate(async () => {
       try {
-        const res = await validateWorksheet(fd)
+        const res = await postWorksheet<WorksheetPreview>("/api/worksheet/validate", file)
         setPreview(res)
         if (res.isValid) toast.success("Tài liệu hợp lệ, sẵn sàng để lưu")
         else toast.error(`Phát hiện ${res.errors.length} lỗi cần sửa`)
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "Không đọc được file"
-        toast.error(/unexpected response/i.test(msg) ? "Server không nhận được file. Thử file nhỏ hơn (dưới 10MB) hoặc .txt" : msg)
+        toast.error(e instanceof Error ? e.message : "Không đọc được file")
       }
     })
   }
 
   function doSave() {
     if (!file || !preview?.isValid) return
-    const fd = new FormData()
-    fd.append("file", file)
     startSave(async () => {
       try {
-        const res = await saveWorksheet(fd)
+        const res = await postWorksheet<SaveResult>("/api/worksheet/save", file)
         toast.success(
           `Đã lưu: ${res.createdLessons} bài, ${res.createdKps} kiến thức, ${res.createdQuestions} câu hỏi`,
         )
         router.push("/teacher/lessons")
         router.refresh()
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "Lưu thất bại"
-        toast.error(/unexpected response/i.test(msg) ? "Lưu thất bại. File có thể quá lớn hoặc thiếu cột DB. Thử lại." : msg)
+        toast.error(e instanceof Error ? e.message : "Lưu thất bại")
       }
     })
   }

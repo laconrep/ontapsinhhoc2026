@@ -6,12 +6,14 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  allowedDevOrigins: ['*.monkeycode-ai.live'],
+  allowedDevOrigins: ['.monkeycode-ai.live', '*.monkeycode-ai.live'],
   serverActions: {
+    allowedOrigins: ['*.monkeycode-ai.live', '.monkeycode-ai.live'],
     bodySizeLimit: "10mb",
   },
   experimental: {
     serverActions: {
+      allowedOrigins: ['*.monkeycode-ai.live', '.monkeycode-ai.live'],
       bodySizeLimit: "10mb",
     },
   },
