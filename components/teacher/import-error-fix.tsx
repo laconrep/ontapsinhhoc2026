@@ -27,12 +27,47 @@ interface ImportErrorFixProps {
   onRevalidated?: (payload: RevalidatedPreview) => void
 }
 
-function lineRange(text: string, line: number): { start: number; end: number } {
+function questionBlockRange(text: string, line: number): { startLine: number; endLine: number } {
   const lines = text.split("\n")
+  if (lines.length === 0) return { startLine: 1, endLine: 1 }
   const idx = Math.max(1, Math.min(line, lines.length)) - 1
+  const t = (i: number) => lines[i]?.trim() ?? ""
+  const isQStart = (s: string) => /^#{1,3}(\s|$)/.test(s) || /^cau:/i.test(s)
+  const isNewBlock = (s: string) =>
+    s.startsWith("#") ||
+    s.startsWith("{") ||
+    s.startsWith("[") ||
+    s.startsWith("-") ||
+    s.startsWith("+") ||
+    s.startsWith("*") ||
+    s.startsWith("//")
+
+  let start = idx
+  while (start > 0 && !isQStart(t(start))) start -= 1
+  if (!isQStart(t(start))) start = idx
+
+  let end = idx
+  for (let i = start + 1; i < lines.length; i++) {
+    const s = t(i)
+    if (s && isNewBlock(s)) break
+    end = i
+  }
+  if (end < idx) end = idx
+  return { startLine: start + 1, endLine: end + 1 }
+}
+
+function offsetRange(text: string, startLine: number, endLine: number): { start: number; end: number } {
+  const lines = text.split("\n")
   let start = 0
-  for (let i = 0; i < idx; i++) start += lines[i].length + 1
-  return { start, end: start + (lines[idx]?.length ?? 0) }
+  const from = Math.max(1, startLine) - 1
+  const to = Math.max(from, Math.min(endLine, lines.length) - 1)
+  for (let i = 0; i < from && i < lines.length; i++) start += lines[i].length + 1
+  let end = start
+  for (let i = from; i <= to && i < lines.length; i++) {
+    end += lines[i].length
+    if (i < to) end += 1
+  }
+  return { start, end }
 }
 
 export function ImportErrorFix({
@@ -49,6 +84,9 @@ export function ImportErrorFix({
   errorsRef.current = errors
 
   function applyRevalidate(text: string) {
+    const ta = textareaRef.current
+    const selStart = ta?.selectionStart
+    const selEnd = ta?.selectionEnd
     setChecking(false)
     const parseResult = parseTextContent(text)
     const { isValid, errors: next } = validateDocument(parseResult)
@@ -63,6 +101,11 @@ export function ImportErrorFix({
       return next.length > 0 ? 0 : null
     })
     onRevalidated?.({ errors: next, isValid, parseResult, summary, sourceText: text })
+    if (!isValid && ta && selStart != null) {
+      requestAnimationFrame(() => {
+        ta.setSelectionRange(selStart, selEnd ?? selStart)
+      })
+    }
   }
 
   function scheduleRevalidate(text: string) {
@@ -94,12 +137,13 @@ export function ImportErrorFix({
     if (!e?.line) return
     const ta = textareaRef.current
     if (!ta) return
-    const { start, end } = lineRange(sourceText, e.line)
+    const { startLine, endLine } = questionBlockRange(sourceText, e.line)
+    const { start, end } = offsetRange(sourceText, startLine, endLine)
     ta.focus()
     ta.setSelectionRange(start, end)
     const lineCount = Math.max(sourceText.split("\n").length, 1)
     const lineHeight = ta.scrollHeight / lineCount
-    ta.scrollTop = lineHeight * (e.line - 1)
+    ta.scrollTop = lineHeight * (startLine - 1)
   }
 
   return (

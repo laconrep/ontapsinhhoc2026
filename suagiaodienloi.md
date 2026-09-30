@@ -251,7 +251,11 @@ Click loi nhay dung hon (khoi cau chu khong chi 1 dong). Xu ly meo. Cap nhat bao
 ### Bao cao phien 6 (dien sau khi code)
 
 - Da lam:
+  - `questionBlockRange`: lui toi `#`/`##`/`###`/`cau:`; end truoc marker moi (`#` `{` `[` `-` `+` `*` `//`). Click loi select ca khoi.
+  - Blur/revalidate giu caret. List trai bot loi cua khoi da sua. Empty/0 bai: loi tong cot trai, textarea van sua.
 - File da sua/tao:
+  - `components/teacher/import-error-fix.tsx`
+  - `suagiaodienloi.md`
 - Viec tiep theo: khong. Giao dien sua loi xong.
 
 ---
@@ -264,13 +268,13 @@ Click loi nhay dung hon (khoi cau chu khong chi 1 dong). Xu ly meo. Cap nhat bao
 
 ## Trang thai
 
-- Phien hien tai: xong phien 5, cho phien 6
+- Phien hien tai: xong phien 6
 - Phien 1: xong
 - Phien 2: xong
 - Phien 3: xong
 - Phien 4: xong
 - Phien 5: xong
-- Phien 6: chua
+- Phien 6: xong
 
 Diem moc sau phien 1:
 - Validate/save qua `/api/worksheet/*`, FormData `file`
