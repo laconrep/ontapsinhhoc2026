@@ -41,8 +41,16 @@ export async function extractAndParse(buffer: Buffer, filename: string): Promise
   }
 
   if (kind === "docx") {
-    // mammoth mặc định bỏ qua gạch chân → map u => u để giữ thẻ <u>
-    const { value: html } = await mammoth.convertToHtml({ buffer }, { styleMap: ["u => u"] })
+    const { value: html } = await mammoth.convertToHtml(
+      { buffer },
+      {
+        styleMap: ["u => u"],
+        convertImage: mammoth.images.imgElement(async (image) => {
+          const encoded = await image.readAsBase64String()
+          return { src: `data:${image.contentType};base64,${encoded}` }
+        }),
+      },
+    )
     return parseHtmlContent(html)
   }
 

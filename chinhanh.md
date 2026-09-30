@@ -166,7 +166,14 @@ Co cho luu HTML de (anh/bang) ma khong vo cau cu (text thuong).
 ### Bao cao phien 3 (dien sau khi code)
 
 - Da lam:
+  - `extract-file.ts`: mammoth `convertImage` -> `<img src="data:image/...;base64,...">`. Giu `styleMap: ["u => u"]`.
+  - `parseHtmlContent`: the `<img>` doi thanh placeholder `@@IMGn@@` truoc khi strip tag; sau parse gan `bodyHtml` (img + text de, xuong dong = `<br>`).
+  - `content` van plain text (bo token anh). Chi chap src `data:image/...;base64,` hoac `/`. Src http bi bo, khong fail file.
+  - File khong anh: `bodyHtml` khong gan, isValid. Mau txt khong doi.
+  - Token anh ngoai de dang mo: bo qua, khong bao loi cu phap.
 - File da sua/tao:
+  - `lib/extract-file.ts`
+  - `lib/worksheet-parser.ts`
 - Viec tiep theo (phien 4): giu `<table>` trong bodyHtml.
 
 ---
@@ -253,19 +260,19 @@ Man chieu GV cuon duoc de dai; editor GV preview HTML; import that su luu `bodyH
 
 ## Trang thai
 
-- Phien hien tai: xong phien 2, cho phien 3
+- Phien hien tai: xong phien 3, cho phien 4
 - Phien 1: xong
 - Phien 2: xong
-- Phien 3: chua
+- Phien 3: xong
 - Phien 4: chua
 - Phien 5: chua
 - Phien 6: chua
 
-Diem moc sau phien 2:
+Diem moc sau phien 3:
 - Parse MC/TF/SA moi da xong (`prase cau hoi.md`)
 - De da dong: y `(1)` `(2)` ghep vao `content` bang `\n`; A.B.C.D van la option
 - Helper `appendStem` / `canAppendStem` nam tren `parseTextContent`
-- HTML van strip het img/table
-- Schema co `questions.bodyHtml` nullable; DTO + import/CRUD da kem field; parser chua gan bodyHtml
+- Docx: mammoth `convertImage` base64. `parseHtmlContent` giu `<img>` qua `@@IMGn@@` roi gan `ParsedQuestion.bodyHtml`. Table van bi strip (phien 4).
+- Schema co `questions.bodyHtml` nullable; DTO + import/CRUD da kem field
 - UI chi in text `content`, khong thanh cuon rieng cho de
 - Can ALTER TABLE them cot `bodyHtml` tren DB that (drizzle schema da ghi; khong co thu muc migrate trong repo)

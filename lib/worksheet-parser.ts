@@ -389,6 +389,11 @@ export function parseTextContent(text: string): ParseResult {
       return
     }
 
+    // Token anh (tu parseHtmlContent) ngoai de dang mo: bo qua, khong fail file
+    if (/^@@IMG\d+@@$/.test(line) && !(curQuestion && canAppendStem(curQuestion))) {
+      return
+    }
+
     // De da dong: (1) (2) ... thuoc de khi dang mo cau, chua co lua chon / dap an
     if (curQuestion && canAppendStem(curQuestion)) {
       appendStem(curQuestion, line)
@@ -419,22 +424,74 @@ function decodeEntities(s: string): string {
     .replace(/&nbsp;/g, " ")
 }
 
+function escapeHtmlText(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+}
+
+function imgTagToPlaceholder(tag: string, images: string[]): string {
+  const src = tag.match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1] ?? ""
+  if (!/^data:image\/[a-zA-Z0-9.+-]+;base64,/i.test(src) && !src.startsWith("/")) return ""
+  const alt = (tag.match(/\balt\s*=\s*["']([^"']*)["']/i)?.[1] ?? "").replace(/[<>"']/g, "")
+  const i = images.length
+  images.push(`<img src="${src}" alt="${alt}">`)
+  return `\n@@IMG${i}@@\n`
+}
+
+function lineWithImagesToHtml(line: string, images: string[]): string {
+  const parts: string[] = []
+  let last = 0
+  const re = /@@IMG(\d+)@@/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(line)) !== null) {
+    if (m.index > last) parts.push(escapeHtmlText(line.slice(last, m.index)))
+    parts.push(images[Number(m[1])] ?? "")
+    last = m.index + m[0].length
+  }
+  if (last < line.length) parts.push(escapeHtmlText(line.slice(last)))
+  return parts.join("")
+}
+
+function attachBodyHtmlFromImages(result: ParseResult, images: string[]) {
+  if (images.length === 0) return
+  for (const ch of result.chapters) {
+    for (const lesson of ch.lessons) {
+      for (const kp of lesson.knowledgePoints) {
+        for (const q of kp.questions) {
+          if (!q.content.includes("@@IMG")) continue
+          const lines = q.content.split("\n")
+          q.bodyHtml = lines.map((ln) => lineWithImagesToHtml(ln, images)).join("<br>\n")
+          q.content = lines
+            .map((ln) => ln.replace(/@@IMG(\d+)@@/g, "").trim())
+            .filter((ln) => ln.length > 0)
+            .join("\n")
+        }
+      }
+    }
+  }
+}
+
 /**
  * Chuyển HTML (mammoth) thành text có delimiter: <u>...</u> → __...__, giữ nguyên
  * "..." để đánh dấu hoán đổi, rồi tái sử dụng parseTextContent.
+ * Thẻ <img> (data URI) giữ qua placeholder rồi gắn `bodyHtml` trên câu hỏi.
  */
 export function parseHtmlContent(html: string): ParseResult {
+  const images: string[] = []
   const normalized = normalizeHtml(html)
-  // tách theo block: mỗi <p>, </p>, <br>, <li> thành 1 dòng
-  const withBreaks = normalized
+  const withImgs = normalized.replace(/<img\b[^>]*>/gi, (tag) => imgTagToPlaceholder(tag, images))
+  const withBreaks = withImgs
     .replace(/<\/(p|div|li|h[1-6])>/gi, "\n")
     .replace(/<br\s*\/?>/gi, "\n")
-  // <u>...</u> → __...__
   const withUnderline = withBreaks.replace(/<u>([\s\S]*?)<\/u>/gi, "__$1__")
-  // bỏ mọi thẻ còn lại
   const stripped = withUnderline.replace(/<[^>]+>/g, "")
   const text = decodeEntities(stripped)
-  return parseTextContent(text)
+  const result = parseTextContent(text)
+  attachBodyHtmlFromImages(result, images)
+  return result
 }
 
 // ============ Validate ============
