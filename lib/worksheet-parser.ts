@@ -182,6 +182,19 @@ export function extractBlanks(raw: string): {
 const CAU_RE = /^(câu|cau)\s*:\s*(.*)$/i
 const DAP_AN_RE = /^(đáp\s*án|dap\s*an)\s*:\s*(.*)$/i
 const CHOICE_RE = /^([a-dA-D])[.)]\s*(.*)$/
+const BULLET_RE = /^[•●◦·▪▸►]\s*/
+
+/** Chuẩn hoá BOM, NBSP, ngoặc kép cong, dấu fullwidth — file Word/Notepad hay lệch so với mẫu. */
+export function normalizeParseText(text: string): string {
+  let s = text.replace(/^\uFEFF/, "").normalize("NFC")
+  s = s.replace(/[\u00A0\u202F\u2007]/g, " ")
+  s = s.replace(/[\u200B-\u200D\uFEFF]/g, "")
+  s = s.replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+  s = s.replace(/[\u201C\u201D\u201E\u201F\u00AB\u00BB]/g, '"')
+  s = s.replace(/[\uFF01-\uFF5E]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
+  s = s.replace(/\u3000/g, " ")
+  return s
+}
 
 export function stripUnderline(s: string): string {
   return s.replace(/__/g, "").trim()
@@ -194,8 +207,10 @@ export function hasUnderline(s: string): boolean {
 export function parseChoiceLine(line: string): { letter: string; text: string } | null {
   const stripped = stripUnderline(line)
   const m = stripped.match(CHOICE_RE) ?? stripped.match(/^([a-dA-D])\s+(.*)$/)
-  if (!m) return null
-  return { letter: m[1].toUpperCase(), text: m[2].trim() }
+  if (m) return { letter: m[1].toUpperCase(), text: m[2].trim() }
+  const num = stripped.match(/^([1-4])[.)]\s*(.*)$/)
+  if (num) return { letter: String.fromCharCode(64 + Number(num[1])), text: num[2].trim() }
+  return null
 }
 
 function parseCauLine(line: string): string | null {
@@ -230,6 +245,7 @@ function canAppendStem(q: ParsedQuestion): boolean {
 // ============ Parser văn bản thuần ============
 
 export function parseTextContent(text: string): ParseResult {
+  text = normalizeParseText(text)
   const errors: ParseError[] = []
   const chapters: ParsedChapter[] = []
 
@@ -248,7 +264,18 @@ export function parseTextContent(text: string): ParseResult {
 
   const lines = text.split(/\r?\n/)
   lines.forEach((rawLine, idx) => {
-    const line = rawLine.trim()
+    let line = rawLine.trim()
+    if (BULLET_RE.test(line) || /^[–—−]\s*/.test(line)) {
+      const rest = line.replace(BULLET_RE, "").replace(/^[–—−]\s*/, "").trim()
+      const keep =
+        parseChoiceLine(rest) != null ||
+        rest.startsWith("#") ||
+        rest.startsWith("{") ||
+        rest.startsWith("[") ||
+        CAU_RE.test(rest) ||
+        DAP_AN_RE.test(rest)
+      line = keep ? rest : `- ${rest}`
+    }
     const lineNo = idx + 1
     if (!line) return
     // dòng chú thích — bị bỏ qua
@@ -422,6 +449,10 @@ function decodeEntities(s: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&nbsp;/g, " ")
+    .replace(/&ldquo;|&rdquo;|&laquo;|&raquo;/gi, '"')
+    .replace(/&lsquo;|&rsquo;/gi, "'")
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, n) => String.fromCharCode(parseInt(n, 16)))
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
 }
 
 function escapeHtmlText(s: string): string {
@@ -484,6 +515,43 @@ function lineWithRichToHtml(line: string, images: string[], tables: string[]): s
   return parts.join("")
 }
 
+function liPlain(content: string): string {
+  return decodeEntities(content.replace(/<[^>]+>/g, "")).replace(/__/g, "").trim()
+}
+
+function alreadyLabeled(plain: string): boolean {
+  return /^([a-dA-D]|[1-4])[.)]/.test(plain) || /^[-–—*+]/.test(plain) || BULLET_RE.test(plain)
+}
+
+/** Word hay biến - KP thành <ul><li> và A.B.C.D thành <ol><li>, mất marker khi strip tag. */
+function convertHtmlLists(html: string): string {
+  let out = html.replace(/<ol\b([^>]*)>([\s\S]*?)<\/ol>/gi, (_m, attrs: string, inner: string) => {
+    const type = attrs.match(/\btype\s*=\s*["']?([AIa1])/i)?.[1] ?? ""
+    let i = 0
+    const items = inner.replace(/<li\b[^>]*>([\s\S]*?)<\/li>/gi, (_li, content: string) => {
+      const plain = liPlain(content)
+      if (!plain || alreadyLabeled(plain)) return `${content}\n`
+      i += 1
+      if (type === "1") return `${i}. ${content}\n`
+      const letter = type === "a" ? String.fromCharCode(96 + i) : String.fromCharCode(64 + i)
+      return `${letter}. ${content}\n`
+    })
+    return `\n${items}\n`
+  })
+  out = out.replace(/<ul\b[^>]*>([\s\S]*?)<\/ul>/gi, (_m, inner: string) => {
+    const items = inner.replace(/<li\b[^>]*>([\s\S]*?)<\/li>/gi, (_li, content: string) => {
+      const plain = liPlain(content)
+      if (!plain) return `${content}\n`
+      if (alreadyLabeled(plain) || plain.startsWith("#") || plain.startsWith("{") || plain.startsWith("[")) {
+        return `${content}\n`
+      }
+      return `- ${content}\n`
+    })
+    return `\n${items}\n`
+  })
+  return out
+}
+
 function attachBodyHtml(result: ParseResult, images: string[], tables: string[]) {
   if (images.length === 0 && tables.length === 0) return
   for (const ch of result.chapters) {
@@ -515,12 +583,13 @@ export function parseHtmlToResultAndText(html: string): { parseResult: ParseResu
   const normalized = normalizeHtml(withoutScripts)
   const withImgs = normalized.replace(/<img\b[^>]*>/gi, (tag) => imgTagToPlaceholder(tag, images))
   const withTables = tableToPlaceholder(withImgs, tables)
-  const withBreaks = withTables
+  const withLists = convertHtmlLists(withTables)
+  const withBreaks = withLists
     .replace(/<\/(p|div|li|h[1-6])>/gi, "\n")
     .replace(/<br\s*\/?>/gi, "\n")
   const withUnderline = withBreaks.replace(/<u>([\s\S]*?)<\/u>/gi, "__$1__")
   const stripped = withUnderline.replace(/<[^>]+>/g, "")
-  const sourceText = decodeEntities(stripped)
+  const sourceText = normalizeParseText(decodeEntities(stripped))
   const parseResult = parseTextContent(sourceText)
   attachBodyHtml(parseResult, images, tables)
   return { parseResult, sourceText }
