@@ -3,7 +3,15 @@ import { chapters, lessons, knowledgePoints, questions, questionOptions } from "
 import { and, eq, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { extractAndParse } from "@/lib/extract-file"
-import { validateDocument, summarize, parseTextContent, type ParseResult, type ValidationError } from "@/lib/worksheet-parser"
+import {
+  validateDocument,
+  summarize,
+  parseTextContent,
+  attachBodyHtml,
+  attachOptionBodyHtml,
+  type ParseResult,
+  type ValidationError,
+} from "@/lib/worksheet-parser"
 import type { SessionUser } from "@/lib/auth-helpers"
 
 export type { ParseResult, ValidationError }
@@ -211,11 +219,39 @@ export async function saveWorksheetBuffer(
   return persistParseResult(user, parseResult, filename)
 }
 
+export function parseMediaArray(raw: FormDataEntryValue | null): string[] | undefined {
+  if (typeof raw !== "string" || !raw) return undefined
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return undefined
+    return parsed.filter((x): x is string => typeof x === "string")
+  } catch {
+    return undefined
+  }
+}
+
+export function parseWorksheetText(
+  text: string,
+  images?: string[],
+  tables?: string[],
+): ParseResult {
+  const parseResult = parseTextContent(text)
+  const imgs = images ?? []
+  const tbls = tables ?? []
+  if (imgs.length > 0 || tbls.length > 0) {
+    attachBodyHtml(parseResult, imgs, tbls)
+    attachOptionBodyHtml(parseResult, imgs, tbls)
+  }
+  return parseResult
+}
+
 export async function saveWorksheetFromText(
   user: SessionUser,
   text: string,
   filename: string,
+  images?: string[],
+  tables?: string[],
 ): Promise<SaveResult> {
-  const parseResult = parseTextContent(text)
+  const parseResult = parseWorksheetText(text, images, tables)
   return persistParseResult(user, parseResult, toTxtFilename(filename))
 }

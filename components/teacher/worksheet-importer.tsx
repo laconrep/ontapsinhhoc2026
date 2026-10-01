@@ -116,6 +116,8 @@ export function WorksheetImporter() {
         if (draftDirty) {
           fd.append("text", draftText)
           fd.append("filename", file.name)
+          fd.append("images", JSON.stringify(preview.images ?? []))
+          fd.append("tables", JSON.stringify(preview.tables ?? []))
         } else {
           fd.append("file", file)
         }

@@ -319,9 +319,9 @@ có `<img` sau attach. Không cần Postgres.
 **Commit:** `wip(preview): phien 5 - luu draft giu anh lua chon`
 
 **Báo cáo phiên 5 (điền sau khi code):**
-- Đã làm:
-- File đã sửa/tạo:
-- Kiểm thử:
+- Đã làm: `saveWorksheetFromText` nhận `images`/`tables`, `parseTextContent` rồi `attachBodyHtml` + `attachOptionBodyHtml`. API đọc JSON FormData `images`/`tables`. Importer khi `draftDirty` gửi kèm mảng từ lần validate. Tách `parseWorksheetText` + `parseMediaArray` để test không cần Postgres.
+- File đã sửa/tạo: `lib/worksheet-import.ts`, `app/api/worksheet/save/route.ts`, `components/teacher/worksheet-importer.tsx`, `scripts/check-preview-phien5.mjs` (mới)
+- Kiểm thử: `tsx scripts/check-preview-phien5.mjs` OK (Câu 5 A `@@IMG0@@` + 1 img → `bodyHtml` có `<img`; không attach khi thiếu mảng). `npx tsc --noEmit` exit 0.
 - Việc tiếp theo (phiên 6): e2e + chốt.
 
 ---
@@ -363,12 +363,12 @@ có `<img` sau attach. Không cần Postgres.
 
 ## 5. Trạng thái
 
-- Phiên hiện tại: sẵn sàng phiên 5.
+- Phiên hiện tại: sẵn sàng phiên 6.
 - Phiên 1: xong
 - Phiên 2: xong
 - Phiên 3: xong
 - Phiên 4: xong
-- Phiên 5: chưa
+- Phiên 5: xong
 - Phiên 6: chưa
 
 Working tree lúc lập kế hoạch: `lib/docx-equations.ts` đã có nháp `reconstructMathTypeSvg`
