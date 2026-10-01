@@ -71,6 +71,24 @@ interface RawMarker {
 }
 
 /**
+ * Word/mammoth hay ra `"__từ"__` thay vì `__"từ"__`.
+ * Cú pháp đúng: __từ__ | "từ" | __"từ"__.
+ */
+export function malformedQuoteUnderlineMarks(raw: string): string[] {
+  const s = raw.replace(/[\u201c\u201d]/g, '"')
+  const masked = s.replace(/__"(.*?)"__/g, (m) => " ".repeat(m.length))
+  const out: string[] = []
+  const re = /"__[\s\S]*?"__|"__[\s\S]*?__"|__"[^"]*?__/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(masked)) !== null) {
+    const snippet = m[0].replace(/\s+/g, " ").trim().slice(0, 48)
+    if (snippet) out.push(snippet)
+  }
+  if (out.length === 0 && /"__|__"/.test(masked)) out.push('"__')
+  return out
+}
+
+/**
  * Phân tích nội dung KP: tìm các ô trống đánh dấu bằng __từ__ (cố định) hoặc
  * "từ" (hoán đổi). __"từ"__ = vừa gạch chân vừa hoán đổi.
  * 
@@ -459,6 +477,13 @@ export function parseTextContent(text: string): ParseResult {
       if (!curLesson) {
         errors.push({ line: lineNo, message: "Điểm kiến thức phải nằm trong một bài [Tên bài]" })
         return
+      }
+      const badMarks = malformedQuoteUnderlineMarks(body)
+      if (badMarks.length > 0) {
+        errors.push({
+          line: lineNo,
+          message: `Gạch chân kèm ngoặc kép phải viết __"từ"__ (không phải "__từ"__): ${badMarks.slice(0, 3).join(", ")}`,
+        })
       }
       const { content, underlinedTerms } = extractBlanks(body)
       curKp = { content, underlinedTerms, questions: [], line: lineNo }

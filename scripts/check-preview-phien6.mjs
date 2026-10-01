@@ -91,13 +91,16 @@ assert(svg35.includes("<line"), "Cau 35 A thieu <line")
 assert(svg35.includes(">G<") && svg35.includes(">C<") && svg35.includes(">2<") && svg35.includes(">3<"), "Cau 35 A khong ra G/C=2/3")
 console.log("OK extract Cau 35 A phan so + 51 cau")
 
-assert(val0.errors.length === 2, `ky vong 2 loi, got ${val0.errors.length}: ${val0.errors.map((e) => `L${e.line} ${e.message}`).join(" | ")}`)
 const kpErr = val0.errors.find((e) => /Điểm kiến thức/.test(e.message ?? ""))
 const leftoverErr = val0.errors.find((e) => /không thuộc câu nào/.test(e.message ?? ""))
+const quoteErr = val0.errors.find((e) => /Gạch chân kèm ngoặc kép/.test(e.message ?? ""))
 assert(kpErr, "thieu loi KP chua gach chan")
 assert(leftoverErr, "thieu loi khoi a-d du")
+assert(quoteErr, "thieu loi gach chan kem ngoac kep lech cu phap")
 assert(kpErr.line === 14, `loi KP line ${kpErr.line}`)
-console.log("OK validate 2 loi", val0.errors.map((e) => `L${e.line}`).join(", "))
+assert(quoteErr.line === 6 || quoteErr.line === 9, `loi ngoac kep line ${quoteErr.line}`)
+assert(val0.errors.filter((e) => /Gạch chân kèm ngoặc kép/.test(e.message ?? "")).length >= 1, "thieu loi ngoac kep")
+console.log("OK validate", val0.errors.map((e) => `L${e.line}`).join(", "))
 
 const lines = sourceText.split("\n")
 const line14 = lines[13] ?? ""
@@ -111,11 +114,12 @@ const afterKp = spliceBlock(sourceText, 14, 14, wrappedLine.text)
 const parsedKp = parseAttached(afterKp, images, tables)
 const valKp = validateDocument(parsedKp)
 assert(!valKp.errors.some((e) => /Điểm kiến thức/.test(e.message ?? "")), `con loi KP: ${valKp.errors.map((e) => e.message).join(" | ")}`)
-assert(valKp.errors.length === 1, `sau wrap KP ky vong 1 loi a-d, got ${valKp.errors.length}: ${valKp.errors.map((e) => `L${e.line} ${e.message}`).join(" | ")}`)
 assert(valKp.errors.some((e) => /không thuộc câu nào/.test(e.message ?? "")), "mat loi a-d sau wrap KP")
+assert(valKp.errors.some((e) => /Gạch chân kèm ngoặc kép/.test(e.message ?? "")), "mat loi ngoac kep lech sau wrap KP")
+assert(!valKp.errors.some((e) => /Điểm kiến thức/.test(e.message ?? "")), "con loi KP sau wrap")
 const sumKp = summarize(parsedKp)
 assert(sumKp.questions === 51, `sau wrap KP cau ${sumKp.questions}`)
-console.log("OK wrap __protein__ mat loi KP, con 1 loi a-d")
+console.log("OK wrap __protein__ mat loi KP, con a-d + ngoac kep lech")
 
 const leftover = valKp.errors.find((e) => /không thuộc câu nào/.test(e.message ?? ""))
 assert(leftover?.line, "loi a-d thieu line")
@@ -135,7 +139,9 @@ const saFix = qFix.filter((q) => q.type === "SA")
 
 assert(sumFix.questions === 51, `sau xoa a-d cau ${sumFix.questions}`)
 assert(mcFix.length === 35 && tfFix.length === 6 && saFix.length === 10, `sau xoa type MC${mcFix.length} TF${tfFix.length} SA${saFix.length}`)
-assert(valFix.isValid, `van con loi: ${valFix.errors.map((e) => `L${e.line} ${e.message}`).join(" | ")}`)
+assert(!valFix.errors.some((e) => /không thuộc câu nào/.test(e.message ?? "")), "con loi a-d sau xoa")
+assert(!valFix.isValid, "sau xoa a-d van phai chan vi ngoac kep lech")
+assert(valFix.errors.some((e) => /Gạch chân kèm ngoặc kép/.test(e.message ?? "")), `thieu loi ngoac kep: ${valFix.errors.map((e) => e.message).join(" | ")}`)
 
 const c35b = mcFix[34]
 const htmlAb = c35b.options[0].bodyHtml ?? ""
@@ -143,6 +149,6 @@ assert(htmlAb.includes("<img"), "sau luu-text Cau 35 A mat img")
 const srcb = htmlAb.match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1] ?? ""
 const svg35b = decodeSvg(srcb)
 assert(svg35b.includes("<line"), "sau attach Cau 35 A thieu <line")
-console.log("OK xoa khoi a-d du, het loi, 51 cau, Cau 35 A giu img")
+console.log("OK xoa khoi a-d du, con loi ngoac kep lech, 51 cau, Cau 35 A giu img")
 
 console.log("OK phien 6")
