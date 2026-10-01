@@ -219,9 +219,9 @@ Không regress parse (`tsx scripts/check-parser-phien8.mjs` nếu deps có).
 **Commit:** `wip(preview): phien 2 - khung xem truoc parse 2 cot`
 
 **Báo cáo phiên 2 (điền sau khi code):**
-- Đã làm:
-- File đã sửa/tạo:
-- Kiểm thử:
+- Đã làm: Tách `PreviewDocument` (KP + câu + ảnh/options). Importer luôn `max-w-5xl` khi có preview, luôn 2 cột (`ImportErrorFix`): trái list lỗi hoặc "Hết lỗi, có thể lưu"; phải preview parse. Bấm lỗi → `scrollIntoView` `#preview-line-N`. Bỏ textarea cả file + dump HTML.
+- File đã sửa/tạo: `components/teacher/worksheet-preview-doc.tsx` (mới), `components/teacher/worksheet-importer.tsx`, `components/teacher/import-error-fix.tsx`
+- Kiểm thử: `npx tsc --noEmit` exit 0. `tsx scripts/check-parser-phien8.mjs` OK (51 câu, MC35 TF6 SA10, Câu 35 A có img).
 - Việc tiếp theo (phiên 3): sửa tại chỗ theo lỗi.
 
 ---
@@ -363,9 +363,9 @@ có `<img` sau attach. Không cần Postgres.
 
 ## 5. Trạng thái
 
-- Phiên hiện tại: sẵn sàng phiên 2.
+- Phiên hiện tại: sẵn sàng phiên 3.
 - Phiên 1: xong
-- Phiên 2: chưa
+- Phiên 2: xong
 - Phiên 3: chưa
 - Phiên 4: chưa
 - Phiên 5: chưa

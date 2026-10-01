@@ -1,15 +1,15 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { AlertTriangle } from "lucide-react"
+import { AlertTriangle, CheckCircle2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { PreviewDocument } from "@/components/teacher/worksheet-preview-doc"
 import {
-    attachBodyHtml,
-    attachOptionBodyHtml,
-    isCauHeading,
+  attachBodyHtml,
+  attachOptionBodyHtml,
+  isCauHeading,
   parseTextContent,
-  sourceTextToPreviewHtml,
   summarize,
   validateDocument,
   type ParseResult,
@@ -27,6 +27,8 @@ export interface RevalidatedPreview {
 interface ImportErrorFixProps {
   errors: ValidationError[]
   sourceText: string
+  parseResult: ParseResult
+  summary: { chapters: number; lessons: number; kps: number; questions: number }
   images?: string[]
   tables?: string[]
   onSourceChange?: (text: string) => void
@@ -84,28 +86,28 @@ function offsetRange(text: string, startLine: number, endLine: number): { start:
 export function ImportErrorFix({
   errors,
   sourceText,
+  parseResult,
+  summary,
   images = [],
   tables = [],
-  onSourceChange,
+  onSourceChange: _onSourceChange,
   onRevalidated,
 }: ImportErrorFixProps) {
   const [activeErrorIndex, setActiveErrorIndex] = useState<number | null>(null)
+  const [highlightLine, setHighlightLine] = useState<number | undefined>()
   const [checking, setChecking] = useState(false)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const previewRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const errorsRef = useRef(errors)
   errorsRef.current = errors
 
   function applyRevalidate(text: string) {
-    const ta = textareaRef.current
-    const selStart = ta?.selectionStart
-    const selEnd = ta?.selectionEnd
     setChecking(false)
-    const parseResult = parseTextContent(text)
-    attachBodyHtml(parseResult, images, tables)
-    attachOptionBodyHtml(parseResult, images, tables)
-    const { isValid, errors: next } = validateDocument(parseResult)
-    const summary = summarize(parseResult)
+    const nextParse = parseTextContent(text)
+    attachBodyHtml(nextParse, images, tables)
+    attachOptionBodyHtml(nextParse, images, tables)
+    const { isValid, errors: next } = validateDocument(nextParse)
+    const nextSummary = summarize(nextParse)
     setActiveErrorIndex((prev) => {
       if (prev == null) return null
       const prevLine = errorsRef.current[prev]?.line
@@ -115,12 +117,7 @@ export function ImportErrorFix({
       }
       return next.length > 0 ? 0 : null
     })
-    onRevalidated?.({ errors: next, isValid, parseResult, summary, sourceText: text })
-    if (!isValid && ta && selStart != null) {
-      requestAnimationFrame(() => {
-        ta.setSelectionRange(selStart, selEnd ?? selStart)
-      })
-    }
+    onRevalidated?.({ errors: next, isValid, parseResult: nextParse, summary: nextSummary, sourceText: text })
   }
 
   function scheduleRevalidate(text: string) {
@@ -137,7 +134,7 @@ export function ImportErrorFix({
       clearTimeout(timerRef.current)
       timerRef.current = null
     }
-    applyRevalidate(textareaRef.current?.value ?? sourceText)
+    applyRevalidate(sourceText)
   }
 
   useEffect(() => {
@@ -146,78 +143,83 @@ export function ImportErrorFix({
     }
   }, [])
 
+  function scrollToLine(line: number) {
+    setHighlightLine(line)
+    requestAnimationFrame(() => {
+      const root = previewRef.current
+      const el = root?.querySelector(`#preview-line-${line}`) as HTMLElement | null
+      el?.scrollIntoView({ block: "start", behavior: "smooth" })
+    })
+  }
+
   function selectError(i: number) {
     setActiveErrorIndex(i)
     const e = errors[i]
     if (!e?.line) return
-    const ta = textareaRef.current
-    if (!ta) return
-    const { startLine, endLine } = questionBlockRange(sourceText, e.line)
-    const { start, end } = offsetRange(sourceText, startLine, endLine)
-    ta.focus()
-    ta.setSelectionRange(start, end)
-    const lineCount = Math.max(sourceText.split("\n").length, 1)
-    const lineHeight = ta.scrollHeight / lineCount
-    ta.scrollTop = lineHeight * (startLine - 1)
+    scrollToLine(e.line)
   }
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <AlertTriangle className="h-5 w-5 text-destructive" />
-          Cần sửa {errors.length} lỗi
+          {errors.length > 0 ? (
+            <>
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Cần sửa {errors.length} lỗi
+            </>
+          ) : (
+            <>
+              <CheckCircle2 className="h-5 w-5 text-primary" />
+              Hết lỗi, có thể lưu
+            </>
+          )}
           {checking ? <Badge variant="secondary">Đang kiểm tra...</Badge> : null}
         </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="min-h-[420px] max-h-[70vh] overflow-auto rounded-lg border border-destructive/40 bg-destructive/5 p-2">
-            <ul className="space-y-1 text-sm">
-              {errors.map((e, i) => (
-                <li key={i}>
-                  <button
-                    type="button"
-                    onClick={() => selectError(i)}
-                    className={`flex w-full gap-2 rounded-md px-2 py-1.5 text-left text-destructive ${
-                      activeErrorIndex === i ? "bg-destructive/15" : "hover:bg-destructive/10"
-                    }`}
-                  >
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                    <span>
-                      {e.line ? <strong>Dòng {e.line}: </strong> : null}
-                      {e.message}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+          <div
+            className={`min-h-[420px] max-h-[70vh] overflow-auto rounded-lg border p-2 ${
+              errors.length > 0 ? "border-destructive/40 bg-destructive/5" : "border-primary/30 bg-primary/5"
+            }`}
+          >
+            {errors.length === 0 ? (
+              <p className="px-2 py-1.5 text-sm text-foreground">Hết lỗi, có thể lưu</p>
+            ) : (
+              <ul className="space-y-1 text-sm">
+                {errors.map((e, i) => (
+                  <li key={i}>
+                    <button
+                      type="button"
+                      onClick={() => selectError(i)}
+                      className={`flex w-full gap-2 rounded-md px-2 py-1.5 text-left text-destructive ${
+                        activeErrorIndex === i ? "bg-destructive/15" : "hover:bg-destructive/10"
+                      }`}
+                    >
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span>
+                        {e.line ? <strong>Dòng {e.line}: </strong> : null}
+                        {e.message}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
-          <div className="flex min-h-[420px] max-h-[70vh] flex-col overflow-hidden rounded-lg border">
-            <textarea
-              ref={textareaRef}
-              value={sourceText}
-              onChange={(ev) => {
-                const text = ev.target.value
-                onSourceChange?.(text)
-                scheduleRevalidate(text)
-              }}
-              onBlur={flushRevalidate}
-              spellCheck={false}
-              className={`block w-full resize-none overflow-auto bg-transparent p-3 font-mono text-sm leading-5 whitespace-pre outline-none ${
-                images.length > 0 || tables.length > 0
-                  ? "min-h-[200px] max-h-[35vh]"
-                  : "h-full min-h-[420px] max-h-[70vh]"
-              }`}
+          <div
+            ref={previewRef}
+            className="min-h-[420px] max-h-[70vh] overflow-auto rounded-lg border bg-background p-3"
+          >
+            <PreviewDocument
+              parseResult={parseResult}
+              summary={summary}
+              isValid={errors.length === 0}
+              errors={errors}
+              highlightLine={highlightLine}
+              onSelectBlock={scrollToLine}
             />
-            {images.length > 0 || tables.length > 0 ? (
-              <div
-                className="min-h-[180px] max-h-[35vh] overflow-auto border-t bg-muted/30 p-3 text-sm leading-relaxed [&_img]:mx-auto [&_img]:my-2 [&_img]:max-h-48 [&_img]:max-w-full [&_table]:my-2 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-border [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-border [&_th]:px-2 [&_th]:py-1"
-                dangerouslySetInnerHTML={{
-                  __html: sourceTextToPreviewHtml(sourceText, images, tables),
-                }}
-              />
-            ) : null}
           </div>
         </div>
       </CardContent>

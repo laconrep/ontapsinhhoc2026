@@ -4,8 +4,6 @@ import { useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
-  AlertTriangle,
-  CheckCircle2,
   Download,
   FileText,
   FileUp,
@@ -15,10 +13,8 @@ import {
   X,
 } from "lucide-react"
 import { Button, buttonVariants } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ImportErrorFix, type RevalidatedPreview } from "@/components/teacher/import-error-fix"
-import { QuestionStem } from "@/components/question/question-stem"
 import type { ParseResult, ValidationError } from "@/lib/worksheet-parser"
 
 interface WorksheetPreview {
@@ -50,7 +46,6 @@ async function postWorksheet<T>(url: string, file: File): Promise<T> {
   return postForm<T>(url, fd)
 }
 
-const TYPE_LABEL: Record<string, string> = { MC: "Trắc nghiệm", TF: "Đúng/Sai", SA: "Trả lời ngắn" }
 const ACCEPT = ".txt,.docx,.pdf"
 
 export function WorksheetImporter() {
@@ -137,7 +132,7 @@ export function WorksheetImporter() {
   }
 
   return (
-    <div className={`mx-auto space-y-6 ${preview && !preview.isValid ? "max-w-5xl" : "max-w-3xl"}`}>
+    <div className={`mx-auto space-y-6 ${preview ? "max-w-5xl" : "max-w-3xl"}`}>
       <div>
         <h1 className="font-heading text-2xl font-bold text-foreground">Nạp câu hỏi từ file</h1>
         <p className="mt-1 text-muted-foreground">
@@ -275,160 +270,18 @@ export function WorksheetImporter() {
         </CardContent>
       </Card>
 
-      {preview && !preview.isValid && (
+      {preview && (
         <ImportErrorFix
           errors={preview.errors}
           sourceText={draftText}
+          parseResult={preview.parseResult}
+          summary={preview.summary}
           images={preview.images}
           tables={preview.tables}
           onSourceChange={setDraftText}
           onRevalidated={handleRevalidated}
         />
       )}
-      {preview && preview.isValid && <PreviewPanel preview={preview} />}
     </div>
-  )
-}
-
-function PreviewPanel({ preview }: { preview: WorksheetPreview }) {
-  const { summary, errors, isValid, parseResult } = preview
-  let qIndex = 0
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          {isValid ? (
-            <>
-              <CheckCircle2 className="h-5 w-5 text-primary" />
-              Tài liệu hợp lệ
-            </>
-          ) : (
-            <>
-              <AlertTriangle className="h-5 w-5 text-destructive" />
-              Cần sửa {errors.length} lỗi
-            </>
-          )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="secondary">{summary.chapters} chương</Badge>
-          <Badge variant="secondary">{summary.lessons} bài</Badge>
-          <Badge variant="secondary">{summary.kps} kiến thức</Badge>
-          <Badge variant="secondary">{summary.questions} câu hỏi</Badge>
-        </div>
-
-        {errors.length > 0 && (
-          <ul className="space-y-1 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm">
-            {errors.map((e, i) => (
-              <li key={i} className="flex gap-2 text-destructive">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>
-                  {e.line ? <strong>Dòng {e.line}: </strong> : null}
-                  {e.message}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        <div className="space-y-3">
-          {parseResult.chapters.map((c, ci) => (
-            <div key={ci} className="rounded-lg border">
-              <div className="border-b bg-secondary/40 px-3 py-2 font-heading font-semibold text-foreground">
-                {c.title}
-              </div>
-              <div className="divide-y">
-                {c.lessons.map((l, li) => (
-                  <div key={li} className="px-3 py-2">
-                    <p className="font-medium text-foreground">{l.title}</p>
-                    <ul className="mt-2 space-y-2">
-                      {l.knowledgePoints.map((kp, ki) => (
-                        <li key={ki} className="rounded-md bg-muted/40 p-2 text-sm">
-                          <p className="text-foreground">{highlightBlanks(kp.content, kp.underlinedTerms)}</p>
-                          {kp.questions.length > 0 && (
-                            <div className="mt-2 space-y-3">
-                              {kp.questions.map((q, qi) => {
-                                qIndex += 1
-                                return (
-                                  <div key={qi} className="rounded-md border bg-background p-2">
-                                    <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-                                      <Badge variant="outline" className="text-xs">
-                                        Câu {qIndex}
-                                      </Badge>
-                                      <Badge variant="outline" className="text-xs">
-                                        {TYPE_LABEL[q.type] ?? q.type}
-                                      </Badge>
-                                    </div>
-                                    <QuestionStem
-                                      content={q.content}
-                                      bodyHtml={q.bodyHtml}
-                                      className="text-sm"
-                                      maxHeightClass="max-h-64"
-                                    />
-                                    {q.options.length > 0 && (
-                                      <ul className="mt-2 space-y-1 text-sm">
-                                        {q.options.map((o, oi) => (
-                                          <li
-                                            key={oi}
-                                            className={o.isCorrect ? "font-medium text-primary" : "text-foreground"}
-                                          >
-                                            <QuestionStem
-                                              content={o.content}
-                                              bodyHtml={o.bodyHtml}
-                                              className="text-sm"
-                                              maxHeightClass="max-h-32"
-                                            />
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    )}
-                                    {q.type === "SA" && q.correctAnswer ? (
-                                      <p className="mt-1 text-sm text-muted-foreground">
-                                        Đáp án: {q.correctAnswer}
-                                      </p>
-                                    ) : null}
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-// Hiển thị nội dung KP, tô đậm những từ là ô trống
-function highlightBlanks(content: string, terms: { text: string }[]) {
-  if (terms.length === 0) return content
-  const parts: (string | { blank: string })[] = [content]
-  for (const t of terms) {
-    for (let i = 0; i < parts.length; i++) {
-      const p = parts[i]
-      if (typeof p !== "string") continue
-      const idx = p.indexOf(t.text)
-      if (idx >= 0) {
-        parts.splice(i, 1, p.slice(0, idx), { blank: t.text }, p.slice(idx + t.text.length))
-        break
-      }
-    }
-  }
-  return parts.map((p, i) =>
-    typeof p === "string" ? (
-      <span key={i}>{p}</span>
-    ) : (
-      <span key={i} className="rounded bg-primary/15 px-1 font-semibold text-primary underline decoration-dotted">
-        {p.blank}
-      </span>
-    ),
   )
 }
