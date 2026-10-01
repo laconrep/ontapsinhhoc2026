@@ -108,6 +108,12 @@ export async function wmfToSvgFallback(buffer: Buffer): Promise<string | null> {
     const actions = callGetActions(wmf, sanitized)
     if (!actions || actions.length === 0) return null
 
+    const textActions = actions.filter((a) => a.t === "text" && a.v)
+    if (textActions.length > 0 && textsShareOrigin(textActions)) {
+      const reconstructed = reconstructMathTypeSvg(textActions.map((a) => String(a.v)))
+      if (reconstructed) return reconstructed
+    }
+
     let [width, height] = wmf.image_size(sanitized)
     if (!Number.isFinite(width) || width <= 0) width = 100
     if (!Number.isFinite(height) || height <= 0) height = 100
@@ -215,4 +221,153 @@ function escapeXml(text: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
+}
+
+function textsShareOrigin(actions: WmfAction[]): boolean {
+  if (actions.length === 0) return false
+  const key = (a: WmfAction) => `${a.p?.[0]?.[0] ?? 0},${a.p?.[0]?.[1] ?? 0}`
+  const first = key(actions[0])
+  return actions.every((a) => key(a) === first)
+}
+
+const MATH_FS = 18
+const MATH_CHAR_W = 11
+
+function estimateTextWidth(s: string): number {
+  return Math.max(1, s.length) * MATH_CHAR_W
+}
+
+function splitAlphaNum(token: string): { letters: string; digits: string } | null {
+  const m = token.match(/^([A-Za-z][A-Za-z+\-\s]*?)(\d+)$/)
+  if (!m) return null
+  return { letters: m[1], digits: m[2] }
+}
+
+function fractionParts(
+  num: string,
+  den: string,
+  cx: number,
+  midY: number,
+): { parts: string[]; halfW: number } {
+  const halfW = Math.max(estimateTextWidth(num), estimateTextWidth(den)) / 2 + 6
+  const numY = midY - MATH_FS * 0.55
+  const denY = midY + MATH_FS * 1.05
+  return {
+    halfW,
+    parts: [
+      `<text x="${cx}" y="${numY}" font-size="${MATH_FS}" text-anchor="middle"` +
+        ` font-family="Times New Roman, serif" fill="#000">${escapeXml(num)}</text>`,
+      `<line x1="${cx - halfW}" y1="${midY}" x2="${cx + halfW}" y2="${midY}"` +
+        ` stroke="#000" stroke-width="1.5"/>`,
+      `<text x="${cx}" y="${denY}" font-size="${MATH_FS}" text-anchor="middle"` +
+        ` font-family="Times New Roman, serif" fill="#000">${escapeXml(den)}</text>`,
+    ],
+  }
+}
+
+function wrapMathSvg(inner: string, width: number, height: number): string {
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"` +
+    ` viewBox="0 0 ${width} ${height}">${inner}</svg>`
+  return `data:image/svg+xml;base64,${Buffer.from(svg, "utf8").toString("base64")}`
+}
+
+function rowTokensSvg(tokens: string[]): string {
+  const gap = 10
+  let x = 12
+  const parts: string[] = []
+  const y = MATH_FS + 8
+  for (const tok of tokens) {
+    const w = estimateTextWidth(tok)
+    const cx = x + w / 2
+    parts.push(
+      `<text x="${cx}" y="${y}" font-size="${MATH_FS}" text-anchor="middle"` +
+        ` font-family="Times New Roman, serif" fill="#000">${escapeXml(tok)}</text>`,
+    )
+    x += w + gap
+  }
+  return wrapMathSvg(parts.join(""), Math.max(40, x), MATH_FS * 2 + 8)
+}
+
+function twoFractionsEqSvg(numL: string, denL: string, numR: string, denR: string): string {
+  const pad = 14
+  const midY = MATH_FS + 10
+  const left = fractionParts(numL, denL, 0, midY)
+  const right = fractionParts(numR, denR, 0, midY)
+  const eqW = estimateTextWidth("=")
+  const leftCx = pad + left.halfW
+  const eqCx = leftCx + left.halfW + 10 + eqW / 2
+  const rightCx = eqCx + eqW / 2 + 10 + right.halfW
+  const width = rightCx + right.halfW + pad
+  const height = MATH_FS * 3 + 16
+  const leftShift = fractionParts(numL, denL, leftCx, midY)
+  const rightShift = fractionParts(numR, denR, rightCx, midY)
+  const eq = `<text x="${eqCx}" y="${midY + MATH_FS * 0.35}" font-size="${MATH_FS}" text-anchor="middle"` +
+    ` font-family="Times New Roman, serif" fill="#000">=</text>`
+  return wrapMathSvg([...leftShift.parts, eq, ...rightShift.parts].join(""), width, height)
+}
+
+function fractionEqValueSvg(num: string, den: string, value: string): string {
+  const pad = 14
+  const midY = MATH_FS + 10
+  const frac = fractionParts(num, den, 0, midY)
+  const eqW = estimateTextWidth("=")
+  const valW = estimateTextWidth(value)
+  const fracCx = pad + frac.halfW
+  const eqCx = fracCx + frac.halfW + 10 + eqW / 2
+  const valCx = eqCx + eqW / 2 + 8 + valW / 2
+  const width = valCx + valW / 2 + pad
+  const height = MATH_FS * 3 + 16
+  const shifted = fractionParts(num, den, fracCx, midY)
+  const eq = `<text x="${eqCx}" y="${midY + MATH_FS * 0.35}" font-size="${MATH_FS}" text-anchor="middle"` +
+    ` font-family="Times New Roman, serif" fill="#000">=</text>`
+  const val = `<text x="${valCx}" y="${midY + MATH_FS * 0.35}" font-size="${MATH_FS}" text-anchor="middle"` +
+    ` font-family="Times New Roman, serif" fill="#000">${escapeXml(value)}</text>`
+  return wrapMathSvg([...shifted.parts, eq, val].join(""), width, height)
+}
+
+function simpleFractionSvg(num: string, den: string): string {
+  const pad = 10
+  const midY = MATH_FS + 10
+  const frac = fractionParts(num, den, 0, midY)
+  const cx = pad + frac.halfW
+  const shifted = fractionParts(num, den, cx, midY)
+  const width = cx + frac.halfW + pad
+  const height = MATH_FS * 3 + 16
+  return wrapMathSvg(shifted.parts.join(""), width, height)
+}
+
+/**
+ * Dung lai cong thuc MathType khi moi text WMF cung origin [0,0].
+ * Tra data URI SVG (phan so dung, khong chong chu).
+ */
+export function reconstructMathTypeSvg(tokens: string[]): string | null {
+  const raw = tokens.map((t) => t.trim()).filter((t) => t.length > 0)
+  if (raw.length === 0) return null
+
+  const hasEq = raw.includes("=")
+  const rest = raw.filter((t) => t !== "=")
+
+  if (!hasEq && rest.length === 2) {
+    return simpleFractionSvg(rest[0], rest[1])
+  }
+
+  if (hasEq && rest.length === 2) {
+    const s0 = splitAlphaNum(rest[0])
+    const s1 = splitAlphaNum(rest[1])
+    if (s0 && s1) {
+      return twoFractionsEqSvg(s0.letters, s1.letters, s0.digits, s1.digits)
+    }
+  }
+
+  if (hasEq && rest.length === 3) {
+    return fractionEqValueSvg(rest[0], rest[2], rest[1])
+  }
+
+  if (hasEq) {
+    const eqAt = Math.max(1, Math.ceil(rest.length / 2))
+    const row = [...rest.slice(0, eqAt), "=", ...rest.slice(eqAt)]
+    return rowTokensSvg(row)
+  }
+  return rowTokensSvg(rest)
 }

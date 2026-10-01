@@ -182,9 +182,9 @@ Có thể đã có reconstruct trong working tree — siết rule rồi commit l
 **Commit:** `wip(preview): phien 1 - dung lai phan so MathType WMF`
 
 **Báo cáo phiên 1 (điền sau khi code):**
-- Đã làm:
-- File đã sửa/tạo:
-- Kiểm thử:
+- Đã làm: Fallback WMF khi mọi text cùng origin gọi `reconstructMathTypeSvg`. Rule: 2 token không `=` → phân số; `G2,C3,=` → G/C = 2/3; `A+G9,T+C6,=` → (A+G)/(T+C)=9/6; `A+G,4,T+C,=` → (A+G)/(T+C)=4. SVG có `<line>` gạch, `text-anchor=middle`, xmlns, kích thước theo chữ.
+- File đã sửa/tạo: `lib/docx-equations.ts`, `scripts/check-preview-phien1.mjs`
+- Kiểm thử: `tsx scripts/check-preview-phien1.mjs` OK (Câu 35 A = G/C=2/3 có gạch; Câu 5 đề = (A+G)/(T+C)). `npx tsc --noEmit` exit 0.
 - Việc tiếp theo (phiên 2): layout 2 cột preview parse.
 
 ---
@@ -363,8 +363,8 @@ có `<img` sau attach. Không cần Postgres.
 
 ## 5. Trạng thái
 
-- Phiên hiện tại: sẵn sàng phiên 1.
-- Phiên 1: chưa
+- Phiên hiện tại: sẵn sàng phiên 2.
+- Phiên 1: xong
 - Phiên 2: chưa
 - Phiên 3: chưa
 - Phiên 4: chưa
