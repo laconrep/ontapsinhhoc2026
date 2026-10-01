@@ -108,7 +108,7 @@ assert(line14.trim().startsWith("-"), `L14 khong phai KP: ${line14.slice(0, 80)}
 const word = "protein"
 const wordAt = line14.indexOf(word)
 assert(wordAt >= 0, `L14 khong co "${word}": ${line14}`)
-const wrappedLine = applyKpWrap(line14, wordAt, wordAt, "fixed")
+const wrappedLine = applyKpWrap(line14, wordAt, wordAt)
 assert(wrappedLine.text.includes("__protein__"), `wrap KP: ${wrappedLine.text}`)
 const afterKp = spliceBlock(sourceText, 14, 14, wrappedLine.text)
 const parsedKp = parseAttached(afterKp, images, tables)

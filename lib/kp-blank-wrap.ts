@@ -1,5 +1,3 @@
-export type KpWrapMode = "fixed" | "swap"
-
 export interface WrapResult {
   text: string
   start: number
@@ -19,7 +17,11 @@ export function expandWord(text: string, start: number, end: number): { start: n
     a = b
     b = t
   }
-  if (a !== b) return { start: a, end: b }
+  if (a !== b) {
+    while (a < b && /\s/.test(text[a])) a += 1
+    while (b > a && /\s/.test(text[b - 1])) b -= 1
+    return { start: a, end: b }
+  }
   let l = a
   let r = a
   while (l > 0 && /\S/.test(text[l - 1])) l -= 1
@@ -56,33 +58,10 @@ function toggleFixed(text: string, start: number, end: number): WrapResult {
   return replaceRange(text, start, end, `__${sel}__`)
 }
 
-function toggleSwap(text: string, start: number, end: number): WrapResult {
-  const sel = text.slice(start, end)
-  const both = sel.match(/^__"([\s\S]+)"__$/)
-  if (both) return replaceRange(text, start, end, `__${both[1]}__`)
-  const quoted = sel.match(/^"([\s\S]+)"$/)
-  if (quoted) return replaceRange(text, start, end, quoted[1])
-  const under = sel.match(/^__([\s\S]+)__$/)
-  if (under && !under[1].startsWith('"')) {
-    return replaceRange(text, start, end, `__"${under[1]}"__`)
-  }
-  if (text.slice(Math.max(0, start - 3), start) === '__"' && text.slice(end, end + 3) === '"__') {
-    return replaceRange(text, start - 3, end + 3, `__${sel}__`)
-  }
-  if (text[start - 1] === '"' && text[end] === '"') {
-    return replaceRange(text, start - 1, end + 1, sel)
-  }
-  if (text.slice(Math.max(0, start - 2), start) === "__" && text.slice(end, end + 2) === "__") {
-    return replaceRange(text, start - 2, end + 2, `__"${sel}"__`)
-  }
-  return replaceRange(text, start, end, `"${sel}"`)
-}
-
-export function applyKpWrap(text: string, start: number, end: number, mode: KpWrapMode): WrapResult {
+export function applyKpWrap(text: string, start: number, end: number): WrapResult {
   const exp = expandWord(text, start, end)
   if (exp.start === exp.end) return { text, start: exp.start, end: exp.end }
   if (overlapsMedia(text, exp.start, exp.end)) return { text, start: exp.start, end: exp.end }
   if (includesKpBullet(text, exp.start, exp.end)) return { text, start: exp.start, end: exp.end }
-  if (mode === "fixed") return toggleFixed(text, exp.start, exp.end)
-  return toggleSwap(text, exp.start, exp.end)
+  return toggleFixed(text, exp.start, exp.end)
 }
