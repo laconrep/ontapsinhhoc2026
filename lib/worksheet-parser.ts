@@ -743,6 +743,23 @@ export function parseHtmlContent(html: string): ParseResult {
 
 // ============ Validate ============
 
+function isEffectivelyEmpty(text: string): boolean {
+  if (/@@(?:IMG|TBL)\d+@@/i.test(text)) return false
+  if (/<img\b/i.test(text) || /<table\b/i.test(text)) return false
+  let s = text.replace(/^[A-Da-d][.)]\s*/i, "")
+  s = s.replace(/<[^>]+>/g, "")
+  s = s.replace(/[.,;:]/g, "")
+  s = s.replace(/\s+/g, "")
+  return s.length === 0
+}
+
+function optionLabel(type: ParsedQuestionType, index: number, content: string): string {
+  const m = content.match(/^([A-Da-d])[.)]/)
+  if (m) return type === "TF" ? m[1].toLowerCase() : m[1].toUpperCase()
+  if (type === "TF") return TF_LETTERS[index] ?? String.fromCharCode(97 + index)
+  return MC_LETTERS[index] ?? String.fromCharCode(65 + index)
+}
+
 export function validateDocument(result: ParseResult): ValidationResult {
   const errors: ValidationError[] = [...result.errors]
 
@@ -767,16 +784,38 @@ export function validateDocument(result: ParseResult): ValidationResult {
           if (q.options.length !== 4) {
             errors.push({ line: q.line, message: `Câu trắc nghiệm phải có đúng 4 lựa chọn (hiện có ${q.options.length})` })
           }
-          if (q.options.filter((o) => o.isCorrect).length !== 1) {
+          const nCorrect = q.options.filter((o) => o.isCorrect).length
+          if (nCorrect === 0) {
+            errors.push({ line: q.line, message: "Câu chưa gạch chân đáp án đúng" })
+          } else if (nCorrect !== 1) {
             errors.push({ line: q.line, message: "Câu trắc nghiệm phải có đúng 1 đáp án đúng (gạch chân)" })
           }
+          q.options.forEach((o, i) => {
+            if (isEffectivelyEmpty(o.content)) {
+              const X = optionLabel("MC", i, o.content)
+              errors.push({
+                line: q.line,
+                message: `Lựa chọn ${X} thiếu nội dung (công thức Word không đọc được)`,
+              })
+            }
+          })
         } else if (q.type === "TF") {
           if (q.options.length !== 4) {
             errors.push({ line: q.line, message: `Câu Đúng/Sai phải có đúng 4 ý a) b) c) d) (hiện có ${q.options.length})` })
           }
+          q.options.forEach((o, i) => {
+            if (isEffectivelyEmpty(o.content)) {
+              const X = optionLabel("TF", i, o.content)
+              errors.push({
+                line: q.line,
+                message: `Lựa chọn ${X} thiếu nội dung (công thức Word không đọc được)`,
+              })
+            }
+          })
         } else if (q.type === "SA") {
           if (!q.correctAnswer) {
-            errors.push({ line: q.line, message: "Câu trả lời ngắn phải có đáp án sau 'dap an:'" })
+            const already = errors.some((e) => e.line === q.line && /đáp án|dap an/i.test(e.message ?? ""))
+            if (!already) errors.push({ line: q.line, message: "Câu trả lời ngắn thiếu 'Đáp án:'" })
           }
         }
       }

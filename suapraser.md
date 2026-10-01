@@ -524,10 +524,24 @@ Nếu vẫn lỗi, ghi rõ lý do vào Báo cáo.
 
 **Commit:** `wip(parser): phien 6 - validate va loi cong thuc`
 
-**Báo cáo phiên 6 (điền sau khi code):**
+**Báo cáo phiên 6 (đã làm):**
 - Đã làm:
-- File đã sửa/tạo:
+  - `isEffectivelyEmpty`: bỏ `@@IMGn@@`/`@@TBLn@@`/`<img>`/`<table>`, khoảng trắng, dấu
+    `. , ; :` — còn lại rỗng mới báo.
+  - MC: thiếu 4 lựa chọn như cũ; 0 đáp án đúng -> "Câu chưa gạch chân đáp án đúng";
+    lựa chọn rỗng -> "Lựa chọn X thiếu nội dung (công thức Word không đọc được)".
+  - TF: đúng 4 ý; ý rỗng cùng câu công thức. SA: thiếu `correctAnswer` không trùng lỗi
+    đã báo lúc parse ("Câu trả lời ngắn thiếu 'Đáp án:'").
+  - Giữ rule KP có `underlinedTerms`, bài có KP. `line` trỏ `Câu n.`.
+- File đã sửa/tạo: `lib/worksheet-parser.ts`, `scripts/check-parser-phien6.mjs` (mới),
+  `suapraser.md`.
 - Kiểm thử:
+  - Sample: A rỗng báo công thức; `@@IMG` không rỗng; 0 gạch chân; TF ý rỗng; SA không
+    trùng lỗi.
+  - File đối chiếu: 2 lỗi — khối a-d dư sau TF Câu 6; KP dòng 14 nguồn không gạch chân
+    (`Gene cấu trúc: Gene mã hóa pro...`). Không còn hàng trăm lỗi, không lỗi đuôi
+    ĐÁP ÁN/HƯỚNG DẪN, không lựa chọn rỗng giả.
+  - `tsx scripts/check-parser-phien5.mjs` vẫn OK; `npx tsc --noEmit` exit 0.
 - Việc tiếp theo (phiên 7): lưu + hiển thị ảnh lựa chọn.
 
 ---
@@ -604,13 +618,13 @@ phân số thay vì A. rỗng. Nếu chưa có DB thì chỉ kiểm tra type-che
 
 ## 6. Trạng thái
 
-- Phiên hiện tại: sẵn sàng phiên 6.
+- Phiên hiện tại: sẵn sàng phiên 7.
 - Phiên 1: xong
 - Phiên 2: xong
 - Phiên 3: xong
 - Phiên 4: xong
 - Phiên 5: xong
-- Phiên 6: chưa
+- Phiên 6: xong
 - Phiên 7: chưa
 - Phiên 8: chưa
 
