@@ -231,10 +231,26 @@ số ảnh SVG >= 20.
 
 **Commit:** `wip(parser): phien 1 - MathType WMF sang SVG`
 
-**Báo cáo phiên 1 (điền sau khi code):**
+**Báo cáo phiên 1 (đã làm):**
 - Đã làm:
-- File đã sửa/tạo:
+  - Tạo `lib/docx-equations.ts`: `wmfToSvg(buffer)` ưu tiên `wmf2svg` (ghi WMF ra tmp rồi
+    `execFile("wmf2svg", [inPath])`), fallback thuần JS bằng gói `wmf` (strip placeable header
+    22 byte, bỏ record `META_ESCAPE` 1574, dựng SVG tối giản từ text/poly);
+    `isConvertibleMetafile`; `ensureSvgNamespace`.
+  - Sửa `lib/extract-file.ts` nhánh docx: trong `convertImage`, nếu là WMF/EMF thì gọi
+    `wmfToSvg`; thành công trả `data:image/svg+xml;base64,...`, thất bại giữ base64 gốc.
+  - Thêm dependency `wmf@^1.0.2` + `types/wmf.d.ts`.
+  - Script kiểm thử `scripts/check-docx-equations.mjs` (chạy bằng `tsx`).
+- File đã sửa/tạo: `lib/docx-equations.ts` (mới), `lib/extract-file.ts`, `package.json`,
+  `pnpm-lock.yaml`, `types/wmf.d.ts` (mới), `scripts/check-docx-equations.mjs` (mới).
 - Kiểm thử:
+  - `tsx scripts/check-docx-equations.mjs` trên file đối chiếu: `images:37, svg:20, wmf:0, png:17`
+    -> KHÔNG còn WMF, đủ 20 ảnh SVG, có default `xmlns`.
+  - Ép `PATH` không có `wmf2svg` -> fallback JS vẫn cho data URI SVG hợp lệ.
+  - `npx tsc --noEmit` exit 0.
+- Ghi chú quan trọng: `wmf2svg` (apt `libwmf-bin`) đã cài trong môi trường. Output của `wmf2svg`
+  KHÔNG có `xmlns` mặc định -> phải tự thêm `xmlns="http://www.w3.org/2000/svg"`, nếu không browser
+  không render ảnh SVG (bug tiềm ẩn của kế hoạch gốc).
 - Việc tiếp theo (phiên 2): OMML -> SVG. Chỉ cần thêm `lib/docx-omml.ts` + tiền xử lý docx
   trong `extract-file.ts`. Không đọc lại parser.
 
@@ -532,8 +548,8 @@ phân số thay vì A. rỗng. Nếu chưa có DB thì chỉ kiểm tra type-che
 
 ## 6. Trạng thái
 
-- Phiên hiện tại: chưa bắt đầu (mới lập kế hoạch).
-- Phiên 1: chưa
+- Phiên hiện tại: sẵn sàng phiên 2.
+- Phiên 1: xong
 - Phiên 2: chưa
 - Phiên 3: chưa
 - Phiên 4: chưa

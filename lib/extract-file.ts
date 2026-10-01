@@ -1,5 +1,6 @@
 import mammoth from "mammoth"
 import { parseTextContent, parseHtmlToResultAndText, type ParseResult } from "./worksheet-parser"
+import { isConvertibleMetafile, wmfToSvg } from "./docx-equations"
 
 export const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 
@@ -54,6 +55,12 @@ export async function extractAndParse(buffer: Buffer, filename: string): Promise
       {
         styleMap: ["u => u"],
         convertImage: mammoth.images.imgElement(async (image) => {
+          if (isConvertibleMetafile(image.contentType)) {
+            const raw = await image.read()
+            const svg = await wmfToSvg(raw)
+            if (svg) return { src: svg }
+            return { src: `data:${image.contentType};base64,${raw.toString("base64")}` }
+          }
           const encoded = await image.readAsBase64String()
           return { src: `data:${image.contentType};base64,${encoded}` }
         }),
