@@ -289,10 +289,30 @@ số ảnh SVG >= 20.
 
 **Commit:** `wip(parser): phien 2 - OMML sang SVG`
 
-**Báo cáo phiên 2 (điền sau khi code):**
+**Báo cáo phiên 2 (đã làm):**
 - Đã làm:
-- File đã sửa/tạo:
+  - Thêm dependency `jszip`, `@xmldom/xmldom`, `omml2mathml`, `mathjax-full`.
+  - Tạo `lib/docx-omml.ts`: `ommlToSvgDataUri(fragment)` (wrap namespace, xmldom,
+    `omml2mathml` lấy `outerHTML`, MathJax `liteAdaptor` + `MathML` + `SVG` fontCache none,
+    tách inner `<svg>`, thêm xmlns nếu thiếu, trả `data:image/svg+xml;base64,...`);
+    `preprocessOmml(buffer)` unzip `word/document.xml`, thay `m:oMathPara` rồi `m:oMath`
+    bằng `<w:r><w:t xml:space="preserve">@@MATHn@@</w:t></w:r>`, rezip. 1 công thức lỗi
+    -> null, không fail file.
+  - Sửa `lib/extract-file.ts` nhánh docx: `preprocessOmml` trước mammoth; sau HTML thay
+    `@@MATHn@@` bằng `<img src="...">` hoặc `[công thức]` rồi `parseHtmlToResultAndText`.
+  - Mở rộng `scripts/check-docx-equations.mjs` đếm OMML SVG + token `@@MATH` sót.
+  - Type `types/omml2mathml.d.ts`.
+- File đã sửa/tạo: `lib/docx-omml.ts` (mới), `lib/extract-file.ts`,
+  `scripts/check-docx-equations.mjs`, `package.json`, `pnpm-lock.yaml`,
+  `types/omml2mathml.d.ts` (mới).
 - Kiểm thử:
+  - `tsx scripts/check-docx-equations.mjs` trên file đối chiếu:
+    `omml tokens:23, omml svg:23, omml fail:0`; `images:60, svg:43, wmf:0, png:17`;
+    `@@MATH` sót = 0. Câu 35 lựa chọn A có `@@IMG13@@` (trước đây rỗng vì mất OMML).
+  - `npx tsc --noEmit` exit 0.
+- Ghi chú: MathJax khởi tạo 1 lần (module-level). `omml2mathml` là CJS (`require` qua
+  default import + `types/omml2mathml.d.ts`). Parser vẫn chưa tách option nên `@@IMG`
+  công thức OMML đang nằm trong stem/`sourceText` (phiên 4 sẽ gắn vào A-D).
 - Việc tiếp theo (phiên 3): viết lại vòng lặp `parseTextContent`.
 
 ---
@@ -548,9 +568,9 @@ phân số thay vì A. rỗng. Nếu chưa có DB thì chỉ kiểm tra type-che
 
 ## 6. Trạng thái
 
-- Phiên hiện tại: sẵn sàng phiên 2.
+- Phiên hiện tại: sẵn sàng phiên 3.
 - Phiên 1: xong
-- Phiên 2: chưa
+- Phiên 2: xong
 - Phiên 3: chưa
 - Phiên 4: chưa
 - Phiên 5: chưa

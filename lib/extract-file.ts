@@ -1,6 +1,7 @@
 import mammoth from "mammoth"
 import { parseTextContent, parseHtmlToResultAndText, type ParseResult } from "./worksheet-parser"
 import { isConvertibleMetafile, wmfToSvg } from "./docx-equations"
+import { preprocessOmml } from "./docx-omml"
 
 export const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 
@@ -50,8 +51,9 @@ export async function extractAndParse(buffer: Buffer, filename: string): Promise
   }
 
   if (kind === "docx") {
-    const { value: html } = await mammoth.convertToHtml(
-      { buffer },
+    const { buffer: buf2, maths } = await preprocessOmml(buffer)
+    const { value: rawHtml } = await mammoth.convertToHtml(
+      { buffer: buf2 },
       {
         styleMap: ["u => u"],
         convertImage: mammoth.images.imgElement(async (image) => {
@@ -66,6 +68,10 @@ export async function extractAndParse(buffer: Buffer, filename: string): Promise
         }),
       },
     )
+    const html = rawHtml.replace(/@@MATH(\d+)@@/g, (_, n: string) => {
+      const src = maths[+n]
+      return src ? `<img src="${src}">` : "[công thức]"
+    })
     return parseHtmlToResultAndText(html)
   }
 
