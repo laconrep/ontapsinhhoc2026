@@ -7,6 +7,7 @@ export type ParsedQuestionType = "MC" | "TF" | "SA"
 export interface ParsedOption {
   content: string
   isCorrect: boolean
+  bodyHtml?: string
 }
 
 export interface ParsedQuestion {
@@ -682,6 +683,14 @@ function convertHtmlLists(html: string): string {
   return out
 }
 
+function stripRichTokens(text: string): string {
+  return text
+    .split("\n")
+    .map((ln) => ln.replace(/@@(IMG|TBL)\d+@@/g, "").trim())
+    .filter((ln) => ln.length > 0)
+    .join("\n")
+}
+
 export function attachBodyHtml(result: ParseResult, images: string[], tables: string[]) {
   if (images.length === 0 && tables.length === 0) return
   for (const ch of result.chapters) {
@@ -691,10 +700,25 @@ export function attachBodyHtml(result: ParseResult, images: string[], tables: st
           if (!q.content.includes("@@IMG") && !q.content.includes("@@TBL")) continue
           const lines = q.content.split("\n")
           q.bodyHtml = lines.map((ln) => lineWithRichToHtml(ln, images, tables)).join("<br>\n")
-          q.content = lines
-            .map((ln) => ln.replace(/@@(IMG|TBL)\d+@@/g, "").trim())
-            .filter((ln) => ln.length > 0)
-            .join("\n")
+          q.content = stripRichTokens(q.content)
+        }
+      }
+    }
+  }
+}
+
+export function attachOptionBodyHtml(result: ParseResult, images: string[], tables: string[]) {
+  if (images.length === 0 && tables.length === 0) return
+  for (const ch of result.chapters) {
+    for (const lesson of ch.lessons) {
+      for (const kp of lesson.knowledgePoints) {
+        for (const q of kp.questions) {
+          for (const o of q.options) {
+            if (!o.content.includes("@@IMG") && !o.content.includes("@@TBL")) continue
+            const lines = o.content.split("\n")
+            o.bodyHtml = lines.map((ln) => lineWithRichToHtml(ln, images, tables)).join("<br>\n")
+            o.content = stripRichTokens(o.content)
+          }
         }
       }
     }
@@ -734,6 +758,7 @@ export function parseHtmlToResultAndText(html: string): {
   const sourceText = normalizeParseText(decodeEntities(stripped))
   const parseResult = parseTextContent(sourceText)
   attachBodyHtml(parseResult, images, tables)
+  attachOptionBodyHtml(parseResult, images, tables)
   return { parseResult, sourceText, images, tables }
 }
 
@@ -743,9 +768,10 @@ export function parseHtmlContent(html: string): ParseResult {
 
 // ============ Validate ============
 
-function isEffectivelyEmpty(text: string): boolean {
+function isEffectivelyEmpty(text: string, html?: string): boolean {
   if (/@@(?:IMG|TBL)\d+@@/i.test(text)) return false
   if (/<img\b/i.test(text) || /<table\b/i.test(text)) return false
+  if (html && (/<img\b/i.test(html) || /<table\b/i.test(html))) return false
   let s = text.replace(/^[A-Da-d][.)]\s*/i, "")
   s = s.replace(/<[^>]+>/g, "")
   s = s.replace(/[.,;:]/g, "")
@@ -791,7 +817,7 @@ export function validateDocument(result: ParseResult): ValidationResult {
             errors.push({ line: q.line, message: "Câu trắc nghiệm phải có đúng 1 đáp án đúng (gạch chân)" })
           }
           q.options.forEach((o, i) => {
-            if (isEffectivelyEmpty(o.content)) {
+            if (isEffectivelyEmpty(o.content, o.bodyHtml)) {
               const X = optionLabel("MC", i, o.content)
               errors.push({
                 line: q.line,
@@ -804,7 +830,7 @@ export function validateDocument(result: ParseResult): ValidationResult {
             errors.push({ line: q.line, message: `Câu Đúng/Sai phải có đúng 4 ý a) b) c) d) (hiện có ${q.options.length})` })
           }
           q.options.forEach((o, i) => {
-            if (isEffectivelyEmpty(o.content)) {
+            if (isEffectivelyEmpty(o.content, o.bodyHtml)) {
               const X = optionLabel("TF", i, o.content)
               errors.push({
                 line: q.line,

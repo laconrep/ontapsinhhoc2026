@@ -12,7 +12,7 @@ export interface LiveQuestion {
   bodyHtml?: string | null
   knowledgePointContent: string
   // Lựa chọn hiển thị (không kèm cờ đúng/sai để tránh lộ đáp án cho HS)
-  options: { id: string; content: string; order: number }[]
+  options: { id: string; content: string; bodyHtml?: string | null; order: number }[]
   timeLimitSec: number | null
 }
 

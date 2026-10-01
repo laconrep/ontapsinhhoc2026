@@ -16,7 +16,7 @@ type QuizQuestion = {
   content: string
   bodyHtml?: string | null
   knowledgePointId: string
-  options: { id: string; content: string }[]
+  options: { id: string; content: string; bodyHtml?: string | null }[]
 }
 
 type Answer = string | Record<string, "D" | "S">
@@ -211,7 +211,11 @@ function MCInput({
           >
             {value === o.id && <span className="h-2 w-2 rounded-full bg-primary" />}
           </span>
-          {o.content}
+          {o.bodyHtml ? (
+            <QuestionStem content={o.content} bodyHtml={o.bodyHtml} className="text-sm" maxHeightClass="max-h-24" />
+          ) : (
+            o.content
+          )}
         </button>
       ))}
     </div>
@@ -231,7 +235,16 @@ function TFInput({
     <div className="flex flex-col gap-2">
       {question.options.map((o) => (
         <div key={o.id} className="flex items-center gap-2 rounded-lg border border-border p-2">
-          <span className="flex-1 text-sm text-foreground">{o.content}</span>
+          {o.bodyHtml ? (
+            <QuestionStem
+              content={o.content}
+              bodyHtml={o.bodyHtml}
+              className="text-sm text-foreground"
+              maxHeightClass="max-h-24 flex-1"
+            />
+          ) : (
+            <span className="flex-1 text-sm text-foreground">{o.content}</span>
+          )}
           <div className="flex gap-1">
             {(["D", "S"] as const).map((v) => (
               <button

@@ -70,6 +70,7 @@ export async function getQuestionBank(): Promise<QuestionBankItem[]> {
 interface OptionInput {
   content: string
   isCorrect: boolean
+  bodyHtml?: string | null
 }
 
 // verify the knowledge point belongs to the teacher; returns lessonId for revalidation
@@ -102,7 +103,7 @@ export async function getQuestionsByKp(knowledgePointId: string): Promise<Questi
   return qs.map((q) => {
     const qOpts: QuestionOptionDto[] = opts
       .filter((o) => o.questionId === q.id)
-      .map((o) => ({ id: o.id, content: o.content, isCorrect: o.isCorrect, order: o.order }))
+      .map((o) => ({ id: o.id, content: o.content, bodyHtml: o.bodyHtml ?? null, isCorrect: o.isCorrect, order: o.order }))
     return {
       id: q.id,
       knowledgePointId: q.knowledgePointId,
@@ -159,6 +160,7 @@ export async function createQuestion(input: {
       input.options.map((o, i) => ({
         questionId: q.id,
         content: o.content.trim(),
+        bodyHtml: o.bodyHtml ?? null,
         isCorrect: o.isCorrect,
         order: i,
       })),
@@ -202,6 +204,7 @@ export async function updateQuestion(input: {
       input.options.map((o, i) => ({
         questionId: input.id,
         content: o.content.trim(),
+        bodyHtml: o.bodyHtml ?? null,
         isCorrect: o.isCorrect,
         order: i,
       })),

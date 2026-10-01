@@ -86,6 +86,7 @@ export interface QuestionDto {
 export interface QuestionOptionDto {
   id: string
   content: string
+  bodyHtml?: string | null
   isCorrect: boolean
   order: number
 }

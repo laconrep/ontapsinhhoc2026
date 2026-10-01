@@ -107,7 +107,16 @@ export function QuizStage({ view }: { view: LiveQuizView }) {
                       >
                         {revealed && isCorrect ? <Check className="h-6 w-6" /> : LETTERS[i]}
                       </span>
-                      <span className="font-medium leading-snug">{o.content}</span>
+                      {o.bodyHtml ? (
+                        <QuestionStem
+                          content={o.content}
+                          bodyHtml={o.bodyHtml}
+                          className="font-medium leading-snug"
+                          maxHeightClass="max-h-32"
+                        />
+                      ) : (
+                        <span className="font-medium leading-snug">{o.content}</span>
+                      )}
                     </div>
                   )
                 })}

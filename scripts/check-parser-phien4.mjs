@@ -100,18 +100,22 @@ for (const n of want) {
   }
 }
 
+function hasRich(o) {
+  return /@@IMG/.test(o.content) || /<img\b/i.test(o.bodyHtml ?? "")
+}
+
 const c5 = byOrder[4]
-if (!/@@IMG/.test(c5.options[0].content) || !/@@IMG/.test(c5.options[2].content)) {
+if (!hasRich(c5.options[0]) || !hasRich(c5.options[2])) {
   console.error("THAT BAI: Cau 5 A/C thieu @@IMG", c5.options)
   process.exit(1)
 }
 const c21 = byOrder[20]
-if (!c21.options.every((o) => /@@IMG/.test(o.content))) {
+if (!c21.options.every((o) => hasRich(o))) {
   console.error("THAT BAI: Cau 21 thieu @@IMG trong A-D", c21.options)
   process.exit(1)
 }
 const c35 = byOrder[34]
-if (!/@@IMG/.test(c35.options[0].content)) {
+if (!hasRich(c35.options[0])) {
   console.error("THAT BAI: Cau 35 A thieu @@IMG", c35.options)
   process.exit(1)
 }

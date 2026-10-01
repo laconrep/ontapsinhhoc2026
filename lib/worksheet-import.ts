@@ -186,6 +186,7 @@ async function persistParseResult(
               pQ.options.map((o, i) => ({
                 questionId: qRow.id,
                 content: o.content,
+                bodyHtml: o.bodyHtml ?? null,
                 isCorrect: o.isCorrect,
                 order: i,
               })),

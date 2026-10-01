@@ -115,7 +115,7 @@ async function loadQuizQuestions(lessonId: string, defaultTimeSec: number): Prom
       content: r.content,
       bodyHtml: r.bodyHtml ?? null,
       knowledgePointContent: r.kpContent,
-      options: qOpts.map((o) => ({ id: o.id, content: o.content, order: o.order })),
+      options: qOpts.map((o) => ({ id: o.id, content: o.content, bodyHtml: o.bodyHtml ?? null, order: o.order })),
       timeLimitSec: r.timeLimitSec ?? defaultTimeSec,
       correctOptionIds,
       correctText,

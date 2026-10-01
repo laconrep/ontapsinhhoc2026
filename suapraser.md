@@ -574,10 +574,29 @@ phân số thay vì A. rỗng. Nếu chưa có DB thì chỉ kiểm tra type-che
 
 **Commit:** `wip(parser): phien 7 - luu va hien anh trong lua chon`
 
-**Báo cáo phiên 7 (điền sau khi code):**
+**Báo cáo phiên 7 (đã làm):**
 - Đã làm:
-- File đã sửa/tạo:
+  - Cột `question_options.bodyHtml`: schema + `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
+  - `QuestionOptionDto.bodyHtml`; `ParsedOption.bodyHtml`.
+  - `attachOptionBodyHtml`: option có `@@IMG`/`@@TBL` -> HTML ảnh/bảng, `content` bỏ token.
+  - Gọi sau `attachBodyHtml` (parse HTML + màn sửa lỗi revalidate).
+  - `persistParseResult` ghi `bodyHtml` khi insert options; load lại ở questions /
+    student-learn / live-quiz.
+  - UI: `QuestionStem` cho lựa chọn có `bodyHtml` (importer, editor, tab4-quiz,
+    quiz-stage). Giữ text nếu không có ảnh.
+- File đã sửa/tạo: `lib/worksheet-parser.ts`, `lib/db/schema.ts`, `lib/db/index.ts`,
+  `lib/worksheet-import.ts`, `types/index.ts`, `app/actions/questions.ts`,
+  `app/actions/student-learn.ts`, `app/actions/live-quiz.ts`,
+  `lib/live-session-state.ts`, `components/live/use-live-quiz.ts`,
+  `components/teacher/worksheet-importer.tsx`, `components/teacher/question-editor.tsx`,
+  `components/teacher/import-error-fix.tsx`, `components/student/tab4-quiz.tsx`,
+  `components/live/quiz-stage.tsx`, `scripts/check-parser-phien7.mjs` (mới),
+  `scripts/check-parser-phien4.mjs`, `suapraser.md`.
 - Kiểm thử:
+  - Sample + file đối chiếu: Câu 5 A/C, Câu 21 A-D, Câu 35 A có `<img>` trong
+    `bodyHtml`, `content` không còn `@@IMG`.
+  - `tsx scripts/check-parser-phien4.mjs` + `phien6` vẫn OK; `npx tsc --noEmit` exit 0.
+  - Chưa chạy lưu DB (môi trường có thể không có Postgres).
 - Việc tiếp theo (phiên 8): chạy end-to-end file đối chiếu + chốt.
 
 ---
@@ -618,14 +637,14 @@ phân số thay vì A. rỗng. Nếu chưa có DB thì chỉ kiểm tra type-che
 
 ## 6. Trạng thái
 
-- Phiên hiện tại: sẵn sàng phiên 7.
+- Phiên hiện tại: sẵn sàng phiên 8.
 - Phiên 1: xong
 - Phiên 2: xong
 - Phiên 3: xong
 - Phiên 4: xong
 - Phiên 5: xong
 - Phiên 6: xong
-- Phiên 7: chưa
+- Phiên 7: xong
 - Phiên 8: chưa
 
 ## 7. Quyết định đã chốt với người dùng

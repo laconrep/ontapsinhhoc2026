@@ -5,8 +5,9 @@ import { AlertTriangle } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
-  attachBodyHtml,
-  isCauHeading,
+    attachBodyHtml,
+    attachOptionBodyHtml,
+    isCauHeading,
   parseTextContent,
   sourceTextToPreviewHtml,
   summarize,
@@ -102,6 +103,7 @@ export function ImportErrorFix({
     setChecking(false)
     const parseResult = parseTextContent(text)
     attachBodyHtml(parseResult, images, tables)
+    attachOptionBodyHtml(parseResult, images, tables)
     const { isValid, errors: next } = validateDocument(parseResult)
     const summary = summarize(parseResult)
     setActiveErrorIndex((prev) => {

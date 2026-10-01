@@ -481,7 +481,7 @@ type QuizQuestionForClient = {
   content: string
   bodyHtml?: string | null
   knowledgePointId: string
-  options: { id: string; content: string }[] // MC/TF (không lộ isCorrect)
+  options: { id: string; content: string; bodyHtml?: string | null }[] // MC/TF (không lộ isCorrect)
 }
 
 export async function startQuiz(lessonId: string): Promise<{
@@ -547,7 +547,7 @@ export async function startQuiz(lessonId: string): Promise<{
         content: q.content,
         bodyHtml: q.bodyHtml ?? null,
         knowledgePointId: q.knowledgePointId,
-        options: seededShuffle(opts, rng).map((o) => ({ id: o.id, content: o.content })),
+        options: seededShuffle(opts, rng).map((o) => ({ id: o.id, content: o.content, bodyHtml: o.bodyHtml ?? null })),
       }
     }
     if (q.type === "TF") {
@@ -558,7 +558,7 @@ export async function startQuiz(lessonId: string): Promise<{
         content: q.content,
         bodyHtml: q.bodyHtml ?? null,
         knowledgePointId: q.knowledgePointId,
-        options: opts.map((o) => ({ id: o.id, content: o.content })),
+        options: opts.map((o) => ({ id: o.id, content: o.content, bodyHtml: o.bodyHtml ?? null })),
       }
     }
     // SA

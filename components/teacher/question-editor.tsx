@@ -35,6 +35,7 @@ const TYPE_LABEL: Record<QType, string> = {
 interface OptRow {
   content: string
   isCorrect: boolean
+  bodyHtml?: string | null
 }
 
 function defaultOptions(type: QType): OptRow[] {
@@ -99,7 +100,7 @@ export function QuestionEditor({
     setType(t)
     setContent(q.content)
     setOptions(
-      (q.options ?? []).map((o) => ({ content: o.content, isCorrect: o.isCorrect })),
+      (q.options ?? []).map((o) => ({ content: o.content, isCorrect: o.isCorrect, bodyHtml: o.bodyHtml })),
     )
     setDialog({ mode: "edit", q })
   }
@@ -186,17 +187,26 @@ export function QuestionEditor({
                       </p>
                     ) : (
                       q.options?.map((o) => (
-                        <p
+                        <div
                           key={o.id}
-                          className="flex items-center gap-1 text-xs text-muted-foreground"
+                          className="flex items-start gap-1 text-xs text-muted-foreground"
                         >
                           {o.isCorrect ? (
-                            <Check className="h-3 w-3 text-primary" />
+                            <Check className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
                           ) : (
-                            <X className="h-3 w-3 text-muted-foreground/50" />
+                            <X className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground/50" />
                           )}
-                          {o.content}
-                        </p>
+                          {o.bodyHtml ? (
+                            <QuestionStem
+                              content={o.content}
+                              bodyHtml={o.bodyHtml}
+                              className="text-xs"
+                              maxHeightClass="max-h-24"
+                            />
+                          ) : (
+                            <span>{o.content}</span>
+                          )}
+                        </div>
                       ))
                     )}
                   </div>

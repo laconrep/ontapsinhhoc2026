@@ -354,7 +354,12 @@ function PreviewPanel({ preview }: { preview: WorksheetPreview }) {
                                             key={oi}
                                             className={o.isCorrect ? "font-medium text-primary" : "text-foreground"}
                                           >
-                                            {o.content}
+                                            <QuestionStem
+                                              content={o.content}
+                                              bodyHtml={o.bodyHtml}
+                                              className="text-sm"
+                                              maxHeightClass="max-h-32"
+                                            />
                                           </li>
                                         ))}
                                       </ul>

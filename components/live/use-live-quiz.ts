@@ -10,7 +10,7 @@ export interface LiveQuestionView {
   content: string
   bodyHtml?: string | null
   knowledgePointContent: string
-  options: { id: string; content: string; order: number }[]
+  options: { id: string; content: string; bodyHtml?: string | null; order: number }[]
   timeLimitSec: number | null
 }
 
