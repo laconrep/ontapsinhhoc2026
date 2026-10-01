@@ -3,12 +3,18 @@
 import { useEffect, useRef, useState } from "react"
 import { AlertTriangle, CheckCircle2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { PreviewDocument } from "@/components/teacher/worksheet-preview-doc"
 import {
+  blockRange,
+  collectMediaTokens,
+  spliceBlock,
+  type LineRange,
+} from "@/lib/worksheet-source-range"
+import {
   attachBodyHtml,
   attachOptionBodyHtml,
-  isCauHeading,
   parseTextContent,
   summarize,
   validateDocument,
@@ -35,52 +41,8 @@ interface ImportErrorFixProps {
   onRevalidated?: (payload: RevalidatedPreview) => void
 }
 
-function questionBlockRange(text: string, line: number): { startLine: number; endLine: number } {
-  const lines = text.split("\n")
-  if (lines.length === 0) return { startLine: 1, endLine: 1 }
-  const idx = Math.max(1, Math.min(line, lines.length)) - 1
-  const t = (i: number) => lines[i]?.trim() ?? ""
-  const isQStart = (s: string) => /^#{1,3}(\s|$)/.test(s) || isCauHeading(s)
-  const isNewBlock = (s: string) =>
-    s.startsWith("#") ||
-    s.startsWith("{") ||
-    s.startsWith("[") ||
-    s.startsWith("-") ||
-    s.startsWith("+") ||
-    s.startsWith("*") ||
-    s.startsWith("//")
-
-  let start = idx
-  while (start > 0 && !isQStart(t(start))) start -= 1
-  if (!isQStart(t(start))) start = idx
-
-  let seenCau = isCauHeading(t(start))
-  let end = idx
-  for (let i = start + 1; i < lines.length; i++) {
-    const s = t(i)
-    if (s && isNewBlock(s)) break
-    if (s && isCauHeading(s)) {
-      if (seenCau) break
-      seenCau = true
-    }
-    end = i
-  }
-  if (end < idx) end = idx
-  return { startLine: start + 1, endLine: end + 1 }
-}
-
-function offsetRange(text: string, startLine: number, endLine: number): { start: number; end: number } {
-  const lines = text.split("\n")
-  let start = 0
-  const from = Math.max(1, startLine) - 1
-  const to = Math.max(from, Math.min(endLine, lines.length) - 1)
-  for (let i = 0; i < from && i < lines.length; i++) start += lines[i].length + 1
-  let end = start
-  for (let i = from; i <= to && i < lines.length; i++) {
-    end += lines[i].length
-    if (i < to) end += 1
-  }
-  return { start, end }
+function sliceBlock(text: string, range: LineRange): string {
+  return text.split("\n").slice(range.startLine - 1, range.endLine).join("\n")
 }
 
 export function ImportErrorFix({
@@ -90,16 +52,23 @@ export function ImportErrorFix({
   summary,
   images = [],
   tables = [],
-  onSourceChange: _onSourceChange,
+  onSourceChange,
   onRevalidated,
 }: ImportErrorFixProps) {
   const [activeErrorIndex, setActiveErrorIndex] = useState<number | null>(null)
   const [highlightLine, setHighlightLine] = useState<number | undefined>()
+  const [activeRange, setActiveRange] = useState<LineRange | null>(null)
+  const [blockEdit, setBlockEdit] = useState("")
+  const [tokenWarn, setTokenWarn] = useState(false)
   const [checking, setChecking] = useState(false)
   const previewRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const errorsRef = useRef(errors)
+  const originalTokensRef = useRef<string[]>([])
+  const latestTextRef = useRef(sourceText)
+  const rangeRef = useRef<LineRange | null>(null)
   errorsRef.current = errors
+  latestTextRef.current = sourceText
 
   function applyRevalidate(text: string) {
     setChecking(false)
@@ -134,7 +103,7 @@ export function ImportErrorFix({
       clearTimeout(timerRef.current)
       timerRef.current = null
     }
-    applyRevalidate(sourceText)
+    applyRevalidate(latestTextRef.current)
   }
 
   useEffect(() => {
@@ -152,11 +121,46 @@ export function ImportErrorFix({
     })
   }
 
+  function openBlock(line: number, message?: string) {
+    const text = latestTextRef.current
+    const range = blockRange(text, line, message)
+    const block = sliceBlock(text, range)
+    originalTokensRef.current = collectMediaTokens(block)
+    rangeRef.current = range
+    setActiveRange(range)
+    setBlockEdit(block)
+    setTokenWarn(false)
+    scrollToLine(line)
+  }
+
   function selectError(i: number) {
     setActiveErrorIndex(i)
     const e = errors[i]
     if (!e?.line) return
-    scrollToLine(e.line)
+    openBlock(e.line, e.message)
+  }
+
+  function applyBlockEdit(edit: string) {
+    const range = rangeRef.current
+    if (!range) return
+    const next = spliceBlock(latestTextRef.current, range.startLine, range.endLine, edit)
+    const nextRange = { startLine: range.startLine, endLine: range.startLine + edit.split("\n").length - 1 }
+    rangeRef.current = nextRange
+    setActiveRange(nextRange)
+    setBlockEdit(edit)
+    const kept = collectMediaTokens(edit)
+    setTokenWarn(originalTokensRef.current.some((tok) => !kept.includes(tok)))
+    latestTextRef.current = next
+    onSourceChange?.(next)
+    scheduleRevalidate(next)
+  }
+
+  function closeEditor() {
+    flushRevalidate()
+    rangeRef.current = null
+    setActiveRange(null)
+    setBlockEdit("")
+    setTokenWarn(false)
   }
 
   return (
@@ -208,18 +212,40 @@ export function ImportErrorFix({
               </ul>
             )}
           </div>
-          <div
-            ref={previewRef}
-            className="min-h-[420px] max-h-[70vh] overflow-auto rounded-lg border bg-background p-3"
-          >
-            <PreviewDocument
-              parseResult={parseResult}
-              summary={summary}
-              isValid={errors.length === 0}
-              errors={errors}
-              highlightLine={highlightLine}
-              onSelectBlock={scrollToLine}
-            />
+          <div className="flex min-h-[420px] max-h-[70vh] flex-col overflow-hidden rounded-lg border bg-background">
+            {activeRange ? (
+              <div className="shrink-0 border-b p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-foreground">
+                    Sửa khối dòng {activeRange.startLine}
+                    {activeRange.endLine !== activeRange.startLine ? `–${activeRange.endLine}` : ""}
+                  </p>
+                  <Button type="button" size="sm" variant="outline" onClick={closeEditor}>
+                    Xong
+                  </Button>
+                </div>
+                {tokenWarn ? (
+                  <p className="mb-2 text-xs text-destructive">Token ảnh/bảng bị xóa — preview có thể mất hình.</p>
+                ) : null}
+                <textarea
+                  value={blockEdit}
+                  onChange={(ev) => applyBlockEdit(ev.target.value)}
+                  onBlur={() => flushRevalidate()}
+                  spellCheck={false}
+                  className="block min-h-[120px] max-h-[28vh] w-full resize-y overflow-auto rounded-md border bg-transparent p-2 font-mono text-sm leading-5 whitespace-pre outline-none"
+                />
+              </div>
+            ) : null}
+            <div ref={previewRef} className="min-h-0 flex-1 overflow-auto p-3">
+              <PreviewDocument
+                parseResult={parseResult}
+                summary={summary}
+                isValid={errors.length === 0}
+                errors={errors}
+                highlightLine={highlightLine}
+                onSelectBlock={(line) => openBlock(line)}
+              />
+            </div>
           </div>
         </div>
       </CardContent>

@@ -256,9 +256,9 @@ trước `##`. Script thuần cho helper nếu tách file.
 **Commit:** `wip(preview): phien 3 - bam loi sua dung khoi`
 
 **Báo cáo phiên 3 (điền sau khi code):**
-- Đã làm:
-- File đã sửa/tạo:
-- Kiểm thử:
+- Đã làm: Tách `blockRange`/`offsetRange`/`spliceBlock`. KP (`-` hoặc message Điểm kiến thức) = 1 dòng. Câu = heading đến biên `#`/`-`/`Câu`/ĐÁP ÁN. Bấm lỗi trái: scroll + textarea khối trên cột phải; onChange splice vào `draftText` + debounce revalidate; cảnh báo nếu xoá `@@IMG`/`@@TBL`; nút Xong đóng editor.
+- File đã sửa/tạo: `lib/worksheet-source-range.ts` (mới), `components/teacher/import-error-fix.tsx`, `scripts/check-preview-phien3.mjs` (mới)
+- Kiểm thử: `tsx scripts/check-preview-phien3.mjs` OK (L14 KP 1 dòng; Câu 35 đến trước `##`; splice không lệch). `npx tsc --noEmit` exit 0.
 - Việc tiếp theo (phiên 4): click từ gạch chân KP.
 
 ---
@@ -363,10 +363,10 @@ có `<img` sau attach. Không cần Postgres.
 
 ## 5. Trạng thái
 
-- Phiên hiện tại: sẵn sàng phiên 3.
+- Phiên hiện tại: sẵn sàng phiên 4.
 - Phiên 1: xong
 - Phiên 2: xong
-- Phiên 3: chưa
+- Phiên 3: xong
 - Phiên 4: chưa
 - Phiên 5: chưa
 - Phiên 6: chưa
