@@ -219,12 +219,30 @@ export function parseCauLine(line: string): string | null {
 }
 
 export function isCauHeading(line: string): boolean {
-  return CAU_RE.test(line.trim())
+  return CAU_RE.test(stripUnderline(line))
 }
 
 function parseDapAnLine(line: string): string | null {
   const m = line.match(DAP_AN_RE)
   return m ? m[2].trim() : null
+}
+
+/** ĐÁP ÁN / HƯỚNG DẪN GIẢI = hết phần câu. `Đáp án:` (có dấu :) là đáp án SA, không cắt. */
+function isTailHeading(line: string): boolean {
+  const bare = stripUnderline(line)
+  if (DAP_AN_RE.test(bare)) return false
+  if (/^(đáp\s*án|dap\s*an)(\s|$)/i.test(bare)) return true
+  if (/^(hướng\s*dẫn\s*giải|huong\s*dan\s*giai)\b/i.test(bare)) return true
+  return false
+}
+
+function matchGroupMarker(line: string): { type: ParsedQuestionType; rest: string } | null {
+  const stripped = stripUnderline(line)
+  const m = stripped.match(/^(#{1,3})(?:\s+|$)(.*)$/)
+  if (!m) return null
+  const type: ParsedQuestionType = m[1] === "###" ? "SA" : m[1] === "##" ? "TF" : "MC"
+  const rest = line.replace(/^[\s_]*#{1,3}(?:__)?\s*/, "").trim()
+  return { type, rest }
 }
 
 function mcOptionContent(letter: string, text: string): string {
@@ -257,6 +275,9 @@ export function parseTextContent(text: string): ParseResult {
   let curLesson: ParsedLesson | null = null
   let curKp: ParsedKnowledgePoint | null = null
   let curQuestion: ParsedQuestion | null = null
+  let groupType: ParsedQuestionType | null = null
+  let inTail = false
+  let sawStructure = false
 
   const ensureChapter = (): ParsedChapter => {
     if (!curChapter) {
@@ -266,8 +287,26 @@ export function parseTextContent(text: string): ParseResult {
     return curChapter
   }
 
+  const closeQuestion = () => {
+    curQuestion = null
+  }
+
+  const startQuestion = (type: ParsedQuestionType, content: string, lineNo: number) => {
+    if (!curKp) {
+      errors.push({ line: lineNo, message: "Câu hỏi phải nằm trong một điểm kiến thức (bắt đầu bằng '-')" })
+      curQuestion = null
+      return
+    }
+    closeQuestion()
+    curQuestion = { type, content, options: [], line: lineNo }
+    curKp.questions.push(curQuestion)
+  }
+
   const lines = text.split(/\r?\n/)
   lines.forEach((rawLine, idx) => {
+    const lineNo = idx + 1
+    if (inTail) return
+
     let line = rawLine.trim()
     if (BULLET_RE.test(line) || /^[–—−]\s*/.test(line)) {
       const rest = line.replace(BULLET_RE, "").replace(/^[–—−]\s*/, "").trim()
@@ -276,110 +315,87 @@ export function parseTextContent(text: string): ParseResult {
         rest.startsWith("#") ||
         rest.startsWith("{") ||
         rest.startsWith("[") ||
-        CAU_RE.test(rest) ||
-        DAP_AN_RE.test(rest)
+        CAU_RE.test(stripUnderline(rest)) ||
+        DAP_AN_RE.test(stripUnderline(rest))
       line = keep ? rest : `- ${rest}`
     }
-    const lineNo = idx + 1
+
     if (!line) return
-    // dòng chú thích — bị bỏ qua
     if (line.startsWith("//")) return
 
-    // {Chương}
-    let mm = line.match(/^\{(.+)\}$/)
-    if (mm) {
-      curChapter = { title: mm[1].trim(), lessons: [], line: lineNo }
+    if (isTailHeading(line)) {
+      closeQuestion()
+      inTail = true
+      return
+    }
+
+    const chapterMatch = line.match(/^\{(.+)\}$/)
+    if (chapterMatch) {
+      sawStructure = true
+      closeQuestion()
+      curChapter = { title: chapterMatch[1].trim(), lessons: [], line: lineNo }
       chapters.push(curChapter)
       curLesson = null
       curKp = null
-      curQuestion = null
       return
     }
 
-    // [Bài]
-    mm = line.match(/^\[(.+)\]$/)
-    if (mm) {
+    const lessonMatch = line.match(/^\[(.+)\]$/)
+    if (lessonMatch) {
+      sawStructure = true
+      closeQuestion()
       const chap = ensureChapter()
-      curLesson = { title: mm[1].trim(), knowledgePoints: [], line: lineNo }
+      curLesson = { title: lessonMatch[1].trim(), knowledgePoints: [], line: lineNo }
       chap.lessons.push(curLesson)
       curKp = null
-      curQuestion = null
       return
     }
 
-    // ### SA — đề trên cùng dòng hoặc dòng sau `câu:`; đáp án dòng `dap an:` / `Đáp án:`
-    if (line.startsWith("###")) {
-      let body = line.slice(3).trim()
-      const cauOnSame = parseCauLine(body)
-      if (cauOnSame != null) body = cauOnSame
-      const dapOnSame = parseDapAnLine(body)
-      if (!curKp) {
-        errors.push({ line: lineNo, message: "Câu hỏi phải nằm trong một điểm kiến thức (bắt đầu bằng '-')" })
-        return
-      }
-      curQuestion = {
-        type: "SA",
-        content: dapOnSame != null ? "" : body,
-        options: [],
-        correctAnswer: dapOnSame ?? "",
-        line: lineNo,
-      }
-      curKp.questions.push(curQuestion)
-      return
-    }
-
-    // ## TF — đề trên cùng dòng, hoặc dòng sau `câu:`; lựa chọn a) b) c) d) (gạch chân = đúng)
-    if (line.startsWith("##")) {
-      let body = line.slice(2).trim()
-      const cauOnSame = parseCauLine(body)
-      if (cauOnSame != null) body = cauOnSame
-      if (!curKp) {
-        errors.push({ line: lineNo, message: "Câu hỏi phải nằm trong một điểm kiến thức (bắt đầu bằng '-')" })
-        return
-      }
-      curQuestion = { type: "TF", content: body, options: [], line: lineNo }
-      curKp.questions.push(curQuestion)
-      return
-    }
-
-    // # MC — đề trên cùng dòng, hoặc dòng sau `câu:`; lựa chọn A. B. C. D. (gạch chân = đúng)
-    if (line.startsWith("#")) {
+    if (line.startsWith("-")) {
+      closeQuestion()
       let body = line.slice(1).trim()
-      const cauOnSame = parseCauLine(body)
-      if (cauOnSame != null) body = cauOnSame
-      if (!curKp) {
-        errors.push({ line: lineNo, message: "Câu hỏi phải nằm trong một điểm kiến thức (bắt đầu bằng '-')" })
+      body = body.replace(/^Ý kiến thức\s*:\s*/i, "").replace(/^Y kien thuc\s*:\s*/i, "")
+      if (!curLesson) {
+        errors.push({ line: lineNo, message: "Điểm kiến thức phải nằm trong một bài [Tên bài]" })
         return
       }
-      curQuestion = { type: "MC", content: body, options: [], line: lineNo }
-      curKp.questions.push(curQuestion)
+      const { content, underlinedTerms } = extractBlanks(body)
+      curKp = { content, underlinedTerms, questions: [], line: lineNo }
+      curLesson.knowledgePoints.push(curKp)
       return
     }
 
-    // Dòng `câu:` / `Câu 1.` / `câu 1:` — điền đề câu đang mở, hoặc mở câu mới cùng loại
-    const cauBody = parseCauLine(line)
-    if (cauBody != null) {
-      if (curQuestion && !curQuestion.content && (curQuestion.type === "MC" || curQuestion.type === "TF" || curQuestion.type === "SA")) {
+    const group = matchGroupMarker(line)
+    if (group) {
+      groupType = group.type
+      closeQuestion()
+      if (!group.rest) return
+      let body = group.rest
+      const cauOnSame = parseCauLine(stripUnderline(body))
+      if (cauOnSame != null) body = cauOnSame
+      const dapOnSame = group.type === "SA" ? parseDapAnLine(stripUnderline(body)) : null
+      startQuestion(group.type, dapOnSame != null ? "" : body, lineNo)
+      if (curQuestion && dapOnSame != null) curQuestion.correctAnswer = dapOnSame
+      return
+    }
+
+    if (parseCauLine(stripUnderline(line)) != null) {
+      const cauBody = parseCauLine(line) ?? parseCauLine(stripUnderline(line)) ?? ""
+      if (groupType == null) {
+        errors.push({ line: lineNo, message: "Câu hỏi phải nằm sau mốc #/##/###" })
+        return
+      }
+      if (curQuestion && !curQuestion.content && curQuestion.type === groupType) {
         curQuestion.content = cauBody
         return
       }
-      if (!curKp) {
-        errors.push({ line: lineNo, message: "Câu hỏi phải nằm trong một điểm kiến thức (bắt đầu bằng '-')" })
-        return
-      }
-      const nextType = curQuestion?.type ?? "MC"
-      curQuestion = {
-        type: nextType,
-        content: cauBody,
-        options: [],
-        line: lineNo,
-      }
-      curKp.questions.push(curQuestion)
+      startQuestion(groupType, cauBody, lineNo)
       return
     }
 
-    // Dòng `dap an:` / `Đáp án:` điền đáp án cho câu SA đang mở
-    const dapAnBody = parseDapAnLine(line)
+    if (!sawStructure) return
+
+    const dapAnBody = parseDapAnLine(stripUnderline(line))
     if (dapAnBody != null && curQuestion?.type === "SA") {
       curQuestion.correctAnswer = dapAnBody
       if (!dapAnBody) {
@@ -388,7 +404,6 @@ export function parseTextContent(text: string): ParseResult {
       return
     }
 
-    // Lựa chọn MC/TF: a. / a) / A. / A) — gạch chân cả dòng hoặc chữ cái đầu = đúng
     const choice = parseChoiceLine(line)
     if (choice && curQuestion?.type === "MC") {
       curQuestion.options.push({
@@ -420,33 +435,21 @@ export function parseTextContent(text: string): ParseResult {
       return
     }
 
-    // - Điểm kiến thức
-    if (line.startsWith("-")) {
-      let body = line.slice(1).trim()
-      body = body.replace(/^Ý kiến thức\s*:\s*/i, "").replace(/^Y kien thuc\s*:\s*/i, "")
-      if (!curLesson) {
-        errors.push({ line: lineNo, message: "Điểm kiến thức phải nằm trong một bài [Tên bài]" })
-        return
-      }
-      const { content, underlinedTerms } = extractBlanks(body)
-      curKp = { content, underlinedTerms, questions: [], line: lineNo }
-      curLesson.knowledgePoints.push(curKp)
-      curQuestion = null
-      return
-    }
-
-    // Token anh/bang (tu parseHtmlContent) ngoai de dang mo: bo qua, khong fail file
     if (/^@@(IMG|TBL)\d+@@$/.test(line) && !(curQuestion && canAppendStem(curQuestion))) {
       return
     }
 
-    // De da dong: (1) (2) ... thuoc de khi dang mo cau, chua co lua chon / dap an
     if (curQuestion && canAppendStem(curQuestion)) {
       appendStem(curQuestion, line)
       return
     }
 
-    // dòng không nhận dạng được
+    if (!curQuestion && curKp) {
+      const extra = stripUnderline(line)
+      if (extra) curKp.content = curKp.content ? `${curKp.content}\n${extra}` : extra
+      return
+    }
+
     errors.push({ line: lineNo, message: `Không nhận dạng được cú pháp: "${line.slice(0, 40)}"` })
   })
 

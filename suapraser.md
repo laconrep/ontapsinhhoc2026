@@ -367,10 +367,23 @@ Chạy thêm trên file đối chiếu: `summarize` giảm mạnh số câu (kh�
 
 **Commit:** `wip(parser): phien 3 - moc nhom dinh, bien cau, cat duoi`
 
-**Báo cáo phiên 3 (điền sau khi code):**
+**Báo cáo phiên 3 (đã làm):**
 - Đã làm:
-- File đã sửa/tạo:
+  - Viết lại vòng lặp `parseTextContent`: state `groupType` / `inTail` / `sawStructure`.
+  - Mốc `#`/`##`/`###` sau `stripUnderline` (xử lý `__##__`, `__###__`) chỉ đặt loại,
+    đóng câu đang mở; có nội dung sau mốc thì coi là đề legacy.
+  - `Câu n.` mở câu theo `groupType`; thiếu mốc -> lỗi "Câu hỏi phải nằm sau mốc #/##/###".
+  - `{` `[` `-` đóng câu trước khi xử lý cấu trúc.
+  - Cắt đuôi: `ĐÁP ÁN` / `ĐÁP ÁN TRẮC NGHIỆM...` / `HƯỚNG DẪN GIẢI` (không cắt `Đáp án:` của SA).
+  - Preamble trước `{`/`[` bỏ qua, không lỗi.
+  - Dòng lạ trong KP khi không mở câu -> nối `curKp.content` (`3. Kết quả:`).
+  - Không sửa `parseChoiceLine` / option / validate.
+- File đã sửa/tạo: `lib/worksheet-parser.ts`, `scripts/check-parser-phien3.mjs` (mới).
 - Kiểm thử:
+  - Text tổng hợp: 2 MC + 1 TF, phần sau `ĐÁP ÁN` bị bỏ, không lỗi preamble.
+  - File đối chiếu: `chapters:1, lessons:1, kps:22, questions:51` (`MC:35 TF:6 SA:10`),
+    errors:8 (lựa chọn 2+2 / token ảnh — phiên 4). Không còn ~107 câu giả, không lỗi `PHẦN V`.
+  - `npx tsc --noEmit` exit 0.
 - Việc tiếp theo (phiên 4): MC options.
 
 ---
@@ -568,10 +581,10 @@ phân số thay vì A. rỗng. Nếu chưa có DB thì chỉ kiểm tra type-che
 
 ## 6. Trạng thái
 
-- Phiên hiện tại: sẵn sàng phiên 3.
+- Phiên hiện tại: sẵn sàng phiên 4.
 - Phiên 1: xong
 - Phiên 2: xong
-- Phiên 3: chưa
+- Phiên 3: xong
 - Phiên 4: chưa
 - Phiên 5: chưa
 - Phiên 6: chưa
