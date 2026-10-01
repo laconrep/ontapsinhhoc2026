@@ -289,9 +289,9 @@ thành `__protein__` → `extractBlanks` có 1 term `allowSwap=false`. Bọc `"G
 **Commit:** `wip(preview): phien 4 - click tu gach chan KP`
 
 **Báo cáo phiên 4 (điền sau khi code):**
-- Đã làm:
-- File đã sửa/tạo:
-- Kiểm thử:
+- Đã làm: Khi khối KP active, thanh Cố định / Đổi chỗ. Click hoặc bôi từ → `__từ__` hoặc `"từ"` (đã `__x__` thì `__"x"__`). Click lại gỡ. Không bọc `@@IMG`/`@@TBL` và gạch `- ` đầu dòng. `extractBlanks` không đổi; vẫn chặn lưu nếu KP chưa blank.
+- File đã sửa/tạo: `lib/kp-blank-wrap.ts` (mới), `components/teacher/import-error-fix.tsx`, `scripts/check-preview-phien4.mjs` (mới)
+- Kiểm thử: `tsx scripts/check-preview-phien4.mjs` OK (`protein` → `__protein__` allowSwap=false; `"Gene"` allowSwap=true; toggle gỡ; không bọc token/gạch). `npx tsc --noEmit` exit 0.
 - Việc tiếp theo (phiên 5): save giữ ảnh.
 
 ---
@@ -363,11 +363,11 @@ có `<img` sau attach. Không cần Postgres.
 
 ## 5. Trạng thái
 
-- Phiên hiện tại: sẵn sàng phiên 4.
+- Phiên hiện tại: sẵn sàng phiên 5.
 - Phiên 1: xong
 - Phiên 2: xong
 - Phiên 3: xong
-- Phiên 4: chưa
+- Phiên 4: xong
 - Phiên 5: chưa
 - Phiên 6: chưa
 

@@ -12,6 +12,7 @@ import {
   spliceBlock,
   type LineRange,
 } from "@/lib/worksheet-source-range"
+import { applyKpWrap, type KpWrapMode } from "@/lib/kp-blank-wrap"
 import {
   attachBodyHtml,
   attachOptionBodyHtml,
@@ -45,6 +46,11 @@ function sliceBlock(text: string, range: LineRange): string {
   return text.split("\n").slice(range.startLine - 1, range.endLine).join("\n")
 }
 
+function isKpEditor(block: string, message?: string): boolean {
+  const first = block.split("\n")[0]?.trim() ?? ""
+  return first.startsWith("-") || (message != null && message.includes("Điểm kiến thức"))
+}
+
 export function ImportErrorFix({
   errors,
   sourceText,
@@ -61,7 +67,10 @@ export function ImportErrorFix({
   const [blockEdit, setBlockEdit] = useState("")
   const [tokenWarn, setTokenWarn] = useState(false)
   const [checking, setChecking] = useState(false)
+  const [isKp, setIsKp] = useState(false)
+  const [wrapMode, setWrapMode] = useState<KpWrapMode>("fixed")
   const previewRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const errorsRef = useRef(errors)
   const originalTokensRef = useRef<string[]>([])
@@ -130,6 +139,8 @@ export function ImportErrorFix({
     setActiveRange(range)
     setBlockEdit(block)
     setTokenWarn(false)
+    setIsKp(isKpEditor(block, message))
+    setWrapMode("fixed")
     scrollToLine(line)
   }
 
@@ -161,6 +172,20 @@ export function ImportErrorFix({
     setActiveRange(null)
     setBlockEdit("")
     setTokenWarn(false)
+    setIsKp(false)
+  }
+
+  function wrapAtSelection() {
+    if (!isKp) return
+    const ta = textareaRef.current
+    if (!ta) return
+    const result = applyKpWrap(blockEdit, ta.selectionStart, ta.selectionEnd, wrapMode)
+    if (result.text === blockEdit) return
+    applyBlockEdit(result.text)
+    requestAnimationFrame(() => {
+      ta.focus()
+      ta.setSelectionRange(result.start, result.end)
+    })
   }
 
   return (
@@ -224,12 +249,37 @@ export function ImportErrorFix({
                     Xong
                   </Button>
                 </div>
+                {isKp ? (
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Bôi hoặc click từ:</span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={wrapMode === "fixed" ? "default" : "outline"}
+                      onMouseDown={(ev) => ev.preventDefault()}
+                      onClick={() => setWrapMode("fixed")}
+                    >
+                      Cố định
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={wrapMode === "swap" ? "default" : "outline"}
+                      onMouseDown={(ev) => ev.preventDefault()}
+                      onClick={() => setWrapMode("swap")}
+                    >
+                      Đổi chỗ
+                    </Button>
+                  </div>
+                ) : null}
                 {tokenWarn ? (
                   <p className="mb-2 text-xs text-destructive">Token ảnh/bảng bị xóa — preview có thể mất hình.</p>
                 ) : null}
                 <textarea
+                  ref={textareaRef}
                   value={blockEdit}
                   onChange={(ev) => applyBlockEdit(ev.target.value)}
+                  onMouseUp={isKp ? wrapAtSelection : undefined}
                   onBlur={() => flushRevalidate()}
                   spellCheck={false}
                   className="block min-h-[120px] max-h-[28vh] w-full resize-y overflow-auto rounded-md border bg-transparent p-2 font-mono text-sm leading-5 whitespace-pre outline-none"
