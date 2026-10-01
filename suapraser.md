@@ -3,7 +3,7 @@
 Mục tiêu: đổi nguyên tắc parser luồng upload file của giáo viên, và cứu công thức Word
 (MathType OLE + OMML) để lựa chọn A-D không còn rỗng.
 
-Trạng thái: **chưa code**. Đây là nguồn sự thật cho 8 phiên. Phiên sau chỉ cần đọc file này
+Trạng thái: **xong 8/8**. Đây là nguồn sự thật cho 8 phiên. Phiên sau chỉ cần đọc file này
 + đúng các file được nêu trong phiên đó, KHÔNG đọc lại toàn repo.
 
 File đối chiếu bắt buộc dùng để kiểm thử: `BAI 1 - GENE VA SU TAI BAN DNA.docx` (ở gốc repo,
@@ -620,10 +620,27 @@ phân số thay vì A. rỗng. Nếu chưa có DB thì chỉ kiểm tra type-che
 
 **Commit:** `wip(parser): phien 8 - kiem thu file doi chieu va chot`
 
-**Báo cáo phiên 8 (điền sau khi code):**
+**Báo cáo phiên 8 (đã làm):**
 - Đã làm:
-- File đã sửa/tạo:
+  - Script e2e `scripts/check-parser-phien8.mjs`: extractAndParse + validate file đối chiếu,
+    đối số lượng MC/TF/SA, SA đáp án, ảnh lựa chọn Câu 5/21/35, không WMF/`@@MATH` sót,
+    persist shape `bodyHtml` cho option.
+  - Regression phiên 3–7 vẫn OK. Không còn lỗi parser cần sửa (2 lỗi còn lại là nguồn).
+  - Cập nhật hướng dẫn UI importer: khung `{chương}` `[bài]` `-`; mốc nhóm dính
+    `#`/`##`/`###`; `Câu n.` / `cau:`; `Đáp án:`; cắt đuôi `ĐÁP ÁN`/`HƯỚNG DẪN GIẢI`;
+    công thức Word thành ảnh.
+- File đã sửa/tạo: `components/teacher/worksheet-importer.tsx`,
+  `scripts/check-parser-phien8.mjs` (mới), `suapraser.md`.
 - Kiểm thử:
+  - File đối chiếu: `chapters:1, lessons:1, kps:22, questions:51`
+    (`MC:35 TF:6 SA:10`). SA đáp án 10, 3, 2, 40, 39, 180, 36, 40, 5, 5.
+  - Câu 5 A/C, Câu 21 A–D, Câu 35 A có `<img>` trong `bodyHtml`. `images:60`,
+    `tables:12`. Không WMF, không `@@MATH` sót. 164 option persist, 8 có `bodyHtml`.
+  - Validate 2 lỗi nguồn: khối a–d dư L227; KP L14 không gạch chân
+    (`Gene cấu trúc: Gene mã hóa pro`). Không lỗi đuôi ĐÁP ÁN/HƯỚNG DẪN.
+  - `tsx scripts/check-parser-phien3.mjs` … `phien7` vẫn OK; `npx tsc --noEmit` exit 0.
+  - `npm run lint` không chạy được (project không có `eslint` trong dependencies).
+  - Chưa lưu DB (môi trường có thể không có Postgres).
 - Việc tiếp theo: không.
 
 ---
@@ -637,7 +654,7 @@ phân số thay vì A. rỗng. Nếu chưa có DB thì chỉ kiểm tra type-che
 
 ## 6. Trạng thái
 
-- Phiên hiện tại: sẵn sàng phiên 8.
+- Phiên hiện tại: xong 8/8.
 - Phiên 1: xong
 - Phiên 2: xong
 - Phiên 3: xong
@@ -645,7 +662,7 @@ phân số thay vì A. rỗng. Nếu chưa có DB thì chỉ kiểm tra type-che
 - Phiên 5: xong
 - Phiên 6: xong
 - Phiên 7: xong
-- Phiên 8: chưa
+- Phiên 8: xong
 
 ## 7. Quyết định đã chốt với người dùng
 
