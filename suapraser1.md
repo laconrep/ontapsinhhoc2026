@@ -5,7 +5,7 @@ Mục tiêu: (1) ảnh công thức MathType không còn chồng chữ / sai ph�
 tương ứng và cho GV sửa tại chỗ; (4) điểm kiến thức thiếu gạch chân vẫn CHẶN lưu,
 GV click từ để bọc `__từ__` (ô cố định) hoặc đánh `"từ"` (ô đổi chỗ) ngay trên khung sửa.
 
-Trạng thái: **chưa code phiên 1–6**. Đây là nguồn sự thật. Phiên sau chỉ đọc file này
+Trạng thái: **đã xong phiên 1–6**. Đây là nguồn sự thật. Phiên sau chỉ đọc file này
 + đúng các file nêu trong phiên đó, KHÔNG đọc lại toàn repo. Parser lõi (`parseTextContent`,
 mốc `#`/`##`/`###`, MC/TF/SA, cắt đuôi) đã xong ở `suapraser.md` — KHÔNG viết lại vòng lặp.
 
@@ -346,9 +346,9 @@ có `<img` sau attach. Không cần Postgres.
 **Commit:** `wip(preview): phien 6 - e2e file doi chieu va chot`
 
 **Báo cáo phiên 6 (điền sau khi code):**
-- Đã làm:
-- File đã sửa/tạo:
-- Kiểm thử:
+- Đã làm: E2E file gene: extract 51 câu (MC35 TF6 SA10), Câu 35 A SVG có `<line>` (G/C=2/3). Validate đúng 2 lỗi (L14 KP, L227 a-d dư). Bọc `__protein__` trên L14 → mất lỗi KP, còn 1 lỗi a-d. Trong editor khối Câu 6 chỉ xóa 4 dòng a-d dư (không xóa cả câu) → hết lỗi, vẫn 51 câu, Câu 35 A giữ img. Không lộ bug code; dòng a-d dư là nguồn, không đổi parser.
+- File đã sửa/tạo: `scripts/check-preview-phien6.mjs` (mới), `suapraser1.md`
+- Kiểm thử: `tsx scripts/check-preview-phien6.mjs` OK. `tsc --noEmit` exit 0.
 - Việc tiếp theo: không.
 
 ---
@@ -363,13 +363,13 @@ có `<img` sau attach. Không cần Postgres.
 
 ## 5. Trạng thái
 
-- Phiên hiện tại: sẵn sàng phiên 6.
+- Phiên hiện tại: xong 1–6.
 - Phiên 1: xong
 - Phiên 2: xong
 - Phiên 3: xong
 - Phiên 4: xong
 - Phiên 5: xong
-- Phiên 6: chưa
+- Phiên 6: xong
 
 Working tree lúc lập kế hoạch: `lib/docx-equations.ts` đã có nháp `reconstructMathTypeSvg`
 (chưa commit). Phiên 1 siết rule rồi commit, không để dump script.
