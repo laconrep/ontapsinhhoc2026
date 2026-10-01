@@ -183,6 +183,7 @@ const CAU_RE = /^(câu|cau)\s*(?:(\d+)\s*)?[.:]\s*(.*)$/i
 const DAP_AN_RE = /^(đáp\s*án|dap\s*an)\s*:\s*(.*)$/i
 const CHOICE_RE = /^([a-dA-D])[.)]\s*(.*)$/
 const BULLET_RE = /^[•●◦·▪▸►]\s*/
+const MC_LETTERS = ["A", "B", "C", "D"]
 
 /** Chuẩn hoá BOM, NBSP, ngoặc kép cong, dấu fullwidth — file Word/Notepad hay lệch so với mẫu. */
 export function normalizeParseText(text: string): string {
@@ -249,6 +250,44 @@ function mcOptionContent(letter: string, text: string): string {
   return `${letter}. ${text}`.trim()
 }
 
+function isMcChoiceStart(line: string): boolean {
+  return /^[A-Da-d][.)]\s*/.test(stripUnderline(line))
+}
+
+/** Tách A-D (hoặc a-d) trong 1 khối: 1 dòng, 4-trong-1, hoặc 2+2. Giữ @@IMG/@@TBL. */
+function splitChoiceBlock(
+  block: string,
+  letters: string[],
+): { letter: string; text: string; underlined: boolean }[] {
+  const searchable = block.replace(/__/g, "  ")
+  const positions: { letter: string; start: number }[] = []
+  let from = 0
+  for (const L of letters) {
+    const re = new RegExp(`(^|[\\s\\u00A0])\\s*(${L}[.)])`, "i")
+    const slice = searchable.slice(from)
+    const m = slice.match(re)
+    if (!m) break
+    const letterStart = (m.index ?? 0) + m[0].length - m[2].length
+    const idx = from + letterStart
+    positions.push({ letter: L, start: idx })
+    from = idx + L.length + 1
+  }
+  const parts: { letter: string; text: string; underlined: boolean }[] = []
+  for (let i = 0; i < positions.length; i++) {
+    const start = positions[i].start
+    let end = i + 1 < positions.length ? positions[i + 1].start : block.length
+    if (i + 1 < positions.length && end >= 2 && block.slice(end - 2, end) === "__") {
+      end -= 2
+    }
+    const raw = block.slice(start, end)
+    const underlined = raw.includes("__") || (start >= 2 && block.slice(start - 2, start) === "__")
+    let text = raw.replace(/^[A-Da-d][.)]\s*/i, "")
+    text = text.replace(/__/g, "").trim()
+    parts.push({ letter: positions[i].letter, text, underlined })
+  }
+  return parts
+}
+
 function tfOptionContent(letter: string, text: string): string {
   return `${letter.toLowerCase()}) ${text}`.trim()
 }
@@ -278,6 +317,7 @@ export function parseTextContent(text: string): ParseResult {
   let groupType: ParsedQuestionType | null = null
   let inTail = false
   let sawStructure = false
+  let optionBuffer: string | null = null
 
   const ensureChapter = (): ParsedChapter => {
     if (!curChapter) {
@@ -287,17 +327,30 @@ export function parseTextContent(text: string): ParseResult {
     return curChapter
   }
 
+  const flushMcOptions = () => {
+    if (!curQuestion || curQuestion.type !== "MC" || optionBuffer == null) {
+      optionBuffer = null
+      return
+    }
+    const parts = splitChoiceBlock(optionBuffer, MC_LETTERS)
+    curQuestion.options = parts.map((p) => ({
+      content: mcOptionContent(p.letter, p.text),
+      isCorrect: p.underlined,
+    }))
+    optionBuffer = null
+  }
+
   const closeQuestion = () => {
+    flushMcOptions()
     curQuestion = null
   }
 
   const startQuestion = (type: ParsedQuestionType, content: string, lineNo: number) => {
+    closeQuestion()
     if (!curKp) {
       errors.push({ line: lineNo, message: "Câu hỏi phải nằm trong một điểm kiến thức (bắt đầu bằng '-')" })
-      curQuestion = null
       return
     }
-    closeQuestion()
     curQuestion = { type, content, options: [], line: lineNo }
     curKp.questions.push(curQuestion)
   }
@@ -320,7 +373,10 @@ export function parseTextContent(text: string): ParseResult {
       line = keep ? rest : `- ${rest}`
     }
 
-    if (!line) return
+    if (!line) {
+      if (optionBuffer != null && curQuestion?.type === "MC") optionBuffer += "\n"
+      return
+    }
     if (line.startsWith("//")) return
 
     if (isTailHeading(line)) {
@@ -404,14 +460,16 @@ export function parseTextContent(text: string): ParseResult {
       return
     }
 
-    const choice = parseChoiceLine(line)
-    if (choice && curQuestion?.type === "MC") {
-      curQuestion.options.push({
-        content: mcOptionContent(choice.letter, choice.text),
-        isCorrect: hasUnderline(line),
-      })
+    if (curQuestion?.type === "MC" && optionBuffer != null) {
+      optionBuffer += `\n${line}`
       return
     }
+    if (curQuestion?.type === "MC" && optionBuffer == null && isMcChoiceStart(line)) {
+      optionBuffer = line
+      return
+    }
+
+    const choice = parseChoiceLine(line)
     if (choice && curQuestion?.type === "TF") {
       curQuestion.options.push({
         content: tfOptionContent(choice.letter, choice.text),
@@ -453,6 +511,7 @@ export function parseTextContent(text: string): ParseResult {
     errors.push({ line: lineNo, message: `Không nhận dạng được cú pháp: "${line.slice(0, 40)}"` })
   })
 
+  closeQuestion()
   return { chapters, errors }
 }
 

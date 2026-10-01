@@ -435,10 +435,20 @@ không bị coi là rỗng.
 
 **Commit:** `wip(parser): phien 4 - MC tach dong va anh trong lua chon`
 
-**Báo cáo phiên 4 (điền sau khi code):**
+**Báo cáo phiên 4 (đã làm):**
 - Đã làm:
-- File đã sửa/tạo:
+  - Thêm `MC_LETTERS`, `splitChoiceBlock` (quét A->B->C->D theo thứ tự, 1 dòng /
+    4-trong-1 / 2+2), `isMcChoiceStart`.
+  - MC gom `optionBuffer` từ lựa chọn đầu đến biên câu (kể cả dòng trống + `@@IMG`);
+    flush khi đóng câu / hết file.
+  - `__C.__` ở đầu lựa chọn sau không đánh dấu lựa chọn trước (cắt `__` dẫn).
+  - Không nhận `1.`/`(1)` làm lựa chọn MC. TF giữ `parseChoiceLine`.
+- File đã sửa/tạo: `lib/worksheet-parser.ts`, `scripts/check-parser-phien4.mjs` (mới).
 - Kiểm thử:
+  - Sample: 4-trong-1 / 2+2 / nhiều dòng / ảnh trong A-C; đúng 1 đáp án gạch chân.
+  - File đối chiếu: 35 MC đều 4 lựa chọn A-D; Câu 1/6/11/14/26/29 (4-trong-1),
+    17/22/30 (2+2), 5/21/35 có `@@IMG` trong lựa chọn; errors:0.
+  - `tsx scripts/check-parser-phien3.mjs` vẫn OK; `npx tsc --noEmit` exit 0.
 - Việc tiếp theo (phiên 5): TF + SA.
 
 ---
@@ -581,11 +591,11 @@ phân số thay vì A. rỗng. Nếu chưa có DB thì chỉ kiểm tra type-che
 
 ## 6. Trạng thái
 
-- Phiên hiện tại: sẵn sàng phiên 4.
+- Phiên hiện tại: sẵn sàng phiên 5.
 - Phiên 1: xong
 - Phiên 2: xong
 - Phiên 3: xong
-- Phiên 4: chưa
+- Phiên 4: xong
 - Phiên 5: chưa
 - Phiên 6: chưa
 - Phiên 7: chưa
