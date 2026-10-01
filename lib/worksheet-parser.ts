@@ -184,6 +184,7 @@ const DAP_AN_RE = /^(đáp\s*án|dap\s*an)\s*:\s*(.*)$/i
 const CHOICE_RE = /^([a-dA-D])[.)]\s*(.*)$/
 const BULLET_RE = /^[•●◦·▪▸►]\s*/
 const MC_LETTERS = ["A", "B", "C", "D"]
+const TF_LETTERS = ["a", "b", "c", "d"]
 
 /** Chuẩn hoá BOM, NBSP, ngoặc kép cong, dấu fullwidth — file Word/Notepad hay lệch so với mẫu. */
 export function normalizeParseText(text: string): string {
@@ -254,6 +255,29 @@ function isMcChoiceStart(line: string): boolean {
   return /^[A-Da-d][.)]\s*/.test(stripUnderline(line))
 }
 
+function isTfChoiceStart(line: string): boolean {
+  return /^[A-Da-d][.)]\s*/.test(stripUnderline(line))
+}
+
+function takeFirstTfBlock(block: string): { first: string; leftover: boolean } {
+  const searchable = block.replace(/__/g, "  ")
+  const re = /(^|[\s\u00A0])\s*([aA][.)])/g
+  let found = 0
+  let secondStart = -1
+  let m: RegExpExecArray | null
+  while ((m = re.exec(searchable)) !== null) {
+    found += 1
+    if (found === 2) {
+      secondStart = m.index + m[0].length - m[2].length
+      break
+    }
+  }
+  if (secondStart < 0) return { first: block, leftover: false }
+  let cut = secondStart
+  if (cut >= 2 && block.slice(cut - 2, cut) === "__") cut -= 2
+  return { first: block.slice(0, cut), leftover: true }
+}
+
 /** Tách A-D (hoặc a-d) trong 1 khối: 1 dòng, 4-trong-1, hoặc 2+2. Giữ @@IMG/@@TBL. */
 function splitChoiceBlock(
   block: string,
@@ -298,9 +322,9 @@ function appendStem(q: ParsedQuestion, extra: string) {
   q.content = q.content ? `${q.content}\n${t}` : t
 }
 
-function canAppendStem(q: ParsedQuestion): boolean {
+function canAppendStem(q: ParsedQuestion, buffering: boolean): boolean {
   if (q.type === "SA") return !q.correctAnswer
-  return q.options.length === 0
+  return !buffering && q.options.length === 0
 }
 
 // ============ Parser văn bản thuần ============
@@ -327,21 +351,41 @@ export function parseTextContent(text: string): ParseResult {
     return curChapter
   }
 
-  const flushMcOptions = () => {
-    if (!curQuestion || curQuestion.type !== "MC" || optionBuffer == null) {
+  let leftoverTf = false
+
+  const flushChoiceBuffer = () => {
+    if (!curQuestion || optionBuffer == null) {
       optionBuffer = null
       return
     }
-    const parts = splitChoiceBlock(optionBuffer, MC_LETTERS)
-    curQuestion.options = parts.map((p) => ({
-      content: mcOptionContent(p.letter, p.text),
-      isCorrect: p.underlined,
-    }))
+    if (curQuestion.type === "MC") {
+      const parts = splitChoiceBlock(optionBuffer, MC_LETTERS)
+      curQuestion.options = parts.map((p) => ({
+        content: mcOptionContent(p.letter, p.text),
+        isCorrect: p.underlined,
+      }))
+    } else if (curQuestion.type === "TF") {
+      const { first, leftover } = takeFirstTfBlock(optionBuffer)
+      const parts = splitChoiceBlock(first, TF_LETTERS)
+      curQuestion.options = parts.slice(0, 4).map((p) => ({
+        content: tfOptionContent(p.letter, p.text),
+        isCorrect: p.underlined,
+      }))
+      if (leftover) {
+        errors.push({
+          line: curQuestion.line,
+          message: "Các ý a)-d) không thuộc câu nào (thiếu Câu n.)",
+        })
+      }
+    }
     optionBuffer = null
   }
 
   const closeQuestion = () => {
-    flushMcOptions()
+    flushChoiceBuffer()
+    if (curQuestion?.type === "SA" && !curQuestion.correctAnswer) {
+      errors.push({ line: curQuestion.line, message: "Câu trả lời ngắn thiếu 'Đáp án:'" })
+    }
     curQuestion = null
   }
 
@@ -374,7 +418,7 @@ export function parseTextContent(text: string): ParseResult {
     }
 
     if (!line) {
-      if (optionBuffer != null && curQuestion?.type === "MC") optionBuffer += "\n"
+      if (optionBuffer != null && (curQuestion?.type === "MC" || curQuestion?.type === "TF")) optionBuffer += "\n"
       return
     }
     if (line.startsWith("//")) return
@@ -432,10 +476,12 @@ export function parseTextContent(text: string): ParseResult {
       const dapOnSame = group.type === "SA" ? parseDapAnLine(stripUnderline(body)) : null
       startQuestion(group.type, dapOnSame != null ? "" : body, lineNo)
       if (curQuestion && dapOnSame != null) curQuestion.correctAnswer = dapOnSame
+      leftoverTf = false
       return
     }
 
     if (parseCauLine(stripUnderline(line)) != null) {
+      leftoverTf = false
       const cauBody = parseCauLine(line) ?? parseCauLine(stripUnderline(line)) ?? ""
       if (groupType == null) {
         errors.push({ line: lineNo, message: "Câu hỏi phải nằm sau mốc #/##/###" })
@@ -454,13 +500,10 @@ export function parseTextContent(text: string): ParseResult {
     const dapAnBody = parseDapAnLine(stripUnderline(line))
     if (dapAnBody != null && curQuestion?.type === "SA") {
       curQuestion.correctAnswer = dapAnBody
-      if (!dapAnBody) {
-        errors.push({ line: lineNo, message: "Câu trả lời ngắn thiếu đáp án sau 'dap an:'" })
-      }
       return
     }
 
-    if (curQuestion?.type === "MC" && optionBuffer != null) {
+    if ((curQuestion?.type === "MC" || curQuestion?.type === "TF") && optionBuffer != null) {
       optionBuffer += `\n${line}`
       return
     }
@@ -468,13 +511,19 @@ export function parseTextContent(text: string): ParseResult {
       optionBuffer = line
       return
     }
+    if (curQuestion?.type === "TF" && optionBuffer == null && isTfChoiceStart(line)) {
+      optionBuffer = line
+      return
+    }
 
-    const choice = parseChoiceLine(line)
-    if (choice && curQuestion?.type === "TF") {
-      curQuestion.options.push({
-        content: tfOptionContent(choice.letter, choice.text),
-        isCorrect: hasUnderline(line),
-      })
+    if (!curQuestion && groupType === "TF" && isTfChoiceStart(line)) {
+      if (!leftoverTf) {
+        leftoverTf = true
+        errors.push({
+          line: lineNo,
+          message: "Các ý a)-d) không thuộc câu nào (thiếu Câu n.)",
+        })
+      }
       return
     }
 
@@ -493,11 +542,11 @@ export function parseTextContent(text: string): ParseResult {
       return
     }
 
-    if (/^@@(IMG|TBL)\d+@@$/.test(line) && !(curQuestion && canAppendStem(curQuestion))) {
+    if (/^@@(IMG|TBL)\d+@@$/.test(line) && !(curQuestion && canAppendStem(curQuestion, optionBuffer != null))) {
       return
     }
 
-    if (curQuestion && canAppendStem(curQuestion)) {
+    if (curQuestion && canAppendStem(curQuestion, optionBuffer != null)) {
       appendStem(curQuestion, line)
       return
     }

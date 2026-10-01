@@ -480,10 +480,23 @@ không bị coi là rỗng.
 
 **Commit:** `wip(parser): phien 5 - TF va SA`
 
-**Báo cáo phiên 5 (điền sau khi code):**
+**Báo cáo phiên 5 (đã làm):**
 - Đã làm:
-- File đã sửa/tạo:
+  - TF: `TF_LETTERS` a-d, gom `optionBuffer` rồi `splitChoiceBlock` (1 dòng / nhiều dòng);
+    chuẩn hóa `a) b) c) d)`; gạch chân = Đúng. Chỉ lấy 4 ý đầu.
+  - Khối a-d dư (sau TF Câu 6): cắt khỏi ý d, báo "Các ý a)-d) không thuộc câu nào
+    (thiếu Câu n.)", không tạo câu giả.
+  - SA: đề gồm mọi dòng đến `Đáp án:` (kể cả `1)` `2)` / `@@IMG` / `@@TBL`);
+    ` Đáp án:` có khoảng trắng đầu dòng vẫn nhận. Đóng câu thiếu `Đáp án:` -> lỗi
+    "Câu trả lời ngắn thiếu 'Đáp án:'". Bỏ nhánh `### de = dap an` 1 dòng.
+  - Legacy `cau:` không có số vẫn mở câu theo `groupType`.
+- File đã sửa/tạo: `lib/worksheet-parser.ts`, `scripts/check-parser-phien5.mjs` (mới),
+  `suapraser.md`.
 - Kiểm thử:
+  - Sample: TF 4-trong-1 / nhiều dòng / khối dư; SA `1)` thuộc đề; thiếu `Đáp án:` báo lỗi.
+  - File đối chiếu: TF 6 câu mỗi câu 4 ý a-d; Câu 4/5 có bảng trong đề; SA 10 câu
+    đáp án 10, 3, 2, 40, 39, 180, 36, 40, 5, 5; 1 lỗi khối a-d dư; MC 35 không phá.
+  - `tsx scripts/check-parser-phien3.mjs` + `phien4` vẫn OK; `npx tsc --noEmit` exit 0.
 - Việc tiếp theo (phiên 6): validate + lỗi.
 
 ---
@@ -591,12 +604,12 @@ phân số thay vì A. rỗng. Nếu chưa có DB thì chỉ kiểm tra type-che
 
 ## 6. Trạng thái
 
-- Phiên hiện tại: sẵn sàng phiên 5.
+- Phiên hiện tại: sẵn sàng phiên 6.
 - Phiên 1: xong
 - Phiên 2: xong
 - Phiên 3: xong
 - Phiên 4: xong
-- Phiên 5: chưa
+- Phiên 5: xong
 - Phiên 6: chưa
 - Phiên 7: chưa
 - Phiên 8: chưa
