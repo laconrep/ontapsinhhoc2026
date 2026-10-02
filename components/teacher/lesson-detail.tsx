@@ -208,7 +208,7 @@ function PoolDropzone({
     <div
       ref={setNodeRef}
       className={cn(
-        "min-h-40 space-y-2 rounded-md p-1",
+        "min-h-full space-y-2 rounded-md p-1",
         isUnassignedTab && isOver && "ring-2 ring-primary",
       )}
     >
@@ -441,8 +441,8 @@ export function LessonDetail({
   const poolList = poolTab === "unassigned" ? unassigned : questions
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div className="flex h-[calc(100svh-5.5rem)] flex-col gap-4 overflow-hidden md:h-[calc(100svh-2.5rem)]">
+      <div className="shrink-0">
         <Button
           variant="ghost"
           size="sm"
@@ -481,69 +481,73 @@ export function LessonDetail({
       </div>
 
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-        <div className="grid gap-4 md:grid-cols-2">
-          <section className="space-y-3 rounded-lg border bg-card p-4">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="font-heading text-lg font-semibold text-foreground">Bộ câu hỏi</h2>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setQDialog({ mode: "create", kpId: null })}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Thêm câu hỏi
-              </Button>
+        <div className="grid min-h-0 flex-1 grid-rows-2 gap-4 md:grid-cols-2 md:grid-rows-1">
+          <section className="flex min-h-0 flex-col rounded-lg border bg-card">
+            <div className="shrink-0 space-y-3 border-b p-4">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="font-heading text-lg font-semibold text-foreground">Bộ câu hỏi</h2>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setQDialog({ mode: "create", kpId: null })}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Thêm câu hỏi
+                </Button>
+              </div>
+              <div className="flex gap-1 rounded-md border p-1">
+                <button
+                  type="button"
+                  onClick={() => setPoolTab("unassigned")}
+                  className={cn(
+                    "flex-1 rounded px-3 py-1.5 text-sm font-medium",
+                    poolTab === "unassigned" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-secondary",
+                  )}
+                >
+                  Chưa gán ({unassigned.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPoolTab("all")}
+                  className={cn(
+                    "flex-1 rounded px-3 py-1.5 text-sm font-medium",
+                    poolTab === "all" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-secondary",
+                  )}
+                >
+                  Tổng câu hỏi ({questions.length})
+                </button>
+              </div>
             </div>
-            <div className="flex gap-1 rounded-md border p-1">
-              <button
-                type="button"
-                onClick={() => setPoolTab("unassigned")}
-                className={cn(
-                  "flex-1 rounded px-3 py-1.5 text-sm font-medium",
-                  poolTab === "unassigned" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-secondary",
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+              <PoolDropzone isUnassignedTab={poolTab === "unassigned"}>
+                {poolList.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-muted-foreground">
+                    {poolTab === "unassigned" ? "Không còn câu chưa gán." : "Chưa có câu hỏi."}
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {poolList.map((q) => (
+                      <DraggableQuestionCard
+                        key={q.id}
+                        q={q}
+                        draggable={poolTab === "unassigned"}
+                        kpLabel={
+                          poolTab === "all" && q.knowledgePointId
+                            ? kpLabelById.get(q.knowledgePointId)
+                            : undefined
+                        }
+                        onEdit={() => setQDialog({ mode: "edit", q: toQuestionDto(q), kpId: q.knowledgePointId })}
+                        onDelete={() => removeQuestion(q.id)}
+                      />
+                    ))}
+                  </ul>
                 )}
-              >
-                Chưa gán ({unassigned.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setPoolTab("all")}
-                className={cn(
-                  "flex-1 rounded px-3 py-1.5 text-sm font-medium",
-                  poolTab === "all" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-secondary",
-                )}
-              >
-                Tổng câu hỏi ({questions.length})
-              </button>
+              </PoolDropzone>
             </div>
-            <PoolDropzone isUnassignedTab={poolTab === "unassigned"}>
-              {poolList.length === 0 ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  {poolTab === "unassigned" ? "Không còn câu chưa gán." : "Chưa có câu hỏi."}
-                </p>
-              ) : (
-                <ul className="space-y-2">
-                  {poolList.map((q) => (
-                    <DraggableQuestionCard
-                      key={q.id}
-                      q={q}
-                      draggable={poolTab === "unassigned"}
-                      kpLabel={
-                        poolTab === "all" && q.knowledgePointId
-                          ? kpLabelById.get(q.knowledgePointId)
-                          : undefined
-                      }
-                      onEdit={() => setQDialog({ mode: "edit", q: toQuestionDto(q), kpId: q.knowledgePointId })}
-                      onDelete={() => removeQuestion(q.id)}
-                    />
-                  ))}
-                </ul>
-              )}
-            </PoolDropzone>
           </section>
 
-          <section className="space-y-3">
-            <div className="flex items-center justify-between">
+          <section className="flex min-h-0 flex-col rounded-lg border bg-card">
+            <div className="flex shrink-0 items-center justify-between border-b p-4">
               <h2 className="font-heading text-lg font-semibold text-foreground">
                 Điểm kiến thức ({kps.length})
               </h2>
@@ -558,57 +562,59 @@ export function LessonDetail({
                 Thêm điểm kiến thức
               </Button>
             </div>
-            {kps.length === 0 ? (
-              <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-16 text-center">
-                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-secondary">
-                  <FileText className="h-6 w-6 text-primary" />
-                </span>
-                <p className="font-medium text-foreground">Chưa có điểm kiến thức</p>
-                <p className="max-w-md text-sm text-muted-foreground">
-                  Thêm điểm kiến thức rồi kéo câu hỏi từ khung trái thả vào đây.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {kps.map((kp, idx) => {
-                  const assigned = questionsByKp.get(kp.id) ?? []
-                  return (
-                    <KpDroppable
-                      key={kp.id}
-                      kp={kp}
-                      idx={idx}
-                      count={assigned.length}
-                      expanded={expandedKpId === kp.id}
-                      onToggle={() => setExpandedKpId(expandedKpId === kp.id ? null : kp.id)}
-                      onEdit={() => {
-                        setKpDialog({ mode: "edit", kp })
-                        setRawContent(renderMarkedContent(kp.content, kp.underlinedTerms))
-                      }}
-                      onDelete={() => removeKp(kp.id)}
-                      onAddQuestion={() => setQDialog({ mode: "create", kpId: kp.id })}
-                    >
-                      {assigned.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">Chưa gán câu hỏi. Kéo từ khung trái thả vào đây.</p>
-                      ) : (
-                        <ul className="space-y-2">
-                          {assigned.map((q) => (
-                            <DraggableQuestionCard
-                              key={q.id}
-                              q={q}
-                              draggable={false}
-                              onEdit={() =>
-                                setQDialog({ mode: "edit", q: toQuestionDto(q), kpId: q.knowledgePointId })
-                              }
-                              onDelete={() => removeQuestion(q.id)}
-                            />
-                          ))}
-                        </ul>
-                      )}
-                    </KpDroppable>
-                  )
-                })}
-              </div>
-            )}
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+              {kps.length === 0 ? (
+                <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-16 text-center">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-secondary">
+                    <FileText className="h-6 w-6 text-primary" />
+                  </span>
+                  <p className="font-medium text-foreground">Chưa có điểm kiến thức</p>
+                  <p className="max-w-md text-sm text-muted-foreground">
+                    Thêm điểm kiến thức rồi kéo câu hỏi từ khung trái thả vào đây.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {kps.map((kp, idx) => {
+                    const assigned = questionsByKp.get(kp.id) ?? []
+                    return (
+                      <KpDroppable
+                        key={kp.id}
+                        kp={kp}
+                        idx={idx}
+                        count={assigned.length}
+                        expanded={expandedKpId === kp.id}
+                        onToggle={() => setExpandedKpId(expandedKpId === kp.id ? null : kp.id)}
+                        onEdit={() => {
+                          setKpDialog({ mode: "edit", kp })
+                          setRawContent(renderMarkedContent(kp.content, kp.underlinedTerms))
+                        }}
+                        onDelete={() => removeKp(kp.id)}
+                        onAddQuestion={() => setQDialog({ mode: "create", kpId: kp.id })}
+                      >
+                        {assigned.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">Chưa gán câu hỏi. Kéo từ khung trái thả vào đây.</p>
+                        ) : (
+                          <ul className="space-y-2">
+                            {assigned.map((q) => (
+                              <DraggableQuestionCard
+                                key={q.id}
+                                q={q}
+                                draggable={false}
+                                onEdit={() =>
+                                  setQDialog({ mode: "edit", q: toQuestionDto(q), kpId: q.knowledgePointId })
+                                }
+                                onDelete={() => removeQuestion(q.id)}
+                              />
+                            ))}
+                          </ul>
+                        )}
+                      </KpDroppable>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
           </section>
         </div>
         <DragOverlay>
