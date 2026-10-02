@@ -220,9 +220,9 @@ hoặc `npx tsc --noEmit`.
 **Commit:** `wip(class): phien 1 - db va action giao bai`
 
 **Báo cáo phiên 1 (điền sau khi code):**
-- Đã làm:
-- File đã sửa/tạo:
-- Kiểm thử:
+- Đã làm: Thêm bảng `class_assignments` (unique classId+lessonId, index ca_class_idx). `ensureSchema` CREATE TABLE + INDEX, giữ 2 ALTER bodyHtml. Types `ClassAssignmentDto`/`AssignedLessonDto`. Action giao nhiều bài (`onConflictDoNothing`), list, sửa hạn/ghi chú, thu hồi, HS lấy bài giao + status. Tách helper `deriveStudentAssignmentStatus` để test không cần DB.
+- File đã sửa/tạo: `lib/db/schema.ts`, `lib/db/index.ts`, `types/index.ts`, `app/actions/assignments.ts` (mới), `lib/assignment-status.ts` (mới), `scripts/check-class-phien1.mjs` (mới)
+- Kiểm thử: `npx tsx scripts/check-class-phien1.mjs` OK. Bỏ qua DB thật (không có drizzle local). `tsc` không chạy (chưa cài node_modules).
 - Việc tiếp theo (phiên 2): tab UI "Bài tập đã giao".
 
 ---
@@ -417,8 +417,8 @@ atRisk -> tone); build nếu được.
 
 ## 5. Trạng thái
 
-- Phiên hiện tại: chưa bắt đầu.
-- Phiên 1: chưa
+- Phiên hiện tại: xong 1.
+- Phiên 1: xong
 - Phiên 2: chưa
 - Phiên 3: chưa
 - Phiên 4: chưa

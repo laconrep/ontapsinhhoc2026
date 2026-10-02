@@ -20,6 +20,23 @@ export function ensureSchema(): Promise<void> {
     schemaReady = pool
       .query(`ALTER TABLE questions ADD COLUMN IF NOT EXISTS "bodyHtml" text`)
       .then(() => pool.query(`ALTER TABLE question_options ADD COLUMN IF NOT EXISTS "bodyHtml" text`))
+      .then(() =>
+        pool.query(`
+          CREATE TABLE IF NOT EXISTS "class_assignments" (
+            "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            "classId" uuid NOT NULL REFERENCES "classes"("id") ON DELETE CASCADE,
+            "lessonId" uuid NOT NULL REFERENCES "lessons"("id") ON DELETE CASCADE,
+            "teacherId" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+            "dueAt" timestamp,
+            "note" text,
+            "createdAt" timestamp NOT NULL DEFAULT now(),
+            CONSTRAINT "ca_class_lesson_unique" UNIQUE ("classId", "lessonId")
+          )
+        `),
+      )
+      .then(() =>
+        pool.query(`CREATE INDEX IF NOT EXISTS "ca_class_idx" ON "class_assignments" ("classId")`),
+      )
       .then(() => undefined)
       .catch((e) => {
         schemaReady = null

@@ -253,6 +253,25 @@ export interface WeeklyPoint {
   // [FIX-V88-01] dùng submittedAt (KHÔNG phải createdAt — bảng tab1 không có cột đó)
   // WeeklyChart hiển thị bar height = activityCount, X axis = ngày trong tuần (Mon-Sun)
 }
+export interface ClassAssignmentDto {
+  id: string
+  classId: string
+  lessonId: string
+  lessonTitle: string
+  chapterTitle: string
+  dueAt: string | null
+  note: string | null
+  createdAt: string
+}
+export interface AssignedLessonDto {
+  lessonId: string
+  lessonTitle: string
+  chapterTitle: string
+  dueAt: string | null
+  note: string | null
+  studentStatus: "not_started" | "in_progress" | "completed" | "overdue"
+  progressPercent: number
+}
 export interface ClassStatsDto {
   students: StudentStatRow[]
   knowledgePoints: KPStatRow[]

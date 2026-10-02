@@ -408,3 +408,26 @@ export const classWorksheets = pgTable(
   },
   (t) => ({ pk: primaryKey({ columns: [t.classId, t.worksheetId] }) }),
 )
+
+export const classAssignments = pgTable(
+  "class_assignments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    classId: uuid("classId")
+      .notNull()
+      .references(() => classes.id, { onDelete: "cascade" }),
+    lessonId: uuid("lessonId")
+      .notNull()
+      .references(() => lessons.id, { onDelete: "cascade" }),
+    teacherId: text("teacherId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    dueAt: timestamp("dueAt"),
+    note: text("note"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (t) => ({
+    byClass: index("ca_class_idx").on(t.classId),
+    uniqClassLesson: unique("ca_class_lesson_unique").on(t.classId, t.lessonId),
+  }),
+)
