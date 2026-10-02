@@ -186,14 +186,20 @@ export function ImportErrorFix({
     })
   }
 
+  const errorLines = new Set(errors.map((e) => e.line).filter((n): n is number => n != null))
+  const editorHasError =
+    activeRange != null &&
+    errors.some((e) => e.line != null && e.line >= activeRange.startLine && e.line <= activeRange.endLine)
+
   return (
-    <Card>
-      <CardHeader>
+    <Card className="w-full">
+      <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-base">
           {errors.length > 0 ? (
             <>
               <AlertTriangle className="h-5 w-5 text-destructive" />
               Cần sửa {errors.length} lỗi
+              <Badge variant="destructive">{errors.length}</Badge>
             </>
           ) : (
             <>
@@ -205,9 +211,9 @@ export function ImportErrorFix({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-10">
           <div
-            className={`min-h-[420px] max-h-[70vh] overflow-auto rounded-lg border p-2 ${
+            className={`min-h-[calc(100vh-8rem)] max-h-[calc(100vh-8rem)] overflow-auto rounded-lg border p-2 md:col-span-4 ${
               errors.length > 0 ? "border-destructive/40 bg-destructive/5" : "border-primary/30 bg-primary/5"
             }`}
           >
@@ -221,7 +227,9 @@ export function ImportErrorFix({
                       type="button"
                       onClick={() => selectError(i)}
                       className={`flex w-full gap-2 rounded-md px-2 py-1.5 text-left text-destructive ${
-                        activeErrorIndex === i ? "bg-destructive/15" : "hover:bg-destructive/10"
+                        activeErrorIndex === i
+                          ? "bg-destructive/20 ring-1 ring-destructive/40"
+                          : "hover:bg-destructive/10"
                       }`}
                     >
                       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -235,9 +243,13 @@ export function ImportErrorFix({
               </ul>
             )}
           </div>
-          <div className="flex min-h-[420px] max-h-[70vh] flex-col overflow-hidden rounded-lg border bg-background">
+          <div className="flex min-h-[calc(100vh-8rem)] max-h-[calc(100vh-8rem)] flex-col overflow-hidden rounded-lg border bg-background md:col-span-6">
             {activeRange ? (
-              <div className="shrink-0 border-b p-3">
+              <div
+                className={`shrink-0 border-b p-3 ${
+                  editorHasError ? "border-destructive/40 bg-destructive/5" : ""
+                }`}
+              >
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <p className="text-sm font-medium text-foreground">
                     Sửa khối dòng {activeRange.startLine}
@@ -264,7 +276,11 @@ export function ImportErrorFix({
                   onMouseUp={isKp ? wrapAtSelection : undefined}
                   onBlur={() => flushRevalidate()}
                   spellCheck={false}
-                  className="block min-h-[120px] max-h-[28vh] w-full resize-y overflow-auto rounded-md border bg-transparent p-2 font-mono text-sm leading-5 whitespace-pre outline-none"
+                  className={`block min-h-[120px] max-h-[28vh] w-full resize-y overflow-auto rounded-md border p-2 font-mono text-sm leading-5 whitespace-pre outline-none ${
+                    editorHasError
+                      ? "border-destructive bg-destructive/10 text-foreground"
+                      : "border-border bg-transparent"
+                  }`}
                 />
               </div>
             ) : null}
@@ -275,6 +291,7 @@ export function ImportErrorFix({
                 isValid={errors.length === 0}
                 errors={errors}
                 highlightLine={highlightLine}
+                errorLines={errorLines}
                 onSelectBlock={(line) => openBlock(line)}
               />
             </div>
