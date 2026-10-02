@@ -375,9 +375,9 @@ atRisk -> tone); build nếu được.
 **Commit:** `wip(class): phien 5 - UI thong ke lop`
 
 **Báo cáo phiên 5 (điền sau khi code):**
-- Đã làm:
-- File đã sửa/tạo:
-- Kiểm thử:
+- Đã làm: Tab Thống kê 3 khối. Tổng quan 6 thẻ (hoàn thành, nắm vững, quiz TB, trung vị, cần chú ý, tuần này). Theo bài giao: tiến độ, StatBar 4 mức, đúng hạn/trễ/quá hạn, KP yếu. Theo HS: sort, trend mũi tên, hàng atRisk tô đỏ, click xem KP yếu. Tab kiến thức thêm đúng lần đầu + cờ Khó. Empty state khi chưa có dữ liệu.
+- File đã sửa/tạo: `components/teacher/class-stats-panel.tsx`, `lib/class-stats-ui.ts` (mới), `scripts/check-class-phien5.mjs` (mới)
+- Kiểm thử: `npx tsx scripts/check-class-phien5.mjs` OK. `tsc` không chạy (chưa cài node_modules).
 - Việc tiếp theo (phiên 6): e2e + chốt.
 
 ---
@@ -417,12 +417,12 @@ atRisk -> tone); build nếu được.
 
 ## 5. Trạng thái
 
-- Phiên hiện tại: xong 4.
+- Phiên hiện tại: xong 5.
 - Phiên 1: xong
 - Phiên 2: xong
 - Phiên 3: xong
 - Phiên 4: xong
-- Phiên 5: chưa
+- Phiên 5: xong
 - Phiên 6: chưa
 
 ## 6. Việc không làm
