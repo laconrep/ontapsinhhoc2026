@@ -101,6 +101,14 @@ const assignCollisionDetection: CollisionDetection = ({
   return kpHits.length > 0 ? kpHits : hits
 }
 
+function isUnassignedQuestion(
+  q: { knowledgePointId?: string | null },
+  kpIds: Set<string>,
+) {
+  const kpId = q.knowledgePointId
+  return !kpId || !kpIds.has(kpId)
+}
+
 function toQuestionDto(q: LessonQuestionItem): QuestionDto {
   return {
     id: q.id,
@@ -342,6 +350,11 @@ export function LessonDetail({
   const [kps, setKps] = useState<KP[]>(initialKnowledgePoints)
   const [questions, setQuestions] = useState<LessonQuestionItem[]>(initialQuestions)
   const [status, setStatus] = useState(lesson.status)
+  useEffect(() => {
+    setKps(initialKnowledgePoints)
+    setQuestions(initialQuestions)
+    setStatus(lesson.status)
+  }, [initialKnowledgePoints, initialQuestions, lesson.status])
   const [expandedKpId, setExpandedKpId] = useState<string | null>(null)
   const [poolTab, setPoolTab] = useState<"unassigned" | "all">("unassigned")
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -366,9 +379,10 @@ export function LessonDetail({
     useSensor(KeyboardSensor),
   )
 
+  const kpIds = useMemo(() => new Set(kps.map((kp) => kp.id)), [kps])
   const unassigned = useMemo(
-    () => questions.filter((q) => q.knowledgePointId === null),
-    [questions],
+    () => questions.filter((q) => isUnassignedQuestion(q, kpIds)),
+    [questions, kpIds],
   )
   const kpLabelById = useMemo(() => {
     const map = new Map<string, string>()
@@ -378,14 +392,15 @@ export function LessonDetail({
   const questionsByKp = useMemo(() => {
     const map = new Map<string, LessonQuestionItem[]>()
     for (const q of questions) {
-      if (!q.knowledgePointId) continue
-      const list = map.get(q.knowledgePointId) ?? []
+      const kid = q.knowledgePointId
+      if (!kid || !kpIds.has(kid)) continue
+      const list = map.get(kid) ?? []
       list.push(q)
-      map.set(q.knowledgePointId, list)
+      map.set(kid, list)
     }
     for (const list of map.values()) list.sort((a, b) => a.order - b.order)
     return map
-  }, [questions])
+  }, [questions, kpIds])
   const activeQuestion = questions.find((q) => q.id === activeId) ?? null
 
   async function refresh() {
@@ -594,9 +609,9 @@ export function LessonDetail({
                       <DraggableQuestionCard
                         key={q.id}
                         q={q}
-                        draggable={poolTab === "unassigned"}
+                        draggable={isUnassignedQuestion(q, kpIds)}
                         kpLabel={
-                          poolTab === "all" && q.knowledgePointId
+                          poolTab === "all" && !isUnassignedQuestion(q, kpIds) && q.knowledgePointId
                             ? kpLabelById.get(q.knowledgePointId)
                             : undefined
                         }

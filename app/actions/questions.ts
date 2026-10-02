@@ -4,7 +4,7 @@ import { db, ensureSchema } from "@/lib/db"
 import { questions, questionOptions, knowledgePoints, lessons } from "@/lib/db/schema"
 import { requireRole } from "@/lib/auth-helpers"
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm"
-import { revalidatePath } from "next/cache"
+import { revalidatePath, unstable_noStore as noStore } from "next/cache"
 import { chapters } from "@/lib/db/schema"
 import type { QuestionDto, QuestionOptionDto } from "@/types"
 
@@ -137,6 +137,7 @@ export async function getQuestionsByKp(knowledgePointId: string): Promise<Questi
 }
 
 export async function getLessonQuestions(lessonId: string): Promise<LessonQuestionItem[]> {
+  noStore()
   const user = await requireRole("teacher")
   await ensureSchema()
   const [lesson] = await db
@@ -146,10 +147,28 @@ export async function getLessonQuestions(lessonId: string): Promise<LessonQuesti
   if (!lesson) throw new Error("Không tìm thấy bài giảng")
 
   const qs = await db
-    .select()
+    .select({
+      id: questions.id,
+      lessonId: questions.lessonId,
+      knowledgePointId: questions.knowledgePointId,
+      resolvedKpId: knowledgePoints.id,
+      type: questions.type,
+      content: questions.content,
+      bodyHtml: questions.bodyHtml,
+      order: questions.order,
+    })
     .from(questions)
+    .leftJoin(
+      knowledgePoints,
+      and(eq(knowledgePoints.id, questions.knowledgePointId), eq(knowledgePoints.lessonId, lessonId)),
+    )
     .where(eq(questions.lessonId, lessonId))
     .orderBy(asc(questions.order), asc(questions.createdAt))
+
+  const danglingIds = qs.filter((q) => q.knowledgePointId && !q.resolvedKpId).map((q) => q.id)
+  if (danglingIds.length > 0) {
+    await db.update(questions).set({ knowledgePointId: null }).where(inArray(questions.id, danglingIds))
+  }
 
   const opts = await db.select().from(questionOptions).orderBy(asc(questionOptions.order))
 
@@ -160,7 +179,7 @@ export async function getLessonQuestions(lessonId: string): Promise<LessonQuesti
     return {
       id: q.id,
       lessonId: q.lessonId,
-      knowledgePointId: q.knowledgePointId,
+      knowledgePointId: q.resolvedKpId || null,
       type: q.type as QuestionType,
       content: q.content,
       bodyHtml: q.bodyHtml ?? null,
@@ -301,7 +320,7 @@ export async function createQuestion(input: {
     .insert(questions)
     .values({
       lessonId,
-      knowledgePointId: input.knowledgePointId,
+      knowledgePointId: input.knowledgePointId || null,
       order: Number(maxRow?.m ?? -1) + 1,
       type: input.type,
       content: input.content.trim(),

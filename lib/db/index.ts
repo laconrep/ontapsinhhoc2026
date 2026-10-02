@@ -67,6 +67,19 @@ export function ensureSchema(): Promise<void> {
         `),
       )
       .then(() => pool.query(`ALTER TABLE questions ALTER COLUMN "lessonId" SET NOT NULL`))
+      .then(() =>
+        pool.query(`
+          UPDATE questions q
+             SET "knowledgePointId" = NULL
+           WHERE q."knowledgePointId" IS NOT NULL
+             AND NOT EXISTS (
+               SELECT 1
+                 FROM knowledge_points kp
+                WHERE kp.id = q."knowledgePointId"
+                  AND kp."lessonId" = q."lessonId"
+             )
+        `),
+      )
       .then(() => undefined)
       .catch((e) => {
         schemaReady = null
