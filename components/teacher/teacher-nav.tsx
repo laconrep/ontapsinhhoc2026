@@ -35,7 +35,7 @@ export function TeacherNav({ variant = "sidebar" }: { variant?: "sidebar" | "mob
             href={item.href}
             className={cn(
               "flex items-center gap-2 rounded-lg text-sm font-medium transition-colors",
-              variant === "sidebar" ? "px-3 py-2" : "shrink-0 px-3 py-2 whitespace-nowrap",
+              variant === "sidebar" ? "px-2 py-1.5" : "shrink-0 px-2 py-1.5 whitespace-nowrap",
               active
                 ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:bg-secondary hover:text-foreground",

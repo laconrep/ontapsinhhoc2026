@@ -1,10 +1,10 @@
 "use client"
 
-import type { ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { usePathname } from "next/navigation"
-import { GraduationCap } from "lucide-react"
 import { SignOutButton } from "@/components/auth/sign-out-button"
 import { TeacherNav } from "@/components/teacher/teacher-nav"
+import { cn } from "@/lib/utils"
 
 function isLiveConsolePath(pathname: string) {
   return /^\/teacher\/sessions\/[^/]+\/?$/.test(pathname)
@@ -24,6 +24,47 @@ export function TeacherShell({
   const pathname = usePathname()
   const presentTv = isPresentTvPath(pathname)
   const liveConsole = isLiveConsolePath(pathname)
+  const [headerVisible, setHeaderVisible] = useState(true)
+  const [canAutoHide, setCanAutoHide] = useState(false)
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hovering = useRef(false)
+
+  function clearHide() {
+    if (hideTimer.current) {
+      clearTimeout(hideTimer.current)
+      hideTimer.current = null
+    }
+  }
+
+  function revealHeader() {
+    clearHide()
+    setHeaderVisible(true)
+  }
+
+  function showHeader() {
+    hovering.current = true
+    revealHeader()
+  }
+
+  function scheduleHide(delay = 3000) {
+    if (!canAutoHide) return
+    clearHide()
+    hideTimer.current = setTimeout(() => {
+      hideTimer.current = null
+      if (!hovering.current) setHeaderVisible(false)
+    }, delay)
+  }
+
+  useEffect(() => {
+    const mq = window.matchMedia("(hover: hover) and (pointer: fine)")
+    setCanAutoHide(mq.matches)
+    if (!mq.matches) return
+    hideTimer.current = setTimeout(() => {
+      hideTimer.current = null
+      if (!hovering.current) setHeaderVisible(false)
+    }, 3000)
+    return () => clearHide()
+  }, [])
 
   if (presentTv || liveConsole) {
     return <>{children}</>
@@ -31,17 +72,31 @@ export function TeacherShell({
 
   return (
     <div className="min-h-svh bg-background">
-      <header className="sticky top-0 z-30 border-b border-border bg-card">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <GraduationCap className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="font-heading font-bold leading-tight text-foreground">EduSync</p>
-              <p className="text-xs text-muted-foreground">Khu vực giáo viên</p>
-            </div>
-          </div>
+      <div
+        className="fixed inset-x-0 top-0 z-40 hidden h-2 md:block"
+        onMouseEnter={revealHeader}
+        onMouseLeave={() => {
+          if (!hovering.current) scheduleHide(400)
+        }}
+        aria-hidden="true"
+      />
+
+      <header
+        onMouseEnter={showHeader}
+        onMouseLeave={() => {
+          hovering.current = false
+          scheduleHide(400)
+        }}
+        className={cn(
+          "fixed inset-x-0 top-0 z-30 hidden border-b border-border/50 bg-card/90 backdrop-blur-md md:block",
+          "transition-transform duration-300 motion-reduce:transition-none",
+          headerVisible ? "translate-y-0" : "-translate-y-full",
+        )}
+      >
+        <div className="flex items-center justify-between px-3 py-1">
+          <p className="font-heading text-sm font-semibold leading-tight text-foreground">
+            Quản lý ôn tập
+          </p>
           <div className="flex items-center gap-3">
             <span className="hidden text-sm text-muted-foreground sm:inline">{userName}</span>
             <SignOutButton />
@@ -49,13 +104,24 @@ export function TeacherShell({
         </div>
       </header>
 
-      <div className="border-b border-border bg-card px-4 py-2 md:hidden">
-        <TeacherNav variant="mobile" />
+      <div className="border-b border-border bg-card/90 md:hidden">
+        <div className="flex items-center justify-between px-3 py-1">
+          <p className="font-heading text-sm font-semibold leading-tight text-foreground">
+            Quản lý ôn tập
+          </p>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground">{userName}</span>
+            <SignOutButton />
+          </div>
+        </div>
+        <div className="px-2 pb-2">
+          <TeacherNav variant="mobile" />
+        </div>
       </div>
 
-      <div className="mx-auto flex max-w-7xl gap-6 px-4 py-6">
-        <aside className="hidden w-56 shrink-0 md:block">
-          <div className="sticky top-20">
+      <div className="flex gap-3 px-2 py-4 md:pt-3">
+        <aside className="hidden w-fit max-w-[12.5rem] shrink-0 md:block">
+          <div className="sticky top-3">
             <TeacherNav />
           </div>
         </aside>

@@ -36,6 +36,7 @@ export function PreviewDocument({
   parseResult,
   summary,
   highlightLine,
+  errorLines,
   onSelectBlock,
 }: {
   parseResult: ParseResult
@@ -43,9 +44,18 @@ export function PreviewDocument({
   isValid?: boolean
   errors?: ValidationError[]
   highlightLine?: number
+  errorLines?: Set<number>
   onSelectBlock?: (line: number) => void
 }) {
   let qIndex = 0
+  function blockTone(line: number) {
+    const hasError = errorLines?.has(line)
+    const active = highlightLine === line
+    return cn(
+      hasError && "border-destructive/50 bg-destructive/10 ring-1 ring-destructive/40",
+      active && (hasError ? "ring-2 ring-destructive" : "ring-2 ring-primary"),
+    )
+  }
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
@@ -73,7 +83,7 @@ export function PreviewDocument({
                         data-line={kp.line}
                         className={cn(
                           "cursor-pointer rounded-md bg-muted/40 p-2 text-sm",
-                          highlightLine === kp.line && "ring-2 ring-primary",
+                          blockTone(kp.line),
                         )}
                         onClick={() => onSelectBlock?.(kp.line)}
                       >
@@ -89,7 +99,7 @@ export function PreviewDocument({
                                   data-line={q.line}
                                   className={cn(
                                     "rounded-md border bg-background p-2",
-                                    highlightLine === q.line && "ring-2 ring-primary",
+                                    blockTone(q.line),
                                   )}
                                   onClick={(ev) => {
                                     ev.stopPropagation()

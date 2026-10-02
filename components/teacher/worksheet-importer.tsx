@@ -134,17 +134,20 @@ export function WorksheetImporter() {
   }
 
   return (
-    <div className={`mx-auto space-y-6 ${preview ? "max-w-5xl" : "max-w-3xl"}`}>
-      <div>
-        <h1 className="font-heading text-2xl font-bold text-foreground">Nạp câu hỏi từ file</h1>
-        <p className="mt-1 text-muted-foreground">
-          Tải lên tài liệu .docx, .pdf hoặc .txt được soạn theo cú pháp mẫu. Hệ thống sẽ tự tách
-          chương, bài, điểm kiến thức và sinh câu hỏi. Không dùng dấu + hay *.
-        </p>
-      </div>
+    <div className={preview ? "w-full space-y-4" : "mx-auto max-w-3xl space-y-6"}>
+      {preview ? (
+        <h1 className="font-heading text-lg font-bold text-foreground">Nạp câu hỏi từ file</h1>
+      ) : (
+        <div>
+          <h1 className="font-heading text-2xl font-bold text-foreground">Nạp câu hỏi từ file</h1>
+          <p className="mt-1 text-muted-foreground">
+            Tải lên tài liệu .docx, .pdf hoặc .txt được soạn theo cú pháp mẫu. Hệ thống sẽ tự tách
+            chương, bài, điểm kiến thức và sinh câu hỏi. Không dùng dấu + hay *.
+          </p>
+        </div>
+      )}
 
-      {/* Bước tải mẫu */}
-      <Card>
+      <Card className={preview ? "hidden" : undefined}>
         <CardHeader>
           <CardTitle className="text-base">1. Tải file mẫu và soạn nội dung</CardTitle>
         </CardHeader>
@@ -207,12 +210,13 @@ export function WorksheetImporter() {
         </CardContent>
       </Card>
 
-      {/* Bước upload */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">2. Chọn file và kiểm tra</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <Card size={preview ? "sm" : "default"}>
+        {!preview ? (
+          <CardHeader>
+            <CardTitle className="text-base">2. Chọn file và kiểm tra</CardTitle>
+          </CardHeader>
+        ) : null}
+        <CardContent className={preview ? "py-0" : "space-y-4"}>
           {!file ? (
             <button
               type="button"
@@ -236,14 +240,28 @@ export function WorksheetImporter() {
               <span className="text-sm text-muted-foreground">Hỗ trợ .txt, .docx, .pdf — tối đa 10MB</span>
             </button>
           ) : (
-            <div className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3">
+            <div className={`flex flex-wrap items-center gap-3 ${preview ? "" : "rounded-lg border bg-card px-4 py-3"}`}>
               <FileText className="h-5 w-5 shrink-0 text-primary" />
-              <div className="flex-1 overflow-hidden">
+              <div className="min-w-0 flex-1 overflow-hidden">
                 <p className="truncate font-medium text-foreground">{file.name}</p>
                 <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</p>
               </div>
               <Button variant="ghost" size="sm" onClick={reset} aria-label="Bỏ file">
                 <X className="h-4 w-4" />
+              </Button>
+              <Button onClick={doValidate} disabled={!file || isValidating} size={preview ? "sm" : "default"}>
+                {isValidating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
+                Kiểm tra tài liệu
+              </Button>
+              <Button
+                variant="default"
+                onClick={doSave}
+                disabled={!preview?.isValid || isSaving}
+                className="bg-primary"
+                size={preview ? "sm" : "default"}
+              >
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Lưu vào hệ thống
               </Button>
             </div>
           )}
@@ -254,21 +272,6 @@ export function WorksheetImporter() {
             className="hidden"
             onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
           />
-          <div className="flex gap-3">
-            <Button onClick={doValidate} disabled={!file || isValidating}>
-              {isValidating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
-              Kiểm tra tài liệu
-            </Button>
-            <Button
-              variant="default"
-              onClick={doSave}
-              disabled={!preview?.isValid || isSaving}
-              className="bg-primary"
-            >
-              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Lưu vào hệ thống
-            </Button>
-          </div>
         </CardContent>
       </Card>
 
