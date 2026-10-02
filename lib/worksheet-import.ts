@@ -209,6 +209,7 @@ async function persistParseResult(
 
   revalidatePath("/teacher/lessons")
   revalidatePath("/teacher/questions")
+  for (const id of result.lessonIds) revalidatePath(`/teacher/lessons/${id}`)
   return result
 }
 
