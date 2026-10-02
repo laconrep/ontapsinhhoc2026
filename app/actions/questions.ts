@@ -3,7 +3,7 @@
 import { db, ensureSchema } from "@/lib/db"
 import { questions, questionOptions, knowledgePoints, lessons } from "@/lib/db/schema"
 import { requireRole } from "@/lib/auth-helpers"
-import { and, asc, eq, inArray, isNull } from "drizzle-orm"
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { chapters } from "@/lib/db/schema"
 import type { QuestionDto, QuestionOptionDto } from "@/types"
@@ -260,7 +260,8 @@ function validateOptions(type: QuestionType, options: OptionInput[]) {
 }
 
 export async function createQuestion(input: {
-  knowledgePointId: string
+  knowledgePointId: string | null
+  lessonId?: string
   type: QuestionType
   content: string
   bodyHtml?: string | null
@@ -269,15 +270,39 @@ export async function createQuestion(input: {
 }): Promise<{ id: string }> {
   const user = await requireRole("teacher")
   await ensureSchema()
-  const lessonId = await assertKpOwner(input.knowledgePointId, user.id)
+  let lessonId: string
+  if (input.knowledgePointId) {
+    lessonId = await assertKpOwner(input.knowledgePointId, user.id)
+  } else {
+    if (!input.lessonId) throw new Error("Thiếu bài giảng")
+    const [lesson] = await db
+      .select({ id: lessons.id })
+      .from(lessons)
+      .where(and(eq(lessons.id, input.lessonId), eq(lessons.teacherId, user.id)))
+    if (!lesson) throw new Error("Không tìm thấy bài giảng")
+    lessonId = lesson.id
+  }
   if (!input.content.trim()) throw new Error("Nội dung câu hỏi không được để trống")
   validateOptions(input.type, input.options)
+
+  const [maxRow] = await db
+    .select({ m: sql<number>`coalesce(max(${questions.order}), -1)` })
+    .from(questions)
+    .where(
+      and(
+        eq(questions.lessonId, lessonId),
+        input.knowledgePointId
+          ? eq(questions.knowledgePointId, input.knowledgePointId)
+          : isNull(questions.knowledgePointId),
+      ),
+    )
 
   const [q] = await db
     .insert(questions)
     .values({
       lessonId,
       knowledgePointId: input.knowledgePointId,
+      order: Number(maxRow?.m ?? -1) + 1,
       type: input.type,
       content: input.content.trim(),
       bodyHtml: input.bodyHtml ?? null,

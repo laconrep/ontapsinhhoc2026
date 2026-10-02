@@ -295,8 +295,18 @@ Dựng lại `lesson-detail.tsx` thành 2 khung, có tab "Chưa gán"/"Tổng c�
 
 ### Báo cáo phiên 3 (điền sau khi code)
 - Đã làm:
+  - Tách `QuestionFormDialog` từ editor; `createQuestion` nhận `knowledgePointId: string | null` + `lessonId` để tạo vào pool.
+  - Viết lại màn bài giảng 2 khung: trái Bộ câu hỏi (tab Chưa gán / Tổng), phải Điểm kiến thức thu gọn + droppable.
+  - Kéo câu từ tab Chưa gán thả vào KP gọi `moveQuestion`; optimistic + rollback; DragOverlay.
+  - Pool dropzone `id: "pool"` sẵn cho phiên 4. Confirm xoá KP giữ text phiên 2.
 - File đã sửa/tạo:
+  - `components/teacher/question-form-dialog.tsx` (tạo mới)
+  - `components/teacher/question-editor.tsx`
+  - `components/teacher/lesson-detail.tsx`
+  - `app/teacher/lessons/[id]/page.tsx`
+  - `app/actions/questions.ts` (`createQuestion` pool)
 - Việc tiếp theo cho phiên 4:
+  - Sortable trong KP, kéo trả về pool, kéo chéo KP.
 
 ---
 

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation"
 import { getLessonDetail } from "@/app/actions/content"
+import { getLessonQuestions } from "@/app/actions/questions"
 import { LessonDetail } from "@/components/teacher/lesson-detail"
 
 export default async function LessonDetailPage({
@@ -10,5 +11,12 @@ export default async function LessonDetailPage({
   const { id } = await params
   const data = await getLessonDetail(id)
   if (!data) notFound()
-  return <LessonDetail lesson={data.lesson} initialKnowledgePoints={data.knowledgePoints} />
+  const questions = await getLessonQuestions(id)
+  return (
+    <LessonDetail
+      lesson={data.lesson}
+      initialKnowledgePoints={data.knowledgePoints}
+      initialQuestions={questions}
+    />
+  )
 }
