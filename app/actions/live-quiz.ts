@@ -484,10 +484,26 @@ export async function goToQuestion(sessionId: string, index: number) {
 }
 
 // ---- GV: hiện đáp án câu hiện tại ----
-export async function revealCurrent(sessionId: string) {
+export async function revealCurrent(sessionId: string, expectedIndex?: number) {
   const { session } = await requireOwner(sessionId)
   const state = await ensureLiveState(sessionId)
   if (!state || state.currentIndex < 0) throw new Error("Chưa có câu hỏi")
+  if (state.phase !== "question") {
+    const q = state.questions[state.currentIndex]
+    return {
+      revealed: false as const,
+      correctOptionIds: q?.correctOptionIds ?? [],
+      correctText: q?.correctText ?? null,
+    }
+  }
+  if (expectedIndex != null && expectedIndex !== state.currentIndex) {
+    const q = state.questions[state.currentIndex]
+    return {
+      revealed: false as const,
+      correctOptionIds: q?.correctOptionIds ?? [],
+      correctText: q?.correctText ?? null,
+    }
+  }
   state.phase = "revealed"
   const q = state.questions[state.currentIndex]
   const snap = (session.resumeSnapshot as { lessonId: string; defaultTimeSec: number }) ?? { lessonId: "", defaultTimeSec: 30 }

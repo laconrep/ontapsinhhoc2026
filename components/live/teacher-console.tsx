@@ -116,16 +116,33 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
   const followUpNames = [...wrongStudents, ...unansweredStudents]
 
   const autoRevealedFor = useRef<number>(-1)
+  const sawTimeOnIndex = useRef<number>(-1)
+  const applyReveal = view.applyReveal
   useEffect(() => {
+    if (view.phase === "question" && view.remainingSec != null && view.remainingSec > 0) {
+      sawTimeOnIndex.current = view.currentIndex
+    }
     if (
+      !pending &&
       view.phase === "question" &&
       view.remainingSec === 0 &&
+      view.timeLimitSec != null &&
+      view.question &&
+      sawTimeOnIndex.current === view.currentIndex &&
       autoRevealedFor.current !== view.currentIndex
     ) {
       autoRevealedFor.current = view.currentIndex
-      revealCurrent(sessionId).catch(() => {})
+      revealCurrent(sessionId, view.currentIndex)
+        .then((res) => {
+          if (!res.revealed) return
+          applyReveal({
+            correctOptionIds: res.correctOptionIds,
+            correctText: res.correctText,
+          })
+        })
+        .catch(() => {})
     }
-  }, [view.phase, view.remainingSec, view.currentIndex, sessionId])
+  }, [pending, view.phase, view.remainingSec, view.currentIndex, view.timeLimitSec, view.question, sessionId, applyReveal])
 
   useEffect(() => {
     leftOpenRef.current = leftOpen
@@ -273,7 +290,7 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
             <Button
               size="sm"
               variant="secondary"
-              onClick={() => run(() => revealCurrent(sessionId))}
+              onClick={() => run(() => revealCurrent(sessionId, view.currentIndex))}
               disabled={pending}
             >
               <Eye className="h-4 w-4" />
