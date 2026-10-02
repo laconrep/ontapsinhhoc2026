@@ -452,6 +452,24 @@ export function LessonDetail({
   }
 
   function removeQuestion(id: string) {
+    const q = questions.find((item) => item.id === id)
+    const assigned = Boolean(q?.knowledgePointId && kpIds.has(q.knowledgePointId))
+    if (assigned) {
+      if (!confirm("Bỏ gán câu hỏi này? Câu hỏi sẽ trở về khung Chưa gán.")) return
+      const prev = questions
+      setQuestions((qs) => qs.map((item) => (item.id === id ? { ...item, knowledgePointId: null } : item)))
+      startTransition(async () => {
+        try {
+          await moveQuestion(id, null)
+          toast.success("Đã trả câu hỏi về khung Chưa gán")
+          await refresh()
+        } catch (e) {
+          setQuestions(prev)
+          toast.error(e instanceof Error ? e.message : "Không bỏ gán được câu hỏi")
+        }
+      })
+      return
+    }
     if (!confirm("Xoá câu hỏi này?")) return
     startTransition(async () => {
       try {
