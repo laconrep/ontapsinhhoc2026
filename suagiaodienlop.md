@@ -342,9 +342,9 @@ dữ liệu giả: progress 0 -> not_started; có attempt -> completed; dueAt qu
 **Commit:** `wip(class): phien 4 - backend thong ke lop`
 
 **Báo cáo phiên 4 (điền sau khi code):**
-- Đã làm:
-- File đã sửa/tạo:
-- Kiểm thử:
+- Đã làm: Tách hàm thuần `buildOverview`/`buildAssignmentStat`/`summarizeStudentQuiz`/`isAtRisk`. `getClassStats` trả `overview` + `assignments` + quizAvg/Best/Attempts/trend/lastActivityAt/weakKpCount/atRisk/status/streak; KP thêm firstTryPercent/hardFlag. Page fallback `emptyClassStats()`.
+- File đã sửa/tạo: `lib/class-stats-calc.ts` (mới), `app/actions/class-stats.ts`, `types/index.ts`, `app/teacher/classes/[id]/page.tsx`, `scripts/check-class-phien4.mjs` (mới)
+- Kiểm thử: `npx tsx scripts/check-class-phien4.mjs` OK. `tsc` không chạy (chưa cài node_modules).
 - Việc tiếp theo (phiên 5): UI thống kê.
 
 ---
@@ -417,11 +417,11 @@ atRisk -> tone); build nếu được.
 
 ## 5. Trạng thái
 
-- Phiên hiện tại: xong 3.
+- Phiên hiện tại: xong 4.
 - Phiên 1: xong
 - Phiên 2: xong
 - Phiên 3: xong
-- Phiên 4: chưa
+- Phiên 4: xong
 - Phiên 5: chưa
 - Phiên 6: chưa
 

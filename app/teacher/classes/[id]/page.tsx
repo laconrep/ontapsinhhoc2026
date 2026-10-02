@@ -5,6 +5,7 @@ import { getDraftSessions } from "@/app/actions/live-quiz"
 import { getClassAssignments } from "@/app/actions/assignments"
 import { ClassTabs } from "@/components/teacher/class-tabs"
 import { SessionControl } from "@/components/teacher/session-control"
+import { emptyClassStats } from "@/lib/class-stats-calc"
 import type { ClassAssignmentDto, ClassStatsDto } from "@/types"
 
 export const dynamic = "force-dynamic"
@@ -18,7 +19,7 @@ export default async function ClassDetailPage({
 
   const cls = await getClassDetail(id)
 
-  let stats: ClassStatsDto = { students: [], knowledgePoints: [] }
+  let stats: ClassStatsDto = emptyClassStats()
   let activeSession = null
   let drafts: Awaited<ReturnType<typeof getDraftSessions>> = []
   let assignments: ClassAssignmentDto[] = []

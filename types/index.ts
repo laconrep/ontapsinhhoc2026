@@ -272,9 +272,36 @@ export interface AssignedLessonDto {
   studentStatus: "not_started" | "in_progress" | "completed" | "overdue"
   progressPercent: number
 }
+export interface ClassOverviewStats {
+  completionRate: number
+  masteryRate: number
+  avgQuiz: number
+  medianQuiz: number
+  atRiskCount: number
+  weeklyActivity: number
+}
+export interface AssignmentStatRow {
+  assignmentId: string
+  lessonId: string
+  lessonTitle: string
+  chapterTitle: string
+  dueAt: string | null
+  completedCount: number
+  totalStudents: number
+  completionPercent: number
+  avgScore: number
+  bestScore: number
+  distribution: { band: string; count: number }[]
+  onTimeCount: number
+  lateCount: number
+  overdueCount: number
+  weakKpIds: string[]
+}
 export interface ClassStatsDto {
   students: StudentStatRow[]
   knowledgePoints: KPStatRow[]
+  overview: ClassOverviewStats
+  assignments: AssignmentStatRow[]
 }
 export interface StudentStatRow {
   studentId: string
@@ -284,6 +311,15 @@ export interface StudentStatRow {
   overconfidentCount: number
   masteredCount: number
   progress: number
+  quizAvg?: number
+  quizBest?: number
+  quizAttempts?: number
+  trend?: number
+  lastActivityAt?: string | null
+  weakKpCount?: number
+  atRisk?: boolean
+  status?: "not_started" | "in_progress" | "completed" | "overdue"
+  streak?: number
 }
 // [FIX-V88-09] overconfidentCount là chỉ số CHẨN ĐOÁN (selfAssessment='known' AND fillStatus='incorrect').
 // Nó CÓ THỂ chồng với masteredCount. UI KHÔNG được hiển thị 2 cột này như thể tổng của chúng = tổng KP.
@@ -293,6 +329,8 @@ export interface KPStatRow {
   knownPercent: number
   overconfidentPercent: number
   reinforcedPercent: number
+  firstTryPercent?: number
+  hardFlag?: boolean
 }
 // [FIX-V88-09] Mẫu số mọi % = số HS đã làm bài cho KP (overallStatus != 'not_started').
 export interface OverconfidentStat {
