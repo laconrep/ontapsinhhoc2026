@@ -1,6 +1,6 @@
 "use server"
 
-import { and, desc, eq, inArray } from "drizzle-orm"
+import { and, asc, desc, eq, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { db, ensureSchema } from "@/lib/db"
 import {
@@ -113,6 +113,26 @@ export async function getClassAssignments(classId: string): Promise<ClassAssignm
     note: r.note,
     createdAt: r.createdAt.toISOString(),
   }))
+}
+
+export async function getAssignableLessons(): Promise<
+  { id: string; title: string; chapterTitle: string }[]
+> {
+  const teacher = await requireRole("teacher")
+  await ensureSchema()
+
+  const rows = await db
+    .select({
+      id: lessons.id,
+      title: lessons.title,
+      chapterTitle: chapters.title,
+    })
+    .from(lessons)
+    .innerJoin(chapters, eq(chapters.id, lessons.chapterId))
+    .where(and(eq(lessons.teacherId, teacher.id), eq(lessons.status, "ready")))
+    .orderBy(asc(chapters.order), asc(lessons.order))
+
+  return rows
 }
 
 export async function updateAssignment(

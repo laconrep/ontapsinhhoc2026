@@ -261,9 +261,9 @@ có nhánh tab/checkbox). Build nếu được.
 **Commit:** `wip(class): phien 2 - UI giao bai va danh sach`
 
 **Báo cáo phiên 2 (điền sau khi code):**
-- Đã làm:
-- File đã sửa/tạo:
-- Kiểm thử:
+- Đã làm: Action `getAssignableLessons` (ready, nhóm theo chương). Tab Tổng quan / Bài tập đã giao / Thống kê. Dialog giao nhiều bài (checkbox, datetime-local, note), danh sách thẻ + badge hạn đỏ/vàng, menu Sửa hạn / Thu hồi. Page gọi `getClassAssignments` fallback `[]`, SessionControl nằm tab Tổng quan.
+- File đã sửa/tạo: `app/actions/assignments.ts`, `components/teacher/class-assignments.tsx` (mới), `components/teacher/class-tabs.tsx` (mới), `app/teacher/classes/[id]/page.tsx`, `scripts/check-class-phien2.mjs` (mới)
+- Kiểm thử: `npx tsx scripts/check-class-phien2.mjs` OK. `tsc` không chạy (chưa cài node_modules).
 - Việc tiếp theo (phiên 3): phía học sinh thấy bài được giao.
 
 ---
@@ -417,9 +417,9 @@ atRisk -> tone); build nếu được.
 
 ## 5. Trạng thái
 
-- Phiên hiện tại: xong 1.
+- Phiên hiện tại: xong 2.
 - Phiên 1: xong
-- Phiên 2: chưa
+- Phiên 2: xong
 - Phiên 3: chưa
 - Phiên 4: chưa
 - Phiên 5: chưa
