@@ -173,8 +173,20 @@ Mỗi câu hỏi có thể tồn tại **không thuộc KP nào** nhưng vẫn t
 
 ### Báo cáo phiên 1 (điền sau khi code)
 - Đã làm:
+  - Schema `questions`: thêm `lessonId` (NOT NULL, FK cascade), `order` (default 0); `knowledgePointId` nullable + `ON DELETE SET NULL`.
+  - `ensureSchema()`: thêm cột, backfill `lessonId` từ KP, DROP NOT NULL `knowledgePointId`, tạo FK `lessonId`, đổi FK KP sang SET NULL, rồi SET NOT NULL `lessonId`.
+  - Import: câu vào pool chưa gán (`knowledgePointId = null`) + ghi `lessonId` + `order` tăng dần theo bài.
+  - `QuestionDto`: `knowledgePointId: string | null`, thêm `lessonId`.
+  - Chỉnh mapping tối thiểu (`createQuestion` ghi `lessonId`, `getQuestionsByKp` trả `lessonId`, null-guard `updateQuestion`/`deleteQuestion`/`startQuiz`) để `tsc --noEmit` xanh.
 - File đã sửa/tạo:
+  - `lib/db/schema.ts`
+  - `lib/db/index.ts`
+  - `types/index.ts`
+  - `lib/worksheet-import.ts`
+  - `app/actions/questions.ts`
+  - `app/actions/student-learn.ts` (null-guard tối thiểu, chưa đổi logic chọn câu)
 - Việc tiếp theo cho phiên 2:
+  - Server actions pool: `getLessonQuestions`, `moveQuestion`, `reorderQuestions`; sửa `getQuestionBank` join theo `lessonId`; sửa text confirm xoá KP.
 
 ---
 
@@ -228,8 +240,19 @@ Có API server cho UI: lấy toàn bộ câu của bài (kèm KP đang gán), g�
 
 ### Báo cáo phiên 2 (điền sau khi code)
 - Đã làm:
+  - `getLessonQuestions(lessonId)` trả toàn bộ câu của bài (đã gán + chưa gán) kèm options, sort theo `order`.
+  - `moveQuestion(questionId, targetKpId, targetIndex?)` xác thực quyền + KP cùng bài, rồi gán/bỏ gán và chuẩn hoá `order`.
+  - `reorderQuestions(kpId, orderedIds)` ghi `order` + `knowledgePointId` theo danh sách (pool khi `kpId = null`).
+  - `getQuestionBank` leftJoin KP, join lesson qua `questions.lessonId`; type cho phép null.
+  - `updateQuestion`/`deleteQuestion` join theo `lessonId` để vẫn sửa/xoá câu chưa gán.
+  - Đổi text confirm xoá KP: câu trở về pool, không bị xoá.
 - File đã sửa/tạo:
+  - `app/actions/questions.ts`
+  - `app/actions/content.ts` (`ensureSchema` trong `getLessonDetail`)
+  - `components/teacher/question-bank.tsx`
+  - `components/teacher/lesson-detail.tsx` (text confirm xoá KP)
 - Việc tiếp theo cho phiên 3:
+  - UI 2 khung + 2 tab + kéo thả gán câu vào KP (`lesson-detail.tsx`), tách `QuestionFormDialog`.
 
 ---
 
@@ -272,8 +295,18 @@ Dựng lại `lesson-detail.tsx` thành 2 khung, có tab "Chưa gán"/"Tổng c�
 
 ### Báo cáo phiên 3 (điền sau khi code)
 - Đã làm:
+  - Tách `QuestionFormDialog` từ editor; `createQuestion` nhận `knowledgePointId: string | null` + `lessonId` để tạo vào pool.
+  - Viết lại màn bài giảng 2 khung: trái Bộ câu hỏi (tab Chưa gán / Tổng), phải Điểm kiến thức thu gọn + droppable.
+  - Kéo câu từ tab Chưa gán thả vào KP gọi `moveQuestion`; optimistic + rollback; DragOverlay.
+  - Pool dropzone `id: "pool"` sẵn cho phiên 4. Confirm xoá KP giữ text phiên 2.
 - File đã sửa/tạo:
+  - `components/teacher/question-form-dialog.tsx` (tạo mới)
+  - `components/teacher/question-editor.tsx`
+  - `components/teacher/lesson-detail.tsx`
+  - `app/teacher/lessons/[id]/page.tsx`
+  - `app/actions/questions.ts` (`createQuestion` pool)
 - Việc tiếp theo cho phiên 4:
+  - Sortable trong KP, kéo trả về pool, kéo chéo KP.
 
 ---
 
@@ -339,8 +372,15 @@ Dialog Thêm/Sửa KP dùng đúng cơ chế của `import-error-fix.tsx`: sửa
 
 ### Báo cáo phiên 5 (điền sau khi code)
 - Đã làm:
+  - `renderMarkedContent` dựng lại marker `__...__` / `__"..."` + synonyms khi mở sửa KP; `parseMarkedContent` re-export `extractBlanks`.
+  - `KpContentEditor`: textarea mono, Ctrl+click gọi `applyKpWrap`, preview `highlightBlanks`, cảnh báo khi chưa có ô trống.
+  - Dialog KP trong `lesson-detail` bỏ `deriveTerms`; tạo/sửa lưu bằng `extractBlanks`.
 - File đã sửa/tạo:
+  - `lib/kp-render.ts` (tạo mới)
+  - `components/teacher/kp-content-editor.tsx` (tạo mới)
+  - `components/teacher/lesson-detail.tsx`
 - Việc tiếp theo cho phiên 6:
+  - `lib/quiz-selection.ts` chia đề theo KP / ngẫu nhiên; sửa `startQuiz` và live quiz join theo `lessonId`.
 
 ---
 
@@ -384,8 +424,16 @@ Khi GV đã gán câu vào KP, đề trắc nghiệm bố trí câu theo từng 
 
 ### Báo cáo phiên 6 (điền sau khi code)
 - Đã làm:
+  - `selectQuizQuestions`: mode `by-kp` (toàn bộ câu theo thứ tự KP rồi `order`, câu chưa gán xếp cuối) hoặc `random` (MC≤18, TF≤4, SA≤6) khi chưa gán câu nào.
+  - `startQuiz` lấy câu theo `questions.lessonId`; `QuizQuestionForClient.knowledgePointId` cho phép null.
+  - Live quiz: `loadQuizQuestions` join theo `lessonId` + dùng chung `selectQuizQuestions`; `getLessonsForQuiz` đếm câu qua `questions.lessonId`.
 - File đã sửa/tạo:
+  - `lib/quiz-selection.ts` (tạo mới)
+  - `app/actions/student-learn.ts`
+  - `app/actions/live-quiz.ts`
+  - `components/student/tab4-quiz.tsx`
 - Tồn đọng / việc sau:
+  - Phiên 4 (sortable trong KP + kéo trả pool) chưa làm. Kéo gán từ pool vào KP đã có ở phiên 3.
 
 ---
 

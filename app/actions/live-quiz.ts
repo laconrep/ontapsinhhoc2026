@@ -1,7 +1,7 @@
 "use server"
 
 import { randomUUID } from "crypto"
-import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm"
+import { and, asc, eq, inArray, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { db, ensureSchema } from "@/lib/db"
 import {
@@ -16,7 +16,8 @@ import {
   sessionEvents,
 } from "@/lib/db/schema"
 import { requireRole, getCurrentUser } from "@/lib/auth-helpers"
-import { normalizeAnswer } from "@/lib/grading"
+import { normalizeAnswer, seededRng } from "@/lib/grading"
+import { selectQuizQuestions } from "@/lib/quiz-selection"
 import { publish, type RealtimeEvent } from "@/lib/realtime"
 import {
   initLiveState,
@@ -87,24 +88,38 @@ async function loadQuizQuestions(lessonId: string, defaultTimeSec: number): Prom
       content: questions.content,
       bodyHtml: questions.bodyHtml,
       timeLimitSec: questions.timeLimitSec,
-      kpContent: knowledgePoints.content,
-      kpOrder: knowledgePoints.order,
+      knowledgePointId: questions.knowledgePointId,
+      order: questions.order,
       createdAt: questions.createdAt,
     })
     .from(questions)
-    .innerJoin(knowledgePoints, eq(knowledgePoints.id, questions.knowledgePointId))
-    .where(and(eq(knowledgePoints.lessonId, lessonId), inArray(questions.type, ["MC", "TF", "SA"])))
-    .orderBy(asc(knowledgePoints.order), asc(questions.createdAt))
+    .where(and(eq(questions.lessonId, lessonId), inArray(questions.type, ["MC", "TF", "SA"])))
 
   if (rows.length === 0) return []
+
+  const kps = await db
+    .select({ id: knowledgePoints.id, order: knowledgePoints.order, content: knowledgePoints.content })
+    .from(knowledgePoints)
+    .where(eq(knowledgePoints.lessonId, lessonId))
+    .orderBy(asc(knowledgePoints.order))
+  const kpContent = new Map(kps.map((k) => [k.id, k.content]))
+
+  const selected = selectQuizQuestions(
+    rows,
+    kps,
+    (q) => q.knowledgePointId != null,
+    seededRng(`live:${lessonId}`),
+  )
+  const byId = new Map(rows.map((r) => [r.id, r]))
+  const ordered = selected.chosen.map((id) => byId.get(id)).filter((r): r is (typeof rows)[number] => Boolean(r))
 
   const opts = await db
     .select()
     .from(questionOptions)
-    .where(inArray(questionOptions.questionId, rows.map((r) => r.id)))
+    .where(inArray(questionOptions.questionId, ordered.map((r) => r.id)))
     .orderBy(asc(questionOptions.order))
 
-  return rows.map((r, index) => {
+  return ordered.map((r, index) => {
     const qOpts = opts.filter((o) => o.questionId === r.id)
     const correctOptionIds = qOpts.filter((o) => o.isCorrect).map((o) => o.id)
     const correctText = r.type === "SA" ? (qOpts.find((o) => o.isCorrect)?.content ?? null) : null
@@ -114,7 +129,7 @@ async function loadQuizQuestions(lessonId: string, defaultTimeSec: number): Prom
       type: r.type as "MC" | "TF" | "SA",
       content: r.content,
       bodyHtml: r.bodyHtml ?? null,
-      knowledgePointContent: r.kpContent,
+      knowledgePointContent: r.knowledgePointId ? (kpContent.get(r.knowledgePointId) ?? "") : "",
       options: qOpts.map((o) => ({ id: o.id, content: o.content, bodyHtml: o.bodyHtml ?? null, order: o.order })),
       timeLimitSec: r.timeLimitSec ?? defaultTimeSec,
       correctOptionIds,
@@ -181,8 +196,7 @@ export async function getLessonsForQuiz(): Promise<QuizLessonOption[]> {
     })
     .from(lessons)
     .innerJoin(chapters, eq(chapters.id, lessons.chapterId))
-    .innerJoin(knowledgePoints, eq(knowledgePoints.lessonId, lessons.id))
-    .innerJoin(questions, and(eq(questions.knowledgePointId, knowledgePoints.id), inArray(questions.type, ["MC", "TF", "SA"])))
+    .innerJoin(questions, and(eq(questions.lessonId, lessons.id), inArray(questions.type, ["MC", "TF", "SA"])))
     .where(and(eq(lessons.teacherId, teacher.id), eq(lessons.status, "ready")))
     .groupBy(lessons.id, lessons.title, chapters.title, chapters.order, lessons.order)
     .orderBy(asc(chapters.order), asc(lessons.order))
