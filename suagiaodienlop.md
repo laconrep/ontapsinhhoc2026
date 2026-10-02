@@ -293,9 +293,9 @@ dữ liệu giả: progress 0 -> not_started; có attempt -> completed; dueAt qu
 **Commit:** `wip(class): phien 3 - hoc sinh thay bai duoc giao`
 
 **Báo cáo phiên 3 (điền sau khi code):**
-- Đã làm:
-- File đã sửa/tạo:
-- Kiểm thử:
+- Đã làm: Accordion nhận `assignmentByLessonId`, badge "Được giao" + hạn + trạng thái, bài giao lên đầu chương. Learn page gọi `getAssignedLessonsForStudent` rồi truyền map. Trang chủ HS có mục "Bài cần làm" (not_started/in_progress/overdue, ưu tiên quá hạn) link `/student/learn/[id]`. Badge xám/xanh/vàng/đỏ theo trạng thái.
+- File đã sửa/tạo: `components/student/lesson-accordion.tsx`, `app/student/learn/page.tsx`, `app/student/page.tsx`, `components/student/assigned-work.tsx` (mới), `scripts/check-class-phien3.mjs` (mới)
+- Kiểm thử: `npx tsx scripts/check-class-phien3.mjs` OK. `tsc` không chạy (chưa cài node_modules).
 - Việc tiếp theo (phiên 4): thống kê backend.
 
 ---
@@ -417,10 +417,10 @@ atRisk -> tone); build nếu được.
 
 ## 5. Trạng thái
 
-- Phiên hiện tại: xong 2.
+- Phiên hiện tại: xong 3.
 - Phiên 1: xong
 - Phiên 2: xong
-- Phiên 3: chưa
+- Phiên 3: xong
 - Phiên 4: chưa
 - Phiên 5: chưa
 - Phiên 6: chưa

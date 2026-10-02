@@ -1,9 +1,19 @@
+import { getAssignedLessonsForStudent } from "@/app/actions/assignments"
 import { getStudentLessons } from "@/app/actions/student-class"
 import { LessonAccordion } from "@/components/student/lesson-accordion"
 import { BookOpen } from "lucide-react"
+import type { AssignedLessonDto } from "@/types"
 
 export default async function StudentLearnPage() {
   const chapters = await getStudentLessons()
+  let assigned: AssignedLessonDto[] = []
+  try {
+    assigned = await getAssignedLessonsForStudent()
+  } catch (err) {
+    console.error("[v0] getAssignedLessonsForStudent error:", err)
+  }
+  const assignmentByLessonId: Record<string, AssignedLessonDto> = {}
+  for (const item of assigned) assignmentByLessonId[item.lessonId] = item
 
   return (
     <div className="flex flex-col gap-6">
@@ -22,7 +32,7 @@ export default async function StudentLearnPage() {
           </p>
         </div>
       ) : (
-        <LessonAccordion chapters={chapters} />
+        <LessonAccordion chapters={chapters} assignmentByLessonId={assignmentByLessonId} />
       )}
     </div>
   )
