@@ -36,6 +36,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
     setSaText("")
     setAnsweredId(null)
     setMyCorrect(null)
+    setSubmitting(false)
   }, [currentQid])
 
   // Báo trạng thái fullscreen cho server
@@ -71,6 +72,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
       await joinQuiz(sessionId)
       setJoined(true)
       report(!!document.fullscreenElement)
+      void view.refresh()
     } catch (err) {
       // Không dùng toast đỏ gây kẹt — hiện màn thông báo thân thiện có nút thử lại/quay về.
       setJoinError(err instanceof Error ? err.message : "Không tham gia được phiên này")
@@ -98,7 +100,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
   // ---- Màn thông báo khi không tham gia được (thay cho lỗi đỏ kẹt màn hình) ----
   if (joinError && !joined) {
     return (
-      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-background p-6 text-center">
+      <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-4 bg-background p-6 text-center">
         <h1 className="font-heading text-xl font-bold text-balance">Chưa vào được phiên</h1>
         <p className="max-w-sm text-pretty text-muted-foreground">{joinError}</p>
         <div className="flex gap-3">
@@ -115,7 +117,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
   if (!joined) {
     const className = view.className || "Phiên trình chiếu"
     return (
-      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-background p-6 text-center">
+      <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-6 bg-background p-6 text-center">
         <div>
           <h1 className="font-heading text-2xl font-bold text-balance">{className}</h1>
           <p className="mt-2 text-muted-foreground">
@@ -132,7 +134,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
 
   if (view.phase === "ended") {
     return (
-      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-background p-6 text-center">
+      <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-3 bg-background p-6 text-center">
         <h1 className="font-heading text-2xl font-bold">Phiên đã kết thúc</h1>
         <p className="text-muted-foreground">Cảm ơn em đã tham gia!</p>
       </div>
@@ -141,13 +143,13 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
 
   const answered = answeredId === currentQid
   const q = view.question
-  const timeUp = view.phase === "question" && view.remainingSec === 0
-  const locked = answered || view.phase !== "question" || timeUp
+  const canAnswer = view.phase === "question" && !answered
+  const locked = !canAnswer
 
   // Safety check - không render quiz nếu không có câu hỏi khi đang trong phase question
   if (view.phase === "question" && !q) {
     return (
-      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-background p-6 text-center">
+      <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-4 bg-background p-6 text-center">
         <h1 className="font-heading text-xl font-bold">Đang tải câu hỏi...</h1>
         <p className="text-muted-foreground">Vui lòng chờ giáo viên bắt đầu câu hỏi.</p>
       </div>
@@ -157,10 +159,10 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
   return (
     <>
       {/* Nút fullscreen (chỉ hiện khi thoát fullscreen) */}
-      {joined && !isFullscreen && (
+          {joined && !isFullscreen && (
         <button
           onClick={reenterFullscreen}
-          className="fixed right-4 top-4 z-50 rounded-lg bg-primary p-2 text-primary-foreground hover:bg-primary/90 shadow-lg"
+          className="fixed right-4 top-4 z-[90] rounded-lg bg-primary p-2 text-primary-foreground hover:bg-primary/90 shadow-lg"
           title="Vào toàn màn hình"
           aria-label="Vào toàn màn hình"
         >
@@ -168,7 +170,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
         </button>
       )}
 
-      <div className="fixed inset-0 z-50 mx-auto flex max-w-2xl flex-col gap-5 overflow-y-auto bg-background p-4 pb-28">
+      <div className="fixed inset-0 z-[80] mx-auto flex max-w-2xl flex-col gap-5 overflow-y-auto bg-background p-4 pb-36">
         {/* Thanh trên: tiến độ + đồng hồ */}
         <div className="flex items-center justify-between">
         <span className="rounded-full bg-secondary px-3 py-1 text-sm font-medium text-secondary-foreground">
@@ -202,7 +204,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
 
           {/* MC */}
           {q.type === "MC" && (
-            <div className="flex flex-col gap-3">
+            <div key={q.id} className="relative z-20 flex flex-col gap-3 pointer-events-auto">
               {q.options.map((o, i) => {
                 const isCorrect = view.revealed?.correctOptionIds.includes(o.id)
                 const isMine = mcChoice === o.id
@@ -211,9 +213,12 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
                     key={o.id}
                     type="button"
                     disabled={locked}
-                    onClick={() => setMcChoice(o.id)}
+                    onClick={() => {
+                      if (locked) return
+                      setMcChoice(o.id)
+                    }}
                     className={cn(
-                      "flex items-center gap-3 rounded-xl border-2 px-4 py-3 text-left text-lg transition-colors disabled:cursor-not-allowed",
+                      "relative z-20 flex min-h-14 w-full cursor-pointer touch-manipulation items-center gap-3 rounded-xl border-2 px-4 py-3 text-left text-lg transition-colors disabled:cursor-not-allowed",
                       view.revealed && isCorrect
                         ? "border-primary bg-primary/10"
                         : view.revealed && isMine
@@ -258,7 +263,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
                         disabled={locked}
                         onClick={() => setTfChoices((s) => ({ ...s, [o.id]: true }))}
                         className={cn(
-                          "rounded-lg px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed",
+                          "min-h-10 touch-manipulation rounded-lg px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed",
                           picked === true ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground",
                         )}
                       >
@@ -269,7 +274,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
                         disabled={locked}
                         onClick={() => setTfChoices((s) => ({ ...s, [o.id]: false }))}
                         className={cn(
-                          "rounded-lg px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed",
+                          "min-h-10 touch-manipulation rounded-lg px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed",
                           picked === false ? "bg-destructive text-primary-foreground" : "bg-secondary text-secondary-foreground",
                         )}
                       >
@@ -315,19 +320,17 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
         </>
       )}
 
-      {/* Hết giờ mà chưa trả lời */}
-      {q && !answered && timeUp && (
-        <p className="fixed inset-x-0 bottom-0 border-t bg-card p-4 text-center font-medium text-destructive">
+      {q && !answered && view.phase === "revealed" && (
+        <p className="fixed inset-x-0 bottom-0 z-[85] border-t bg-card p-4 text-center font-medium text-destructive">
           Đã hết giờ trả lời câu này
         </p>
       )}
 
-      {/* Nút gửi cố định dưới */}
-      {q && !answered && view.phase === "question" && !timeUp && (
-        <div className="fixed inset-x-0 bottom-0 border-t bg-card p-3">
+      {q && !answered && view.phase === "question" && (
+        <div className="fixed inset-x-0 bottom-0 z-[85] border-t bg-card p-3">
           <div className="mx-auto flex max-w-2xl">
             <Button
-              className="w-full"
+              className="h-12 w-full text-base"
               size="lg"
               disabled={
                 submitting ||
@@ -351,7 +354,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
       )}
 
       {answered && view.phase === "question" && (
-        <p className="fixed inset-x-0 bottom-0 border-t bg-card p-4 text-center text-muted-foreground">
+        <p className="fixed inset-x-0 bottom-0 z-[85] border-t bg-card p-4 text-center text-muted-foreground">
           Đã gửi câu trả lời. Chờ các bạn khác…
         </p>
       )}

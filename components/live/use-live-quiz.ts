@@ -31,6 +31,8 @@ export interface RevealInfo {
   correctText: string | null
 }
 
+type Snapshot = Awaited<ReturnType<typeof getLiveQuizSnapshot>>
+
 export interface LiveQuizView {
   connected: boolean
   loading: boolean
@@ -89,13 +91,13 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
     teacherCurrentAnswer: null,
   })
 
-  // Đồng bộ đồng hồ: offset = giờ_local - giờ_server
   const clockOffsetRef = useRef(0)
   const questionStartedAtRef = useRef<number | null>(null)
-  // toàn bộ đề (đã che đáp án) — chỉ GV có, dùng để tính câu kế tiếp
   const outlineRef = useRef<LiveQuestionView[]>([])
   const [remainingSec, setRemainingSec] = useState<number | null>(null)
   const joinBadgeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const refreshInFlight = useRef(false)
+  const lastStartedAtRef = useRef(0)
 
   const flashJoinBadge = useCallback(() => {
     setState((s) => ({ ...s, showJoinBadge: true }))
@@ -105,33 +107,75 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
     }, 3000)
   }, [])
 
-  // Nạp snapshot ban đầu
+  const applySnap = useCallback((snap: Snapshot) => {
+    const started = snap.questionStartedAt ?? 0
+    if (
+      snap.phase !== "ended" &&
+      lastStartedAtRef.current > 0 &&
+      started < lastStartedAtRef.current
+    ) {
+      setState((s) => ({
+        ...s,
+        loading: false,
+        joinedCount: snap.joinedCount,
+        joined: snap.joined ?? s.joined,
+        answers: snap.answers,
+        notFullscreen: snap.notFullscreen,
+      }))
+      return
+    }
+    if (started > 0) lastStartedAtRef.current = started
+    clockOffsetRef.current = Date.now() - snap.serverNow
+    questionStartedAtRef.current = snap.questionStartedAt
+    if (snap.teacherExtras?.outline) {
+      outlineRef.current = snap.teacherExtras.outline as LiveQuestionView[]
+    }
+    const limit = snap.question?.timeLimitSec ?? null
+    if (snap.phase === "question" && started && limit) {
+      const serverNow = snap.serverNow
+      const elapsed = (serverNow - started) / 1000
+      setRemainingSec(Math.max(0, Math.ceil(limit - elapsed)))
+    } else {
+      setRemainingSec(snap.phase === "question" ? limit : null)
+    }
+    setState((s) => ({
+      ...s,
+      loading: false,
+      phase: snap.phase as LiveQuizView["phase"],
+      className: snap.className,
+      isTeacher: snap.isTeacher,
+      currentIndex: snap.currentIndex,
+      total: snap.total,
+      question: snap.question,
+      revealed: snap.revealed,
+      timeLimitSec: limit,
+      joinedCount: snap.joinedCount,
+      joined: snap.joined ?? s.joined,
+      answers: snap.answers,
+      notFullscreen: snap.notFullscreen,
+      teacherNext: snap.teacherExtras?.next ?? null,
+      teacherCurrentAnswer: snap.teacherExtras?.current ?? null,
+    }))
+  }, [])
+
+  const refresh = useCallback(async () => {
+    if (refreshInFlight.current) return
+    refreshInFlight.current = true
+    try {
+      const snap = await getLiveQuizSnapshot(sessionId)
+      applySnap(snap)
+    } catch {
+      setState((s) => ({ ...s, loading: false }))
+    } finally {
+      refreshInFlight.current = false
+    }
+  }, [sessionId, applySnap])
+
   useEffect(() => {
     let cancelled = false
     getLiveQuizSnapshot(sessionId)
       .then((snap) => {
-        if (cancelled) return
-        clockOffsetRef.current = Date.now() - snap.serverNow
-        questionStartedAtRef.current = snap.questionStartedAt
-        outlineRef.current = (snap.teacherExtras?.outline as LiveQuestionView[]) ?? []
-        setState((s) => ({
-          ...s,
-          loading: false,
-          phase: snap.phase as LiveQuizView["phase"],
-          className: snap.className,
-          isTeacher: snap.isTeacher,
-          currentIndex: snap.currentIndex,
-          total: snap.total,
-          question: snap.question,
-          revealed: snap.revealed,
-          timeLimitSec: snap.question?.timeLimitSec ?? null,
-          joinedCount: snap.joinedCount,
-          joined: snap.joined ?? [],
-          answers: snap.answers,
-          notFullscreen: snap.notFullscreen,
-          teacherNext: snap.teacherExtras?.next ?? null,
-          teacherCurrentAnswer: snap.teacherExtras?.current ?? null,
-        }))
+        if (!cancelled) applySnap(snap)
       })
       .catch(() => {
         if (!cancelled) setState((s) => ({ ...s, loading: false }))
@@ -139,114 +183,158 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
     return () => {
       cancelled = true
     }
-  }, [sessionId])
+  }, [sessionId, applySnap])
 
-  // Kết nối SSE
   useEffect(() => {
-    const es = new EventSource(`/api/sessions/${sessionId}/stream`)
-    es.addEventListener("connected", () => setState((s) => ({ ...s, connected: true })))
+    let es: EventSource | null = null
+    let closed = false
 
-    es.onmessage = (e) => {
-      let ev: { type: string; studentId?: string | null; studentName?: string | null; payload?: Record<string, unknown> | null }
-      try {
-        ev = JSON.parse(e.data)
-      } catch {
-        return
+    const open = () => {
+      if (closed) return
+      es = new EventSource(`/api/sessions/${sessionId}/stream`)
+      es.addEventListener("connected", () => {
+        setState((s) => ({ ...s, connected: true }))
+        void refresh()
+      })
+
+      es.onmessage = (e) => {
+        let ev: {
+          type: string
+          studentId?: string | null
+          studentName?: string | null
+          payload?: Record<string, unknown> | null
+        }
+        try {
+          ev = JSON.parse(e.data)
+        } catch {
+          return
+        }
+        const p = ev.payload ?? {}
+        switch (ev.type) {
+          case "question_changed": {
+            const startedAt = (p.startedAt as number) ?? Date.now()
+            if (startedAt > 0) lastStartedAtRef.current = Math.max(lastStartedAtRef.current, startedAt)
+            questionStartedAtRef.current = startedAt
+            if (typeof p.serverNow === "number") clockOffsetRef.current = Date.now() - (p.serverNow as number)
+            const q = p.question as LiveQuestionView
+            const idx = (p.index as number) ?? -1
+            const next = idx >= 0 && idx + 1 < outlineRef.current.length ? outlineRef.current[idx + 1] : null
+            const limit = q?.timeLimitSec ?? null
+            setRemainingSec(limit)
+            setState((s) => ({
+              ...s,
+              phase: "question",
+              currentIndex: idx >= 0 ? idx : s.currentIndex,
+              total: (p.total as number) ?? s.total,
+              question: q,
+              revealed: null,
+              timeLimitSec: limit,
+              answers: [],
+              teacherCurrentAnswer: null,
+              teacherNext: next,
+            }))
+            break
+          }
+          case "revealed": {
+            const revealIdx = typeof p.index === "number" ? (p.index as number) : null
+            setState((s) => {
+              if (revealIdx != null && s.currentIndex >= 0 && revealIdx !== s.currentIndex) return s
+              return {
+                ...s,
+                phase: "revealed",
+                revealed: {
+                  correctOptionIds: (p.correctOptionIds as string[]) ?? [],
+                  correctText: (p.correctText as string | null) ?? null,
+                },
+                teacherCurrentAnswer: {
+                  correctOptionIds: (p.correctOptionIds as string[]) ?? [],
+                  correctText: (p.correctText as string | null) ?? null,
+                },
+              }
+            })
+            break
+          }
+          case "student_joined": {
+            setState((s) => {
+              const id = ev.studentId
+              const name = ev.studentName ?? "Học sinh"
+              const rest = id ? s.joined.filter((j) => j.studentId !== id) : s.joined
+              const joined = id ? [...rest, { studentId: id, name, online: true }] : s.joined
+              return {
+                ...s,
+                joinedCount: (p.joinedCount as number) ?? joined.filter((j) => j.online).length,
+                joined,
+              }
+            })
+            flashJoinBadge()
+            break
+          }
+          case "answer_submitted": {
+            if (!ev.studentId) break
+            setState((s) => {
+              const rest = s.answers.filter((a) => a.studentId !== ev.studentId)
+              const name = ev.studentName ?? "Học sinh"
+              const joined = s.joined.some((j) => j.studentId === ev.studentId)
+                ? s.joined
+                : [...s.joined, { studentId: ev.studentId!, name, online: true }]
+              return {
+                ...s,
+                joined,
+                joinedCount: Math.max(s.joinedCount, joined.length),
+                answers: [...rest, { studentId: ev.studentId!, name, correct: !!p.correct }],
+              }
+            })
+            break
+          }
+          case "fullscreen_changed": {
+            if (!ev.studentId) break
+            setState((s) => {
+              const rest = s.notFullscreen.filter((n) => n.studentId !== ev.studentId)
+              return {
+                ...s,
+                notFullscreen: p.isFullscreen
+                  ? rest
+                  : [...rest, { studentId: ev.studentId!, name: ev.studentName ?? "Học sinh" }],
+              }
+            })
+            break
+          }
+          case "session_ended": {
+            setState((s) => ({ ...s, phase: "ended" }))
+            break
+          }
+        }
       }
-      const p = ev.payload ?? {}
-      switch (ev.type) {
-        case "question_changed": {
-          questionStartedAtRef.current = (p.startedAt as number) ?? Date.now()
-          if (typeof p.serverNow === "number") clockOffsetRef.current = Date.now() - (p.serverNow as number)
-          const q = p.question as LiveQuestionView
-          const idx = (p.index as number) ?? -1
-          const next = idx >= 0 && idx + 1 < outlineRef.current.length ? outlineRef.current[idx + 1] : null
-          setState((s) => ({
-            ...s,
-            phase: "question",
-            currentIndex: idx >= 0 ? idx : s.currentIndex,
-            total: (p.total as number) ?? s.total,
-            question: q,
-            revealed: null,
-            timeLimitSec: q?.timeLimitSec ?? null,
-            answers: [],
-            teacherCurrentAnswer: null,
-            teacherNext: next,
-          }))
-          break
-        }
-        case "revealed": {
-          setState((s) => ({
-            ...s,
-            phase: "revealed",
-            revealed: {
-              correctOptionIds: (p.correctOptionIds as string[]) ?? [],
-              correctText: (p.correctText as string | null) ?? null,
-            },
-            teacherCurrentAnswer: {
-              correctOptionIds: (p.correctOptionIds as string[]) ?? [],
-              correctText: (p.correctText as string | null) ?? null,
-            },
-          }))
-          break
-        }
-        case "student_joined": {
-          setState((s) => {
-            const id = ev.studentId
-            const name = ev.studentName ?? "Học sinh"
-            const rest = id ? s.joined.filter((j) => j.studentId !== id) : s.joined
-            const joined = id
-              ? [...rest, { studentId: id, name, online: true }]
-              : s.joined
-            return {
-              ...s,
-              joinedCount: (p.joinedCount as number) ?? joined.filter((j) => j.online).length,
-              joined,
-            }
-          })
-          flashJoinBadge()
-          break
-        }
-        case "answer_submitted": {
-          if (!ev.studentId) break
-          setState((s) => {
-            const rest = s.answers.filter((a) => a.studentId !== ev.studentId)
-            const name = ev.studentName ?? "Học sinh"
-            const joined = s.joined.some((j) => j.studentId === ev.studentId)
-              ? s.joined
-              : [...s.joined, { studentId: ev.studentId!, name, online: true }]
-            return {
-              ...s,
-              joined,
-              joinedCount: Math.max(s.joinedCount, joined.length),
-              answers: [...rest, { studentId: ev.studentId!, name, correct: !!p.correct }],
-            }
-          })
-          break
-        }
-        case "fullscreen_changed": {
-          if (!ev.studentId) break
-          setState((s) => {
-            const rest = s.notFullscreen.filter((n) => n.studentId !== ev.studentId)
-            return {
-              ...s,
-              notFullscreen: p.isFullscreen
-                ? rest
-                : [...rest, { studentId: ev.studentId!, name: ev.studentName ?? "Học sinh" }],
-            }
-          })
-          break
-        }
-        case "session_ended": {
-          setState((s) => ({ ...s, phase: "ended" }))
-          break
-        }
+
+      es.onerror = () => {
+        setState((s) => ({ ...s, connected: false }))
       }
     }
 
-    es.onerror = () => setState((s) => ({ ...s, connected: false }))
-    return () => es.close()
-  }, [sessionId, flashJoinBadge])
+    open()
+
+    return () => {
+      closed = true
+      es?.close()
+    }
+  }, [sessionId, flashJoinBadge, refresh])
+
+  useEffect(() => {
+    const tick = () => {
+      void refresh()
+    }
+    const iv = setInterval(tick, 2000)
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refresh()
+    }
+    document.addEventListener("visibilitychange", onVisible)
+    window.addEventListener("focus", onVisible)
+    return () => {
+      clearInterval(iv)
+      document.removeEventListener("visibilitychange", onVisible)
+      window.removeEventListener("focus", onVisible)
+    }
+  }, [refresh])
 
   const applyQuestion = useCallback(
     (payload: {
@@ -257,13 +345,17 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
       startedAt: number | null
       serverNow: number
     }) => {
-      questionStartedAtRef.current = payload.startedAt ?? Date.now()
+      const startedAt = payload.startedAt ?? Date.now()
+      if (startedAt > 0) lastStartedAtRef.current = Math.max(lastStartedAtRef.current, startedAt)
+      questionStartedAtRef.current = startedAt
       clockOffsetRef.current = Date.now() - payload.serverNow
       const next =
         payload.next ??
         (payload.index >= 0 && payload.index + 1 < outlineRef.current.length
           ? outlineRef.current[payload.index + 1]
           : null)
+      const limit = payload.question?.timeLimitSec ?? null
+      setRemainingSec(limit)
       setState((s) => ({
         ...s,
         phase: "question",
@@ -271,7 +363,7 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
         total: payload.total,
         question: payload.question,
         revealed: null,
-        timeLimitSec: payload.question?.timeLimitSec ?? null,
+        timeLimitSec: limit,
         answers: [],
         teacherCurrentAnswer: null,
         teacherNext: next,
@@ -289,32 +381,6 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
     }))
   }, [])
 
-  const refresh = useCallback(async () => {
-    const snap = await getLiveQuizSnapshot(sessionId)
-    clockOffsetRef.current = Date.now() - snap.serverNow
-    questionStartedAtRef.current = snap.questionStartedAt
-    outlineRef.current = (snap.teacherExtras?.outline as LiveQuestionView[]) ?? []
-    setState((s) => ({
-      ...s,
-      loading: false,
-      phase: snap.phase as LiveQuizView["phase"],
-      className: snap.className,
-      isTeacher: snap.isTeacher,
-      currentIndex: snap.currentIndex,
-      total: snap.total,
-      question: snap.question,
-      revealed: snap.revealed,
-      timeLimitSec: snap.question?.timeLimitSec ?? null,
-      joinedCount: snap.joinedCount,
-      joined: snap.joined ?? s.joined,
-      answers: snap.answers,
-      notFullscreen: snap.notFullscreen,
-      teacherNext: snap.teacherExtras?.next ?? null,
-      teacherCurrentAnswer: snap.teacherExtras?.current ?? null,
-    }))
-  }, [sessionId])
-
-  // Đồng hồ đếm ngược cục bộ
   useEffect(() => {
     const tick = () => {
       const startedAt = questionStartedAtRef.current
@@ -330,7 +396,7 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
     tick()
     const iv = setInterval(tick, 250)
     return () => clearInterval(iv)
-  }, [state.phase, state.timeLimitSec])
+  }, [state.phase, state.timeLimitSec, state.currentIndex, state.question?.id])
 
   return { ...state, remainingSec, refresh, applyQuestion, applyReveal }
 }
