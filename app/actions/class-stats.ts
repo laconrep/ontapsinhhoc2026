@@ -191,7 +191,11 @@ export async function getClassStats(classId: string): Promise<ClassStatsDto> {
           .select({ id: questions.id, knowledgePointId: questions.knowledgePointId })
           .from(questions)
           .where(inArray(questions.knowledgePointId, assignedKpIds))
-  const questionToKp = new Map(questionRows.map((q) => [q.id, q.knowledgePointId]))
+  const questionToKp = new Map(
+    questionRows
+      .filter((q): q is { id: string; knowledgePointId: string } => q.knowledgePointId != null)
+      .map((q) => [q.id, q.knowledgePointId]),
+  )
   const attemptIds = quizRows.filter((q) => q.completedAt).map((q) => q.id)
   const answerRows =
     attemptIds.length === 0

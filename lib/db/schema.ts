@@ -140,14 +140,18 @@ export const knowledgePoints = pgTable("knowledge_points", {
 
 export const questions = pgTable("questions", {
   id: uuid("id").primaryKey().defaultRandom(),
-  knowledgePointId: uuid("knowledgePointId")
+  lessonId: uuid("lessonId")
     .notNull()
-    .references(() => knowledgePoints.id, { onDelete: "cascade" }),
+    .references(() => lessons.id, { onDelete: "cascade" }),
+  knowledgePointId: uuid("knowledgePointId").references(() => knowledgePoints.id, {
+    onDelete: "set null",
+  }),
   type: text("type", { enum: ["MC", "TF", "SA", "FILL", "DRAG"] }).notNull(),
   content: text("content").notNull(),
   bodyHtml: text("bodyHtml"),
   difficulty: integer("difficulty").notNull().default(1),
   timeLimitSec: integer("timeLimitSec"),
+  order: integer("order").notNull().default(0),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 

@@ -26,6 +26,7 @@ import {
   seededShuffle,
   type FillDragStatus,
 } from "@/lib/grading"
+import { selectQuizQuestions } from "@/lib/quiz-selection"
 import type { KnowledgePointDto, QuestionDto, UnderlinedTerm, QuizResultDto } from "@/types"
 
 // ============ Helpers ============
@@ -268,6 +269,7 @@ export async function getTab2Questions(lessonId: string): Promise<{
       const terms = (kp.underlinedTerms as UnderlinedTerm[]) ?? []
       return {
         id: `fill-${kp.id}`,
+        lessonId,
         knowledgePointId: kp.id,
         type: "FILL" as const,
         content: kp.content,
@@ -480,7 +482,7 @@ type QuizQuestionForClient = {
   type: "MC" | "TF" | "SA"
   content: string
   bodyHtml?: string | null
-  knowledgePointId: string
+  knowledgePointId: string | null
   options: { id: string; content: string; bodyHtml?: string | null }[] // MC/TF (không lộ isCorrect)
 }
 
@@ -494,14 +496,17 @@ export async function startQuiz(lessonId: string): Promise<{
   await ensureSchema()
   await assertLessonAccess(student.id, lessonId)
 
-  const kpIds = await getKpIdsOfLesson(lessonId)
-  if (kpIds.length === 0) throw new Error("Bài học chưa có câu hỏi")
-
   const qRows = await db
     .select()
     .from(questions)
-    .where(inArray(questions.knowledgePointId, kpIds))
+    .where(and(eq(questions.lessonId, lessonId), inArray(questions.type, ["MC", "TF", "SA"])))
   if (qRows.length === 0) throw new Error("Bài học chưa có câu hỏi")
+
+  const kps = await db
+    .select({ id: knowledgePoints.id, order: knowledgePoints.order })
+    .from(knowledgePoints)
+    .where(eq(knowledgePoints.lessonId, lessonId))
+    .orderBy(asc(knowledgePoints.order))
 
   const optRows = await db
     .select()
@@ -528,12 +533,14 @@ export async function startQuiz(lessonId: string): Promise<{
   const attemptNumber = Number(doneCount) + 1
   const rng = seededRng(`${student.id}:${lessonId}:${attemptNumber}`)
 
-  // phân nhóm & giới hạn (scale nếu thiếu): MC≤18, TF≤4, SA≤6
-  const byType = (t: string) => qRows.filter((q) => q.type === t)
-  const mc = seededShuffle(byType("MC"), rng).slice(0, 18)
-  const tf = seededShuffle(byType("TF"), rng).slice(0, 4)
-  const sa = seededShuffle(byType("SA"), rng).slice(0, 6)
-  const chosen = seededShuffle([...mc, ...tf, ...sa], rng)
+  const selected = selectQuizQuestions(
+    qRows,
+    kps,
+    (q) => q.knowledgePointId != null,
+    rng,
+  )
+  const byId = new Map(qRows.map((q) => [q.id, q]))
+  const chosen = selected.chosen.map((id) => byId.get(id)).filter((q): q is (typeof qRows)[number] => Boolean(q))
 
   // tính totalSlots: MC=1, SA=1, TF=số ý
   let totalSlots = 0
@@ -688,7 +695,7 @@ export async function submitQuiz(
   }
 
   // 3) seed spaced_repetition cho các KP trong bài
-  const kpIds = [...new Set(qRows.map((q) => q.knowledgePointId))]
+  const kpIds = [...new Set(qRows.map((q) => q.knowledgePointId).filter((id): id is string => Boolean(id)))]
   const tomorrow = new Date()
   tomorrow.setDate(tomorrow.getDate() + 1)
   for (const kpId of kpIds) {

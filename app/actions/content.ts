@@ -1,10 +1,10 @@
 "use server"
 
-import { db } from "@/lib/db"
+import { db, ensureSchema } from "@/lib/db"
 import { chapters, lessons, knowledgePoints, questions } from "@/lib/db/schema"
 import { requireRole } from "@/lib/auth-helpers"
 import { and, asc, eq, sql } from "drizzle-orm"
-import { revalidatePath } from "next/cache"
+import { revalidatePath, unstable_noStore as noStore } from "next/cache"
 import type { ChapterDto, LessonDto, KnowledgePointDto, UnderlinedTerm } from "@/types"
 
 // ---------- Chapters ----------
@@ -134,6 +134,8 @@ export async function getLessonDetail(id: string): Promise<{
   knowledgePoints: (KnowledgePointDto & { questionCount: number })[]
 } | null> {
   const user = await requireRole("teacher")
+  noStore()
+  await ensureSchema()
   const [lesson] = await db
     .select({
       id: lessons.id,

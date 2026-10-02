@@ -157,8 +157,9 @@ async function persistParseResult(
       result.lessonIds.push(lessonId)
 
       let kpOrder = 0
+      let qOrder = 0
       for (const pKp of pLesson.knowledgePoints) {
-        const [kpRow] = await db
+        await db
           .insert(knowledgePoints)
           .values({
             lessonId,
@@ -166,14 +167,15 @@ async function persistParseResult(
             underlinedTerms: pKp.underlinedTerms,
             order: kpOrder++,
           })
-          .returning({ id: knowledgePoints.id })
         result.createdKps += 1
 
         for (const pQ of pKp.questions) {
           const [qRow] = await db
             .insert(questions)
             .values({
-              knowledgePointId: kpRow.id,
+              lessonId,
+              knowledgePointId: null,
+              order: qOrder++,
               type: pQ.type,
               content: pQ.content,
               bodyHtml: pQ.bodyHtml ?? null,
@@ -207,6 +209,7 @@ async function persistParseResult(
 
   revalidatePath("/teacher/lessons")
   revalidatePath("/teacher/questions")
+  for (const id of result.lessonIds) revalidatePath(`/teacher/lessons/${id}`)
   return result
 }
 
