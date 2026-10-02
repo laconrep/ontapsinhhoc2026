@@ -28,8 +28,6 @@ import {
   X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
@@ -53,9 +51,12 @@ import {
 } from "@/app/actions/content"
 import { deleteQuestion, moveQuestion, type LessonQuestionItem } from "@/app/actions/questions"
 import { QuestionFormDialog } from "@/components/teacher/question-form-dialog"
+import { KpContentEditor } from "@/components/teacher/kp-content-editor"
 import { QuestionStem } from "@/components/question/question-stem"
+import { extractBlanks } from "@/lib/worksheet-parser"
+import { renderMarkedContent } from "@/lib/kp-render"
 import { cn } from "@/lib/utils"
-import type { KnowledgePointDto, LessonDto, QuestionDto, UnderlinedTerm } from "@/types"
+import type { KnowledgePointDto, LessonDto, QuestionDto } from "@/types"
 
 type KP = KnowledgePointDto & { questionCount: number }
 
@@ -72,22 +73,6 @@ const TYPE_LABEL: Record<string, string> = {
   SA: "Trả lời ngắn",
   FILL: "Điền khuyết",
   DRAG: "Kéo thả",
-}
-
-function deriveTerms(content: string, previous: UnderlinedTerm[]): UnderlinedTerm[] {
-  const matches = [...content.matchAll(/"([^"]+)"/g)].map((m) => m[1])
-  return matches.map((text, i) => {
-    const prev = previous.find((p) => p.text === text)
-    return (
-      prev ?? {
-        text,
-        slotIndex: i,
-        allowSwap: false,
-        swapGroupId: null,
-        extraAccepted: [],
-      }
-    )
-  })
 }
 
 function toQuestionDto(q: LessonQuestionItem): QuestionDto {
@@ -323,7 +308,7 @@ export function LessonDetail({
   const [isPending, startTransition] = useTransition()
 
   const [kpDialog, setKpDialog] = useState<{ mode: "create" | "edit"; kp?: KP } | null>(null)
-  const [content, setContent] = useState("")
+  const [rawContent, setRawContent] = useState("")
   const [qDialog, setQDialog] = useState<{
     mode: "create" | "edit"
     q?: QuestionDto
@@ -368,19 +353,23 @@ export function LessonDetail({
   }
 
   function submitKp() {
-    if (!content.trim()) return
-    const terms = deriveTerms(content, kpDialog?.kp?.underlinedTerms ?? [])
+    if (!rawContent.trim()) return
+    const { content, underlinedTerms } = extractBlanks(rawContent)
+    if (underlinedTerms.length === 0) {
+      toast.error("Điểm kiến thức cần ít nhất 1 ô trống (gạch chân hoặc ngoặc kép).")
+      return
+    }
     startTransition(async () => {
       try {
         if (kpDialog?.mode === "create") {
-          await createKnowledgePoint(lesson.id, content, terms)
+          await createKnowledgePoint(lesson.id, content, underlinedTerms)
           toast.success("Đã thêm điểm kiến thức")
         } else if (kpDialog?.kp) {
-          await updateKnowledgePoint(kpDialog.kp.id, content, terms)
+          await updateKnowledgePoint(kpDialog.kp.id, content, underlinedTerms)
           toast.success("Đã cập nhật điểm kiến thức")
         }
         setKpDialog(null)
-        setContent("")
+        setRawContent("")
         await refresh()
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Có lỗi xảy ra")
@@ -562,7 +551,7 @@ export function LessonDetail({
                 size="sm"
                 onClick={() => {
                   setKpDialog({ mode: "create" })
-                  setContent("")
+                  setRawContent("")
                 }}
               >
                 <Plus className="h-4 w-4" />
@@ -593,7 +582,7 @@ export function LessonDetail({
                       onToggle={() => setExpandedKpId(expandedKpId === kp.id ? null : kp.id)}
                       onEdit={() => {
                         setKpDialog({ mode: "edit", kp })
-                        setContent(kp.content)
+                        setRawContent(renderMarkedContent(kp.content, kp.underlinedTerms))
                       }}
                       onDelete={() => removeKp(kp.id)}
                       onAddQuestion={() => setQDialog({ mode: "create", kpId: kp.id })}
@@ -638,30 +627,10 @@ export function LessonDetail({
               {kpDialog?.mode === "create" ? "Thêm điểm kiến thức" : "Chỉnh sửa điểm kiến thức"}
             </DialogTitle>
             <DialogDescription>
-              Đặt từ khoá quan trọng trong dấu ngoặc kép, ví dụ: đơn phân là &quot;nucleotide&quot;.
+              Giữ Ctrl + click để gạch chân; thêm ngoặc kép để cho phép hoán đổi vị trí.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="kp-content">Nội dung</Label>
-            <Textarea
-              id="kp-content"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder='VD: ADN cấu tạo theo nguyên tắc "đa phân", đơn phân là "nucleotide"'
-              rows={4}
-              autoFocus
-            />
-            {content && (
-              <p className="text-xs text-muted-foreground">
-                Từ khoá điền khuyết:{" "}
-                {deriveTerms(content, []).length > 0
-                  ? deriveTerms(content, [])
-                      .map((t) => t.text)
-                      .join(", ")
-                  : "chưa có (dùng dấu ngoặc kép)"}
-              </p>
-            )}
-          </div>
+          <KpContentEditor value={rawContent} onChange={setRawContent} autoFocus />
           <DialogFooter>
             <Button variant="outline" onClick={() => setKpDialog(null)}>
               Huỷ

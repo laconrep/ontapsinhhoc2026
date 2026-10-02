@@ -372,8 +372,15 @@ Dialog Thêm/Sửa KP dùng đúng cơ chế của `import-error-fix.tsx`: sửa
 
 ### Báo cáo phiên 5 (điền sau khi code)
 - Đã làm:
+  - `renderMarkedContent` dựng lại marker `__...__` / `__"..."` + synonyms khi mở sửa KP; `parseMarkedContent` re-export `extractBlanks`.
+  - `KpContentEditor`: textarea mono, Ctrl+click gọi `applyKpWrap`, preview `highlightBlanks`, cảnh báo khi chưa có ô trống.
+  - Dialog KP trong `lesson-detail` bỏ `deriveTerms`; tạo/sửa lưu bằng `extractBlanks`.
 - File đã sửa/tạo:
+  - `lib/kp-render.ts` (tạo mới)
+  - `components/teacher/kp-content-editor.tsx` (tạo mới)
+  - `components/teacher/lesson-detail.tsx`
 - Việc tiếp theo cho phiên 6:
+  - `lib/quiz-selection.ts` chia đề theo KP / ngẫu nhiên; sửa `startQuiz` và live quiz join theo `lessonId`.
 
 ---
 
