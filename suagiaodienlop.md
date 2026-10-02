@@ -401,9 +401,9 @@ atRisk -> tone); build nếu được.
 **Commit:** `wip(class): phien 6 - e2e va chot`
 
 **Báo cáo phiên 6 (điền sau khi code):**
-- Đã làm:
-- File đã sửa/tạo:
-- Kiểm thử:
+- Đã làm: Script e2e giả lập giao 2 bài ready -> 2 assignment; HS progress 1 bài completed, bài còn lại overdue vào "Bài cần làm". `buildOverview`/`buildAssignmentStat` đúng input mẫu. Shape `getClassStats` có overview+assignments (bỏ qua DB). Rà soát tab GV không vỡ, hạn quá khứ đỏ, overdue ưu tiên ở "Bài cần làm". Sửa empty-state tab thống kê không che nội dung khi có dữ liệu.
+- File đã sửa/tạo: `scripts/check-class-phien6.mjs` (mới), `components/teacher/class-stats-panel.tsx`, `suagiaodienlop.md`
+- Kiểm thử: `npx tsx scripts/check-class-phien6.mjs` OK. `npm run lint`/`npm run build` không chạy (chưa cài node_modules).
 - Việc tiếp theo: không.
 
 ---
@@ -417,13 +417,13 @@ atRisk -> tone); build nếu được.
 
 ## 5. Trạng thái
 
-- Phiên hiện tại: xong 5.
+- Phiên hiện tại: xong 6.
 - Phiên 1: xong
 - Phiên 2: xong
 - Phiên 3: xong
 - Phiên 4: xong
 - Phiên 5: xong
-- Phiên 6: chưa
+- Phiên 6: xong
 
 ## 6. Việc không làm
 

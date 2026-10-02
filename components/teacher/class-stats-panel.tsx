@@ -297,9 +297,7 @@ export function ClassStatsPanel({ stats }: { stats: ClassStatsDto }) {
       <div className="p-5">
         {empty ? (
           <p className="py-6 text-center text-sm text-muted-foreground">Chưa có dữ liệu thống kê cho lớp này.</p>
-        ) : null}
-
-        {tab === "overview" && !empty ? (
+        ) : tab === "overview" ? (
           <div className="flex flex-col gap-6">
             <OverviewCards overview={overview} />
             <div>
@@ -314,37 +312,34 @@ export function ClassStatsPanel({ stats }: { stats: ClassStatsDto }) {
               <StudentTable students={stats.students} />
             </div>
           </div>
-        ) : null}
-
-        {tab === "students" && !empty ? <StudentTable students={stats.students} /> : null}
-
-        {tab === "knowledge" &&
-          (hasKp ? (
-            <ul className="flex flex-col gap-4">
-              {stats.knowledgePoints.map((k) => (
-                <li key={k.kpId} className="flex flex-col gap-2">
-                  <p className="text-sm text-foreground line-clamp-2">
-                    {k.content}
-                    {k.hardFlag ? (
-                      <span className="ml-2 inline-flex items-center rounded-full bg-destructive/15 px-2 py-0.5 text-[11px] font-medium text-destructive">
-                        Khó
-                      </span>
-                    ) : null}
-                  </p>
-                  <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
-                    <StatBar label="Đã nắm" value={k.knownPercent} tone="primary" />
-                    <StatBar label="Chủ quan sai" value={k.overconfidentPercent} tone="destructive" />
-                    <StatBar label="Đã củng cố" value={k.reinforcedPercent} tone="accent" />
-                    <StatBar label="Đúng lần đầu" value={k.firstTryPercent ?? 0} tone="primary" />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              Chưa có điểm kiến thức nào ở trạng thái sẵn sàng.
-            </p>
-          ))}
+        ) : tab === "students" ? (
+          <StudentTable students={stats.students} />
+        ) : hasKp ? (
+          <ul className="flex flex-col gap-4">
+            {stats.knowledgePoints.map((k) => (
+              <li key={k.kpId} className="flex flex-col gap-2">
+                <p className="text-sm text-foreground line-clamp-2">
+                  {k.content}
+                  {k.hardFlag ? (
+                    <span className="ml-2 inline-flex items-center rounded-full bg-destructive/15 px-2 py-0.5 text-[11px] font-medium text-destructive">
+                      Khó
+                    </span>
+                  ) : null}
+                </p>
+                <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+                  <StatBar label="Đã nắm" value={k.knownPercent} tone="primary" />
+                  <StatBar label="Chủ quan sai" value={k.overconfidentPercent} tone="destructive" />
+                  <StatBar label="Đã củng cố" value={k.reinforcedPercent} tone="accent" />
+                  <StatBar label="Đúng lần đầu" value={k.firstTryPercent ?? 0} tone="primary" />
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            Chưa có điểm kiến thức nào ở trạng thái sẵn sàng.
+          </p>
+        )}
       </div>
     </section>
   )
