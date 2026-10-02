@@ -76,7 +76,8 @@ export interface UnderlinedTerm {
 // === Questions ===
 export interface QuestionDto {
   id: string
-  knowledgePointId: string
+  lessonId: string
+  knowledgePointId: string | null
   type: "MC" | "TF" | "SA" | "FILL" | "DRAG"
   content: string
   bodyHtml?: string | null

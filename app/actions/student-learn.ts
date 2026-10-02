@@ -268,6 +268,7 @@ export async function getTab2Questions(lessonId: string): Promise<{
       const terms = (kp.underlinedTerms as UnderlinedTerm[]) ?? []
       return {
         id: `fill-${kp.id}`,
+        lessonId,
         knowledgePointId: kp.id,
         type: "FILL" as const,
         content: kp.content,
@@ -546,7 +547,7 @@ export async function startQuiz(lessonId: string): Promise<{
         type: "MC",
         content: q.content,
         bodyHtml: q.bodyHtml ?? null,
-        knowledgePointId: q.knowledgePointId,
+        knowledgePointId: q.knowledgePointId ?? "",
         options: seededShuffle(opts, rng).map((o) => ({ id: o.id, content: o.content, bodyHtml: o.bodyHtml ?? null })),
       }
     }
@@ -557,7 +558,7 @@ export async function startQuiz(lessonId: string): Promise<{
         type: "TF",
         content: q.content,
         bodyHtml: q.bodyHtml ?? null,
-        knowledgePointId: q.knowledgePointId,
+        knowledgePointId: q.knowledgePointId ?? "",
         options: opts.map((o) => ({ id: o.id, content: o.content, bodyHtml: o.bodyHtml ?? null })),
       }
     }
@@ -568,7 +569,7 @@ export async function startQuiz(lessonId: string): Promise<{
       type: "SA",
       content: q.content,
       bodyHtml: q.bodyHtml ?? null,
-      knowledgePointId: q.knowledgePointId,
+      knowledgePointId: q.knowledgePointId ?? "",
       options: [],
     }
   })
@@ -688,7 +689,7 @@ export async function submitQuiz(
   }
 
   // 3) seed spaced_repetition cho các KP trong bài
-  const kpIds = [...new Set(qRows.map((q) => q.knowledgePointId))]
+  const kpIds = [...new Set(qRows.map((q) => q.knowledgePointId).filter((id): id is string => Boolean(id)))]
   const tomorrow = new Date()
   tomorrow.setDate(tomorrow.getDate() + 1)
   for (const kpId of kpIds) {

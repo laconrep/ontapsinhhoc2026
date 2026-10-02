@@ -173,8 +173,20 @@ Mỗi câu hỏi có thể tồn tại **không thuộc KP nào** nhưng vẫn t
 
 ### Báo cáo phiên 1 (điền sau khi code)
 - Đã làm:
+  - Schema `questions`: thêm `lessonId` (NOT NULL, FK cascade), `order` (default 0); `knowledgePointId` nullable + `ON DELETE SET NULL`.
+  - `ensureSchema()`: thêm cột, backfill `lessonId` từ KP, DROP NOT NULL `knowledgePointId`, tạo FK `lessonId`, đổi FK KP sang SET NULL, rồi SET NOT NULL `lessonId`.
+  - Import: câu vào pool chưa gán (`knowledgePointId = null`) + ghi `lessonId` + `order` tăng dần theo bài.
+  - `QuestionDto`: `knowledgePointId: string | null`, thêm `lessonId`.
+  - Chỉnh mapping tối thiểu (`createQuestion` ghi `lessonId`, `getQuestionsByKp` trả `lessonId`, null-guard `updateQuestion`/`deleteQuestion`/`startQuiz`) để `tsc --noEmit` xanh.
 - File đã sửa/tạo:
+  - `lib/db/schema.ts`
+  - `lib/db/index.ts`
+  - `types/index.ts`
+  - `lib/worksheet-import.ts`
+  - `app/actions/questions.ts`
+  - `app/actions/student-learn.ts` (null-guard tối thiểu, chưa đổi logic chọn câu)
 - Việc tiếp theo cho phiên 2:
+  - Server actions pool: `getLessonQuestions`, `moveQuestion`, `reorderQuestions`; sửa `getQuestionBank` join theo `lessonId`; sửa text confirm xoá KP.
 
 ---
 

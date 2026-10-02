@@ -106,6 +106,7 @@ export async function getQuestionsByKp(knowledgePointId: string): Promise<Questi
       .map((o) => ({ id: o.id, content: o.content, bodyHtml: o.bodyHtml ?? null, isCorrect: o.isCorrect, order: o.order }))
     return {
       id: q.id,
+      lessonId: q.lessonId,
       knowledgePointId: q.knowledgePointId,
       type: q.type as QuestionType,
       content: q.content,
@@ -146,6 +147,7 @@ export async function createQuestion(input: {
   const [q] = await db
     .insert(questions)
     .values({
+      lessonId,
       knowledgePointId: input.knowledgePointId,
       type: input.type,
       content: input.content.trim(),
@@ -210,6 +212,7 @@ export async function updateQuestion(input: {
       })),
     )
   }
+  if (!q.kpId) throw new Error("Không tìm thấy điểm kiến thức")
   const lessonId = await assertKpOwner(q.kpId, user.id)
   revalidatePath(`/teacher/lessons/${lessonId}`)
 }
@@ -223,6 +226,7 @@ export async function deleteQuestion(id: string): Promise<void> {
     .innerJoin(lessons, eq(lessons.id, knowledgePoints.lessonId))
     .where(and(eq(questions.id, id), eq(lessons.teacherId, user.id)))
   if (!q) throw new Error("Không tìm thấy câu hỏi")
+  if (!q.kpId) throw new Error("Không tìm thấy điểm kiến thức")
   const lessonId = await assertKpOwner(q.kpId, user.id)
   await db.delete(questions).where(eq(questions.id, id))
   revalidatePath(`/teacher/lessons/${lessonId}`)

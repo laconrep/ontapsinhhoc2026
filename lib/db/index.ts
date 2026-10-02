@@ -14,12 +14,59 @@ export const db = drizzle(pool, { schema })
 
 let schemaReady: Promise<void> | null = null
 
-/** Cot bodyHtml them o phien 2, repo khong co migrate — dam bao DB that co cot. */
+/** Cot bodyHtml them o phien 2; lessonId/order/nullable KP o phien 1. */
 export function ensureSchema(): Promise<void> {
   if (!schemaReady) {
     schemaReady = pool
       .query(`ALTER TABLE questions ADD COLUMN IF NOT EXISTS "bodyHtml" text`)
       .then(() => pool.query(`ALTER TABLE question_options ADD COLUMN IF NOT EXISTS "bodyHtml" text`))
+      .then(() =>
+        pool.query(`ALTER TABLE questions ADD COLUMN IF NOT EXISTS "order" integer NOT NULL DEFAULT 0`),
+      )
+      .then(() => pool.query(`ALTER TABLE questions ADD COLUMN IF NOT EXISTS "lessonId" uuid`))
+      .then(() =>
+        pool.query(`
+          UPDATE questions q
+             SET "lessonId" = kp."lessonId"
+            FROM knowledge_points kp
+           WHERE q."knowledgePointId" = kp.id AND q."lessonId" IS NULL
+        `),
+      )
+      .then(() => pool.query(`ALTER TABLE questions ALTER COLUMN "knowledgePointId" DROP NOT NULL`))
+      .then(() =>
+        pool.query(`
+          DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'questions_lessonId_lessons_id_fk') THEN
+              ALTER TABLE questions
+                ADD CONSTRAINT "questions_lessonId_lessons_id_fk"
+                FOREIGN KEY ("lessonId") REFERENCES lessons(id) ON DELETE CASCADE;
+            END IF;
+          END $$;
+        `),
+      )
+      .then(() =>
+        pool.query(`
+          DO $$
+          DECLARE cname text;
+          BEGIN
+            SELECT conname INTO cname
+              FROM pg_constraint
+             WHERE conrelid = 'questions'::regclass
+               AND contype = 'f'
+               AND pg_get_constraintdef(oid) ILIKE '%knowledgePointId%';
+            IF cname IS NOT NULL THEN EXECUTE format('ALTER TABLE questions DROP CONSTRAINT %I', cname); END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+               WHERE conrelid = 'questions'::regclass AND contype='f'
+                 AND pg_get_constraintdef(oid) ILIKE '%knowledgePointId%'
+            ) THEN
+              ALTER TABLE questions ADD CONSTRAINT "questions_knowledgePointId_fk"
+                FOREIGN KEY ("knowledgePointId") REFERENCES knowledge_points(id) ON DELETE SET NULL;
+            END IF;
+          END $$;
+        `),
+      )
+      .then(() => pool.query(`ALTER TABLE questions ALTER COLUMN "lessonId" SET NOT NULL`))
       .then(() => undefined)
       .catch((e) => {
         schemaReady = null
