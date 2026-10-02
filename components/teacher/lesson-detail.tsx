@@ -110,7 +110,7 @@ export function LessonDetail({
   }
 
   function removeKp(id: string) {
-    if (!confirm("Xoá điểm kiến thức này và toàn bộ câu hỏi bên trong?")) return
+    if (!confirm("Xoá điểm kiến thức này? Các câu hỏi trong đó sẽ trở về khung câu hỏi (không bị xoá).")) return
     startTransition(async () => {
       try {
         await deleteKnowledgePoint(id)

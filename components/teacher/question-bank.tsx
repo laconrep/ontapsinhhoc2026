@@ -34,7 +34,11 @@ export function QuestionBank({ items }: { items: QuestionBankItem[] }) {
     return items.filter((it) => {
       if (typeFilter !== "all" && it.type !== typeFilter) return false
       if (lessonFilter !== "all" && it.lessonId !== lessonFilter) return false
-      if (q && !it.content.toLowerCase().includes(q) && !it.knowledgePointContent.toLowerCase().includes(q))
+      if (
+        q &&
+        !it.content.toLowerCase().includes(q) &&
+        !(it.knowledgePointContent ?? "").toLowerCase().includes(q)
+      )
         return false
       return true
     })

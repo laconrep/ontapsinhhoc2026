@@ -240,8 +240,19 @@ Có API server cho UI: lấy toàn bộ câu của bài (kèm KP đang gán), g�
 
 ### Báo cáo phiên 2 (điền sau khi code)
 - Đã làm:
+  - `getLessonQuestions(lessonId)` trả toàn bộ câu của bài (đã gán + chưa gán) kèm options, sort theo `order`.
+  - `moveQuestion(questionId, targetKpId, targetIndex?)` xác thực quyền + KP cùng bài, rồi gán/bỏ gán và chuẩn hoá `order`.
+  - `reorderQuestions(kpId, orderedIds)` ghi `order` + `knowledgePointId` theo danh sách (pool khi `kpId = null`).
+  - `getQuestionBank` leftJoin KP, join lesson qua `questions.lessonId`; type cho phép null.
+  - `updateQuestion`/`deleteQuestion` join theo `lessonId` để vẫn sửa/xoá câu chưa gán.
+  - Đổi text confirm xoá KP: câu trở về pool, không bị xoá.
 - File đã sửa/tạo:
+  - `app/actions/questions.ts`
+  - `app/actions/content.ts` (`ensureSchema` trong `getLessonDetail`)
+  - `components/teacher/question-bank.tsx`
+  - `components/teacher/lesson-detail.tsx` (text confirm xoá KP)
 - Việc tiếp theo cho phiên 3:
+  - UI 2 khung + 2 tab + kéo thả gán câu vào KP (`lesson-detail.tsx`), tách `QuestionFormDialog`.
 
 ---
 

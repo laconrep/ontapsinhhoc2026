@@ -3,7 +3,7 @@
 import { db, ensureSchema } from "@/lib/db"
 import { questions, questionOptions, knowledgePoints, lessons } from "@/lib/db/schema"
 import { requireRole } from "@/lib/auth-helpers"
-import { and, asc, eq } from "drizzle-orm"
+import { and, asc, eq, inArray, isNull } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { chapters } from "@/lib/db/schema"
 import type { QuestionDto, QuestionOptionDto } from "@/types"
@@ -18,15 +18,34 @@ export interface QuestionBankItem {
   chapterTitle: string
   lessonId: string
   lessonTitle: string
-  knowledgePointId: string
-  knowledgePointContent: string
+  knowledgePointId: string | null
+  knowledgePointContent: string | null
   optionCount: number
   correctAnswer?: string
+}
+
+export interface LessonQuestionItem {
+  id: string
+  lessonId: string
+  knowledgePointId: string | null
+  type: QuestionType
+  content: string
+  bodyHtml: string | null
+  order: number
+  options: QuestionOptionDto[]
+  correctAnswer?: string
+}
+
+function revalidateQuestionPaths(lessonId: string) {
+  revalidatePath("/teacher/lessons")
+  revalidatePath("/teacher/questions")
+  revalidatePath(`/teacher/lessons/${lessonId}`)
 }
 
 // Toàn bộ câu hỏi của giáo viên, kèm ngữ cảnh chương/bài/điểm kiến thức để lọc và tra cứu.
 export async function getQuestionBank(): Promise<QuestionBankItem[]> {
   const user = await requireRole("teacher")
+  await ensureSchema()
 
   const rows = await db
     .select({
@@ -41,8 +60,8 @@ export async function getQuestionBank(): Promise<QuestionBankItem[]> {
       knowledgePointContent: knowledgePoints.content,
     })
     .from(questions)
-    .innerJoin(knowledgePoints, eq(knowledgePoints.id, questions.knowledgePointId))
-    .innerJoin(lessons, eq(lessons.id, knowledgePoints.lessonId))
+    .leftJoin(knowledgePoints, eq(knowledgePoints.id, questions.knowledgePointId))
+    .innerJoin(lessons, eq(lessons.id, questions.lessonId))
     .innerJoin(chapters, eq(chapters.id, lessons.chapterId))
     .where(eq(lessons.teacherId, user.id))
     .orderBy(asc(chapters.order), asc(lessons.order), asc(knowledgePoints.order))
@@ -117,6 +136,116 @@ export async function getQuestionsByKp(knowledgePointId: string): Promise<Questi
   })
 }
 
+export async function getLessonQuestions(lessonId: string): Promise<LessonQuestionItem[]> {
+  const user = await requireRole("teacher")
+  await ensureSchema()
+  const [lesson] = await db
+    .select({ id: lessons.id })
+    .from(lessons)
+    .where(and(eq(lessons.id, lessonId), eq(lessons.teacherId, user.id)))
+  if (!lesson) throw new Error("Không tìm thấy bài giảng")
+
+  const qs = await db
+    .select()
+    .from(questions)
+    .where(eq(questions.lessonId, lessonId))
+    .orderBy(asc(questions.order), asc(questions.createdAt))
+
+  const opts = await db.select().from(questionOptions).orderBy(asc(questionOptions.order))
+
+  return qs.map((q) => {
+    const qOpts: QuestionOptionDto[] = opts
+      .filter((o) => o.questionId === q.id)
+      .map((o) => ({ id: o.id, content: o.content, bodyHtml: o.bodyHtml ?? null, isCorrect: o.isCorrect, order: o.order }))
+    return {
+      id: q.id,
+      lessonId: q.lessonId,
+      knowledgePointId: q.knowledgePointId,
+      type: q.type as QuestionType,
+      content: q.content,
+      bodyHtml: q.bodyHtml ?? null,
+      order: q.order,
+      options: qOpts,
+      correctAnswer: q.type === "SA" ? qOpts.find((o) => o.isCorrect)?.content : undefined,
+    }
+  })
+}
+
+async function assertQuestionOwner(questionId: string, teacherId: string) {
+  const [q] = await db
+    .select({ id: questions.id, lessonId: questions.lessonId })
+    .from(questions)
+    .innerJoin(lessons, eq(lessons.id, questions.lessonId))
+    .where(and(eq(questions.id, questionId), eq(lessons.teacherId, teacherId)))
+  if (!q) throw new Error("Không tìm thấy câu hỏi")
+  return q
+}
+
+async function assertKpInLesson(kpId: string, lessonId: string) {
+  const [kp] = await db
+    .select({ id: knowledgePoints.id, lessonId: knowledgePoints.lessonId })
+    .from(knowledgePoints)
+    .where(eq(knowledgePoints.id, kpId))
+  if (!kp || kp.lessonId !== lessonId) throw new Error("Điểm kiến thức không thuộc bài này")
+}
+
+export async function reorderQuestions(kpId: string | null, orderedIds: string[]): Promise<void> {
+  const user = await requireRole("teacher")
+  await ensureSchema()
+  if (orderedIds.length === 0) return
+
+  const rows = await db
+    .select({ id: questions.id, lessonId: questions.lessonId })
+    .from(questions)
+    .innerJoin(lessons, eq(lessons.id, questions.lessonId))
+    .where(and(inArray(questions.id, orderedIds), eq(lessons.teacherId, user.id)))
+  if (rows.length !== orderedIds.length) throw new Error("Không tìm thấy câu hỏi")
+
+  const lessonId = rows[0].lessonId
+  if (rows.some((r) => r.lessonId !== lessonId)) throw new Error("Câu hỏi không cùng bài giảng")
+  if (kpId) await assertKpInLesson(kpId, lessonId)
+
+  for (let i = 0; i < orderedIds.length; i++) {
+    await db
+      .update(questions)
+      .set({ order: i, knowledgePointId: kpId })
+      .where(eq(questions.id, orderedIds[i]))
+  }
+  revalidateQuestionPaths(lessonId)
+}
+
+export async function moveQuestion(
+  questionId: string,
+  targetKpId: string | null,
+  targetIndex?: number,
+): Promise<void> {
+  const user = await requireRole("teacher")
+  await ensureSchema()
+  const q = await assertQuestionOwner(questionId, user.id)
+  if (targetKpId) await assertKpInLesson(targetKpId, q.lessonId)
+
+  await db
+    .update(questions)
+    .set({ knowledgePointId: targetKpId })
+    .where(eq(questions.id, questionId))
+
+  const siblings = await db
+    .select({ id: questions.id })
+    .from(questions)
+    .where(
+      and(
+        eq(questions.lessonId, q.lessonId),
+        targetKpId === null ? isNull(questions.knowledgePointId) : eq(questions.knowledgePointId, targetKpId),
+      ),
+    )
+    .orderBy(asc(questions.order), asc(questions.createdAt))
+
+  const ids = siblings.map((s) => s.id).filter((id) => id !== questionId)
+  const idx = targetIndex === undefined ? ids.length : Math.max(0, Math.min(targetIndex, ids.length))
+  ids.splice(idx, 0, questionId)
+  await reorderQuestions(targetKpId, ids)
+}
+
 function validateOptions(type: QuestionType, options: OptionInput[]) {
   if (type === "MC") {
     if (options.length < 2) throw new Error("Câu trắc nghiệm cần ít nhất 2 lựa chọn")
@@ -168,7 +297,7 @@ export async function createQuestion(input: {
       })),
     )
   }
-  revalidatePath(`/teacher/lessons/${lessonId}`)
+  revalidateQuestionPaths(lessonId)
   return q
 }
 
@@ -182,10 +311,14 @@ export async function updateQuestion(input: {
   const user = await requireRole("teacher")
   await ensureSchema()
   const [q] = await db
-    .select({ id: questions.id, type: questions.type, kpId: questions.knowledgePointId })
+    .select({
+      id: questions.id,
+      type: questions.type,
+      kpId: questions.knowledgePointId,
+      lessonId: questions.lessonId,
+    })
     .from(questions)
-    .innerJoin(knowledgePoints, eq(knowledgePoints.id, questions.knowledgePointId))
-    .innerJoin(lessons, eq(lessons.id, knowledgePoints.lessonId))
+    .innerJoin(lessons, eq(lessons.id, questions.lessonId))
     .where(and(eq(questions.id, input.id), eq(lessons.teacherId, user.id)))
   if (!q) throw new Error("Không tìm thấy câu hỏi")
   validateOptions(q.type as QuestionType, input.options)
@@ -212,22 +345,17 @@ export async function updateQuestion(input: {
       })),
     )
   }
-  if (!q.kpId) throw new Error("Không tìm thấy điểm kiến thức")
-  const lessonId = await assertKpOwner(q.kpId, user.id)
-  revalidatePath(`/teacher/lessons/${lessonId}`)
+  revalidateQuestionPaths(q.lessonId)
 }
 
 export async function deleteQuestion(id: string): Promise<void> {
   const user = await requireRole("teacher")
   const [q] = await db
-    .select({ kpId: questions.knowledgePointId })
+    .select({ lessonId: questions.lessonId })
     .from(questions)
-    .innerJoin(knowledgePoints, eq(knowledgePoints.id, questions.knowledgePointId))
-    .innerJoin(lessons, eq(lessons.id, knowledgePoints.lessonId))
+    .innerJoin(lessons, eq(lessons.id, questions.lessonId))
     .where(and(eq(questions.id, id), eq(lessons.teacherId, user.id)))
   if (!q) throw new Error("Không tìm thấy câu hỏi")
-  if (!q.kpId) throw new Error("Không tìm thấy điểm kiến thức")
-  const lessonId = await assertKpOwner(q.kpId, user.id)
   await db.delete(questions).where(eq(questions.id, id))
-  revalidatePath(`/teacher/lessons/${lessonId}`)
+  revalidateQuestionPaths(q.lessonId)
 }
