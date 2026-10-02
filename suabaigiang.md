@@ -424,8 +424,16 @@ Khi GV đã gán câu vào KP, đề trắc nghiệm bố trí câu theo từng 
 
 ### Báo cáo phiên 6 (điền sau khi code)
 - Đã làm:
+  - `selectQuizQuestions`: mode `by-kp` (toàn bộ câu theo thứ tự KP rồi `order`, câu chưa gán xếp cuối) hoặc `random` (MC≤18, TF≤4, SA≤6) khi chưa gán câu nào.
+  - `startQuiz` lấy câu theo `questions.lessonId`; `QuizQuestionForClient.knowledgePointId` cho phép null.
+  - Live quiz: `loadQuizQuestions` join theo `lessonId` + dùng chung `selectQuizQuestions`; `getLessonsForQuiz` đếm câu qua `questions.lessonId`.
 - File đã sửa/tạo:
+  - `lib/quiz-selection.ts` (tạo mới)
+  - `app/actions/student-learn.ts`
+  - `app/actions/live-quiz.ts`
+  - `components/student/tab4-quiz.tsx`
 - Tồn đọng / việc sau:
+  - Phiên 4 (sortable trong KP + kéo trả pool) chưa làm. Kéo gán từ pool vào KP đã có ở phiên 3.
 
 ---
 

@@ -15,7 +15,7 @@ type QuizQuestion = {
   type: "MC" | "TF" | "SA"
   content: string
   bodyHtml?: string | null
-  knowledgePointId: string
+  knowledgePointId: string | null
   options: { id: string; content: string; bodyHtml?: string | null }[]
 }
 
