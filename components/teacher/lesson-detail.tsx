@@ -1,18 +1,22 @@
 "use client"
 
-import { useMemo, useState, useTransition, type ReactNode } from "react"
+import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react"
+import { createPortal } from "react-dom"
 import Link from "next/link"
 import { toast } from "sonner"
 import {
   DndContext,
   DragOverlay,
   KeyboardSensor,
+  MeasuringStrategy,
   PointerSensor,
   useDraggable,
   useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core"
 import {
@@ -73,6 +77,28 @@ const TYPE_LABEL: Record<string, string> = {
   SA: "Trả lời ngắn",
   FILL: "Điền khuyết",
   DRAG: "Kéo thả",
+}
+
+const assignCollisionDetection: CollisionDetection = ({
+  droppableContainers,
+  pointerCoordinates,
+}) => {
+  if (!pointerCoordinates) return []
+  const { x, y } = pointerCoordinates
+  const hits: { id: string; data: { droppableContainer: (typeof droppableContainers)[number]; value: number } }[] = []
+  for (const container of droppableContainers) {
+    const node = container.node.current
+    if (!node || container.disabled) continue
+    const r = node.getBoundingClientRect()
+    if (x < r.left || x > r.right || y < r.top || y > r.bottom) continue
+    hits.push({
+      id: String(container.id),
+      data: { droppableContainer: container, value: r.width * r.height },
+    })
+  }
+  hits.sort((a, b) => a.data.value - b.data.value)
+  const kpHits = hits.filter((h) => h.id.startsWith("kp:"))
+  return kpHits.length > 0 ? kpHits : hits
 }
 
 function toQuestionDto(q: LessonQuestionItem): QuestionDto {
@@ -148,19 +174,18 @@ function DraggableQuestionCard({
   return (
     <li
       ref={setNodeRef}
-      className={cn("rounded-md border bg-card px-3 py-2", isDragging && "opacity-40")}
+      className={cn(
+        "rounded-md border bg-card px-3 py-2",
+        draggable && "cursor-grab touch-none",
+        isDragging && "opacity-40",
+      )}
+      {...(draggable ? { ...listeners, ...attributes } : {})}
     >
       <div className="flex items-start gap-2">
         {draggable ? (
-          <button
-            type="button"
-            className="mt-0.5 shrink-0 cursor-grab touch-none text-muted-foreground hover:text-foreground"
-            aria-label="Kéo câu hỏi"
-            {...listeners}
-            {...attributes}
-          >
+          <span className="mt-0.5 shrink-0 text-muted-foreground" aria-hidden="true">
             <GripVertical className="h-4 w-4" />
-          </button>
+          </span>
         ) : null}
         <Badge variant="outline" className="shrink-0">
           {TYPE_LABEL[q.type] ?? q.type}
@@ -172,7 +197,10 @@ function DraggableQuestionCard({
               {kpLabel}
             </Badge>
           ) : null}
-          <div className="flex gap-1">
+          <div
+            className="flex gap-1"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
             <button
               type="button"
               onClick={onEdit}
@@ -193,6 +221,18 @@ function DraggableQuestionCard({
         </div>
       </div>
     </li>
+  )
+}
+
+function KpPanelDroppable({ children }: { children: ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id: "kp-panel" })
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn("min-h-full space-y-3 rounded-md", isOver && "ring-2 ring-primary/40")}
+    >
+      {children}
+    </div>
   )
 }
 
@@ -305,6 +345,7 @@ export function LessonDetail({
   const [expandedKpId, setExpandedKpId] = useState<string | null>(null)
   const [poolTab, setPoolTab] = useState<"unassigned" | "all">("unassigned")
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [hoverKpId, setHoverKpId] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
   const [kpDialog, setKpDialog] = useState<{ mode: "create" | "edit"; kp?: KP } | null>(null)
@@ -315,8 +356,13 @@ export function LessonDetail({
     kpId: string | null
   } | null>(null)
 
+  const [overlayMounted, setOverlayMounted] = useState(false)
+  useEffect(() => {
+    setOverlayMounted(true)
+  }, [])
+
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor),
   )
 
@@ -419,12 +465,18 @@ export function LessonDetail({
     setActiveId(String(ev.active.id))
   }
 
+  function onDragOver(ev: DragOverEvent) {
+    const overId = ev.over?.id ? String(ev.over.id) : ""
+    if (overId.startsWith("kp:")) setHoverKpId(overId.slice(3))
+  }
+
   function onDragEnd(ev: DragEndEvent) {
     setActiveId(null)
     const overId = ev.over?.id ? String(ev.over.id) : ""
     const qid = String(ev.active.id)
-    if (!overId.startsWith("kp:")) return
-    const kpId = overId.slice(3)
+    const kpId = overId.startsWith("kp:") ? overId.slice(3) : hoverKpId
+    setHoverKpId(null)
+    if (!kpId) return
     const prev = questions
     setQuestions((qs) => qs.map((q) => (q.id === qid ? { ...q, knowledgePointId: kpId } : q)))
     startTransition(async () => {
@@ -480,7 +532,19 @@ export function LessonDetail({
         </div>
       </div>
 
-      <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={assignCollisionDetection}
+        measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+        autoScroll={false}
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDragEnd={onDragEnd}
+        onDragCancel={() => {
+          setActiveId(null)
+          setHoverKpId(null)
+        }}
+      >
         <div className="grid min-h-0 flex-1 grid-rows-2 gap-4 md:grid-cols-2 md:grid-rows-1">
           <section className="flex min-h-0 flex-col rounded-lg border bg-card">
             <div className="shrink-0 space-y-3 border-b p-4">
@@ -574,7 +638,7 @@ export function LessonDetail({
                   </p>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <KpPanelDroppable>
                   {kps.map((kp, idx) => {
                     const assigned = questionsByKp.get(kp.id) ?? []
                     return (
@@ -612,18 +676,23 @@ export function LessonDetail({
                       </KpDroppable>
                     )
                   })}
-                </div>
+                </KpPanelDroppable>
               )}
             </div>
           </section>
         </div>
-        <DragOverlay>
-          {activeQuestion ? (
-            <div className="rounded-md border bg-card px-3 py-2 shadow-md">
-              <p className="line-clamp-2 text-sm">{activeQuestion.content}</p>
-            </div>
-          ) : null}
-        </DragOverlay>
+        {overlayMounted
+          ? createPortal(
+              <DragOverlay dropAnimation={null} zIndex={80}>
+                {activeQuestion ? (
+                  <div className="pointer-events-none w-[min(28rem,90vw)] cursor-grabbing rounded-md border bg-card px-3 py-2 shadow-lg">
+                    <p className="line-clamp-2 text-sm">{activeQuestion.content}</p>
+                  </div>
+                ) : null}
+              </DragOverlay>,
+              document.body,
+            )
+          : null}
       </DndContext>
 
       <Dialog open={kpDialog !== null} onOpenChange={(v) => !v && setKpDialog(null)}>
