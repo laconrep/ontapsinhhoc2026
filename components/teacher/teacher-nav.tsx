@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 import { LayoutDashboard, Users, BookOpen, Library } from "lucide-react"
 
 const items = [
-  { href: "/teacher", label: "Tổng quan", icon: LayoutDashboard, exact: true },
+  { href: "/teacher", label: "Trang chủ", icon: LayoutDashboard, exact: true },
   { href: "/teacher/classes", label: "Lớp học", icon: Users },
   { href: "/teacher/lessons", label: "Bài giảng", icon: BookOpen },
   { href: "/teacher/questions", label: "Ngân hàng câu hỏi", icon: Library },

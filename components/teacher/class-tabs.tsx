@@ -33,7 +33,7 @@ export function ClassTabs({
   const [tab, setTab] = useState<Tab>("overview")
 
   const tabs: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
-    { id: "overview", label: "Tổng quan", icon: LayoutDashboard },
+    { id: "overview", label: "Thông tin lớp", icon: LayoutDashboard },
     { id: "assignments", label: "Bài tập đã giao", icon: BookMarked },
     { id: "stats", label: "Thống kê", icon: BarChart3 },
   ]
@@ -62,12 +62,7 @@ export function ClassTabs({
         })}
       </div>
 
-      {tab === "overview" ? (
-        <div className="flex flex-col gap-8">
-          <ClassDetail cls={cls} />
-          {overviewExtra}
-        </div>
-      ) : null}
+      {tab === "overview" ? <ClassDetail cls={cls} hero={overviewExtra} /> : null}
       {tab === "assignments" ? <ClassAssignments classId={cls.id} initial={assignments} /> : null}
       {tab === "stats" ? <ClassStatsPanel stats={stats} /> : null}
     </div>

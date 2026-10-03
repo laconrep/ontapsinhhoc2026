@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useTransition } from "react"
+import { useState, useEffect, useTransition, type ReactNode } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
@@ -42,7 +42,7 @@ type ClassDetailData = {
   students: Student[]
 }
 
-export function ClassDetail({ cls }: { cls: ClassDetailData }) {
+export function ClassDetail({ cls, hero }: { cls: ClassDetailData; hero?: ReactNode }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [inviteCode, setInviteCode] = useState(cls.inviteCode)
@@ -108,6 +108,8 @@ export function ClassDetail({ cls }: { cls: ClassDetailData }) {
         </div>
         <p className="mt-1 text-muted-foreground">Năm học {cls.schoolYear}</p>
       </div>
+
+      {hero}
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Mã mời + QR */}
