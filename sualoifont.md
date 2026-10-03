@@ -372,9 +372,21 @@ Neu `h-full` + `aspect-video` bi overflow ngang: them `max-w-full w-auto` / `obj
 ### Bao cao phien 3 (dien sau khi code)
 
 - Da lam:
+  - `StageFrame`: letterbox nen den, hop trong `aspect-video` 16:9, contain theo khung cha (`@container` + `cqw`/`cqh`).
+  - Console: boc QuizStage trong StageFrame (thanh nut + cot HS ngoai khung).
+  - PresentView: boc QuizStage trong StageFrame; nut fullscreen giu.
+  - Khong sua AdaptiveQuestion / measure.
 - File da sua/tao:
+  - Tao: `components/live/stage-frame.tsx`
+  - Sua: `components/live/teacher-console.tsx`
+  - Sua: `components/live/present-view.tsx`
+  - Sua: `sualoifont.md`
 - Ket qua tsc/lint:
+  - `npx tsc --noEmit`: dat (exit 0).
+  - lint: fail san co — khong co `eslint.config.*`. Khong them thu vien.
 - Diem chua chac:
+  - `@container` / cqw can Tailwind v4 (project dung v4). Neu browser cu khong cqw, khung co the khong contain dung — chap nhan.
+  - Present 16:10: letterbox; TV 16:9 fullscreen ~ full hop.
 - Viec tiep theo: phien 4 tour TV.
 
 ---
@@ -533,10 +545,10 @@ Bat buoc `[text-align-last:left]`. Khong justify dong cuoi.
 
 ## Trang thai
 
-- Phien hien tai: xong phien 2
+- Phien hien tai: xong phien 3
 - Phien 1: xong (le, gian dong, A.A.)
 - Phien 2: xong (cau 22 inline + tach C/D)
-- Phien 3: chua (tivi ao 16:9)
+- Phien 3: xong (tivi ao 16:9)
 - Phien 4: chua (tour TV)
 - Phien 5: chua (lan sau, Tat TV, ra soat)
 

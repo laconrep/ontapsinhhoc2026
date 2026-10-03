@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button"
 import { SignOutButton } from "@/components/auth/sign-out-button"
 import { TeacherNav } from "@/components/teacher/teacher-nav"
 import { QuizStage } from "./quiz-stage"
+import { StageFrame } from "./stage-frame"
 import { useLiveQuiz } from "./use-live-quiz"
 import { goToQuestion, revealCurrent, endQuizSession } from "@/app/actions/live-quiz"
 import { cn } from "@/lib/utils"
@@ -273,7 +274,9 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="min-h-0 min-w-0 flex-1">
-          <QuizStage view={view} />
+          <StageFrame>
+            <QuizStage view={view} />
+          </StageFrame>
         </div>
 
         <div className="relative z-[100] flex shrink-0 flex-wrap items-center justify-center gap-1.5 border-t bg-card px-3 py-2">

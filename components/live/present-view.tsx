@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Maximize, Minimize } from "lucide-react"
 import { QuizStage } from "./quiz-stage"
+import { StageFrame } from "./stage-frame"
 import { useLiveQuiz } from "./use-live-quiz"
 
 export function PresentView({ sessionId }: { sessionId: string }) {
@@ -27,7 +28,9 @@ export function PresentView({ sessionId }: { sessionId: string }) {
 
   return (
     <div className="relative h-screen w-screen">
-      <QuizStage view={view} />
+      <StageFrame>
+        <QuizStage view={view} />
+      </StageFrame>
       <button
         type="button"
         onClick={toggleFullscreen}
