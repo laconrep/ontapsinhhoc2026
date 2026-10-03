@@ -259,9 +259,23 @@ Neu `bodyHtml` bat dau bang `A. ` / `<p>A. ` thi strip tuong duong (regex dau ch
 ### Bao cao phien 1 (dien sau khi code)
 
 - Da lam:
+  - Helper `stripOptionPrefix` / `stripOptionPrefixHtml` bo `A.` `a)` o dau chuoi (va dau HTML `<p>A. `).
+  - San khau: badge LETTERS giu; noi dung option da strip. Stem bo `text-center`/`text-balance`; `text-justify [text-align-last:left]`; `leading-snug`; `[&_p]:my-0`; collapse `\n{2,}` -> `\n`. Khong sua `measure`.
+  - HS MC/TF strip prefix. Stem HS `[&_p]:my-0`.
+  - NextQuestionPreview: `A. {stripOptionPrefix(o.content)}`.
+  - Khong sua `question-stem.tsx` default (`leading-relaxed` editor giu).
 - File da sua/tao:
+  - Tao: `lib/option-prefix.ts`
+  - Sua: `components/live/adaptive-question.tsx`
+  - Sua: `components/live/student-quiz-view.tsx`
+  - Sua: `components/live/teacher-console.tsx` (chi preview)
+  - Sua: `sualoifont.md`
 - Ket qua tsc/lint:
+  - `npx tsc --noEmit`: dat (exit 0). (`pnpm exec tsc` loi corepack pnpm trong moi truong; dung npx.)
+  - lint: fail san co — khong co `eslint.config.*`. Khong them thu vien. Khong phai loi moi.
 - Diem chua chac:
+  - `stripOptionPrefixHtml` chi bo prefix o dau chuoi / sau `<p>` mo; khong xu ly `<p>A.</p>` tach tag. Du lieu hien prefix nam o `content` text.
+  - Tailwind `cn` merge `leading-snug` vs `leading-relaxed` default QuestionStem: className di sau, leading-snug thang.
 - Viec tiep theo: phien 2 cau 22 inline + tach C/D.
 
 ---
@@ -509,8 +523,8 @@ Bat buoc `[text-align-last:left]`. Khong justify dong cuoi.
 
 ## Trang thai
 
-- Phien hien tai: chua
-- Phien 1: chua (le, gian dong, A.A.)
+- Phien hien tai: xong phien 1
+- Phien 1: xong (le, gian dong, A.A.)
 - Phien 2: chua (cau 22 inline + tach C/D)
 - Phien 3: chua (tivi ao 16:9)
 - Phien 4: chua (tour TV)

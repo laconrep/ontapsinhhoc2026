@@ -3,6 +3,7 @@
 import { useCallback, useLayoutEffect, useRef, useState, type Ref } from "react"
 import { Check } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { stripOptionPrefix, stripOptionPrefixHtml } from "@/lib/option-prefix"
 import { QuestionStem } from "@/components/question/question-stem"
 import type { LiveQuizView } from "./use-live-quiz"
 
@@ -117,12 +118,11 @@ export function AdaptiveQuestion({ question, revealed }: { question: Q; revealed
   function stemNode() {
     return (
       <QuestionStem
-        content={question.content}
+        content={question.content.replace(/\n{2,}/g, "\n")}
         bodyHtml={question.bodyHtml ?? undefined}
         className={cn(
-          "whitespace-pre-line font-heading font-bold leading-tight",
+          "whitespace-pre-line font-heading font-bold leading-snug [&_p]:my-0 text-justify [text-align-last:left]",
           FIGURE_CLASS,
-          question.content.length < 140 && !question.bodyHtml && "text-balance text-center",
         )}
         maxHeightClass="max-h-none"
       />
@@ -171,9 +171,12 @@ export function AdaptiveQuestion({ question, revealed }: { question: Q; revealed
               </span>
               <div className="min-w-0 flex-1">
                 <QuestionStem
-                  content={o.content}
-                  bodyHtml={o.bodyHtml}
-                  className={cn("font-medium leading-snug", FIGURE_CLASS)}
+                  content={stripOptionPrefix(o.content)}
+                  bodyHtml={o.bodyHtml ? stripOptionPrefixHtml(o.bodyHtml) : o.bodyHtml}
+                  className={cn(
+                    "font-medium leading-snug text-justify [text-align-last:left]",
+                    FIGURE_CLASS,
+                  )}
                   maxHeightClass="max-h-none"
                 />
               </div>

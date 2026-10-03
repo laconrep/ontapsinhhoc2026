@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { useLiveQuiz } from "./use-live-quiz"
 import { joinQuiz, submitLiveAnswer, reportFullscreen } from "@/app/actions/live-quiz"
 import { QuestionStem } from "@/components/question/question-stem"
+import { stripOptionPrefix } from "@/lib/option-prefix"
 import { StudentQuestionLayout } from "./student-question-layout"
 
 const LETTERS = ["A", "B", "C", "D", "E", "F"]
@@ -203,7 +204,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
               <QuestionStem
                 content={q.content}
                 bodyHtml={q.bodyHtml}
-                className="text-balance font-heading font-bold leading-snug"
+                className="font-heading font-bold leading-snug [&_p]:my-0"
                 maxHeightClass="max-h-none"
               />
             }
@@ -237,7 +238,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
                           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary text-sm font-bold text-secondary-foreground">
                             {LETTERS[i]}
                           </span>
-                          <span>{o.content}</span>
+                          <span>{stripOptionPrefix(o.content)}</span>
                         </button>
                       )
                     })}
@@ -261,7 +262,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
                               : "border-border bg-card",
                           )}
                         >
-                          <span className="flex-1 text-base">{o.content}</span>
+                          <span className="flex-1 text-base">{stripOptionPrefix(o.content)}</span>
                           <div className="flex shrink-0 gap-1">
                             <button
                               type="button"

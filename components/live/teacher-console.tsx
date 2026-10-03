@@ -22,6 +22,7 @@ import { QuizStage } from "./quiz-stage"
 import { useLiveQuiz } from "./use-live-quiz"
 import { goToQuestion, revealCurrent, endQuizSession } from "@/app/actions/live-quiz"
 import { cn } from "@/lib/utils"
+import { stripOptionPrefix } from "@/lib/option-prefix"
 
 const LEFT_REVEAL_MS = 1500
 const LEFT_EDGE_PX = 24
@@ -83,7 +84,7 @@ function NextQuestionPreview({
           <ul className="space-y-0.5 text-[0.85em] text-muted-foreground">
             {options.map((o, i) => (
               <li key={o.id} className="break-words">
-                {["A", "B", "C", "D", "E", "F"][i] ?? i + 1}. {o.content}
+                {["A", "B", "C", "D", "E", "F"][i] ?? i + 1}. {stripOptionPrefix(o.content)}
               </li>
             ))}
           </ul>
