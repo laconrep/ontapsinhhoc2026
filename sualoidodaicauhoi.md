@@ -2,7 +2,7 @@
 
 Muc tieu: man trinh chieu GV/TV tu chon co chu lon nhat vua man, so cot dap an, va chi chia khung 65/35 khi 28px van tran. Man dien thoai HS chia 65/35 khi cau dai, fit font theo thong so dien thoai (khong copy so TV). Cong thuc MathType/OMML inline co theo chu. Khong dong bo cuon TV-GV.
 
-Trang thai: **xong phien 5**. Day la nguon su that cho 6 phien. Phien sau CHI doc file nay + dung cac file duoc liet ke trong phien do. KHONG doc lai toan repo. KHONG doc `Ke-hoach-sua-loi-hien-thi-cau-hoi.docx` (ke hoach cu, lech repo).
+Trang thai: **xong phien 6**. Day la nguon su that cho 6 phien. Phien sau CHI doc file nay + dung cac file duoc liet ke trong phien do. KHONG doc lai toan repo. KHONG doc `Ke-hoach-sua-loi-hien-thi-cau-hoi.docx` (ke hoach cu, lech repo).
 
 File doi chieu (neu can thu cong thuc): `BAI 1 - GENE VA SU TAI BAN DNA.docx` o goc repo.
 
@@ -590,10 +590,32 @@ Xu ly:
 ### Bao cao phien 6 (dien sau khi code)
 
 - Da lam:
+  - Grep `QuestionStem`, `max-h-48`, `max-h-[40vh]`, `max-h-[36vh]`, `AdaptiveQuestion`, `StudentQuestionLayout`.
+  - `quiz-stage`: khong con stem max-h 40vh; dung AdaptiveQuestion `key={question.id}` trong `relative min-h-0 flex-1`, `pt-24`.
+  - `student-quiz-view`: khong con 36vh; stem `max-h-none`; boc `StudentQuestionLayout`; khong gan AdaptiveQuestion.
+  - `tab4-quiz` (default max-h / `max-h-24`), `question-editor` (`max-h-32`/`max-h-24`), `lesson-detail` (`max-h-24`/`max-h-16`), `question-form-dialog` (`max-h-48`), `worksheet-preview-doc` (`max-h-64`/`max-h-32`): giu max-h cu, huong CSS eq-inline tu QuestionStem. KHONG gan AdaptiveQuestion.
+  - SA revealed: AdaptiveQuestion da do lai khi `revealed` doi; ResizeObserver debounce 1 rAF, chi observe `boxRef`. `setLayout` skip neu khong doi. Khong doi thuat toan. Khong thay giat manh o code — khong sua.
+  - CPU: RO chi khung ngoai, khong observe natRef. Khong vong lap do.
+  - Khong sua parser / extract / present-view / teacher-console.
 - File da sua/tao:
+  - Khong sua file code (grep khong ra cho sot).
+  - `sualoidodaicauhoi.md` (bao cao + trang thai)
 - Ket qua tsc/lint:
+  - `pnpm exec tsc --noEmit`: dat (exit 0).
+  - `pnpm lint`: fail san co (`eslint` khong co trong PATH / khong co `eslint.config.*`). Khong them thu vien. Khong phai loi moi cua phien 6.
 - Grep con sot:
+  - `max-h-[40vh]`: chi default prop `QuestionStem` (`question-stem.tsx`) — dung, cac man khong-trinh-chieu van cuon.
+  - `max-h-[36vh]`: khong con.
+  - `max-h-48`: CSS default figure trong QuestionStem + `question-form-dialog` preview — dung.
+  - `max-h-[28vh]`: `FIGURE_CLASS` trong AdaptiveQuestion (san khau) — dung. `import-error-fix.tsx` textarea `max-h-[28vh]` khong lien quan QuestionStem, khong sua.
+  - AdaptiveQuestion chi `quiz-stage.tsx`. StudentQuestionLayout chi `student-quiz-view.tsx`.
 - Rui ro 6.3 (bao cao, chua sua):
+  - Dap an dung nhan bang `<u>` -> `__...__` roi `splitChoiceBlock` `raw.includes("__")`. Cong thuc OMML/WMF thanh `<img class="eq-inline">`: neu Word gach chan anh ma mammoth khong boc `<u>` quanh img thi `isCorrect` mat. Chi bao cao, khong sua parser.
+  - Anh header/footer khong map theo thu tu extent — khong con la van de.
+  - Split tren TV khong chuot: chap nhan; khong T7.
+  - SVG MathJax height `ex`: fallback CSS `h-[1.5em]`; chua thu de that.
+  - `STAGE_MAX_FS = 80` giu (chua thu TV that; duoc phep giam 64 neu cau ngan qua to).
+  - HS: `StudentQuestionLayout` khong do lai khi `revealed` (chi `questionId`); khoi "Dap an:" SA co the tran 1 frame — chap nhan, khong doi thuat toan.
 - Viec tiep theo: khong. Ke hoach xong.
 
 ---
@@ -662,19 +684,22 @@ Xu ly:
 
 ## Trang thai
 
-- Phien hien tai: xong phien 5
+- Phien hien tai: xong phien 6
 - Phien 1: xong
 - Phien 2: xong
 - Phien 3: xong
 - Phien 4: xong
 - Phien 5: xong
-- Phien 6: chua
+- Phien 6: xong
 
-Diem moc sau phien 5:
+Diem moc sau phien 6:
 
-- `QuestionStem` giu class eq-inline/eq-figure + style height em; `max-h-none` khong overflow-y-auto; figure mac dinh van max-h-48
-- QuizStage dung AdaptiveQuestion (`key={question.id}`), pt-24, chip khong nam trong khoi do
+- `QuestionStem` giu class eq-inline/eq-figure + style height em; `max-h-none` khong overflow-y-auto; figure mac dinh van max-h-48; default max-h-[40vh] chi man khong-trinh-chieu
+- QuizStage dung AdaptiveQuestion (`key={question.id}`), pt-24, chip khong nam trong khoi do; khong con max-h 40vh tren san khau
 - present-view / teacher-console khong sua (van boc QuizStage)
 - extract-file: `tagEquationImages` + MATH `class="eq-inline"`; parser `imgTagToPlaceholder` giu class/style
-- StudentQuizView dung StudentQuestionLayout (14-24px, 1 cot, split 65/35); stem max-h-none; nut Gui van fixed bottom
+- StudentQuizView dung StudentQuestionLayout (14-24px, 1 cot, split 65/35); stem max-h-none; khong con 36vh; nut Gui van fixed bottom
 - Co `components/live/student-question-layout.tsx`
+- Man editor/preview/tab4 giu max-h cu, khong gan AdaptiveQuestion
+- ResizeObserver chi box ngoai; SA revealed do lai 1 rAF tren san khau
+- Ke hoach 6 phien xong
