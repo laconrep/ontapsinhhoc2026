@@ -20,6 +20,7 @@ import { SignOutButton } from "@/components/auth/sign-out-button"
 import { TeacherNav } from "@/components/teacher/teacher-nav"
 import { QuizStage } from "./quiz-stage"
 import { StageFrame } from "./stage-frame"
+import { TvStageTour } from "./tv-stage-tour"
 import { useLiveQuiz } from "./use-live-quiz"
 import { goToQuestion, revealCurrent, endQuizSession } from "@/app/actions/live-quiz"
 import { cn } from "@/lib/utils"
@@ -101,6 +102,7 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
   const [pending, startTransition] = useTransition()
   const [headerOpen, setHeaderOpen] = useState(false)
   const [leftOpen, setLeftOpen] = useState(false)
+  const [tvTourOpen, setTvTourOpen] = useState(false)
   const leftOpenRef = useRef(false)
   const leftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -325,9 +327,7 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => {
-              window.open(`/teacher/sessions/${sessionId}/present`, "_blank", "noopener,noreferrer")
-            }}
+            onClick={() => setTvTourOpen(true)}
           >
             <Monitor className="h-4 w-4" />
             TV
@@ -431,6 +431,8 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
           )}
         </div>
       </aside>
+
+      <TvStageTour open={tvTourOpen} onOpenChange={setTvTourOpen} sessionId={sessionId} />
     </div>
   )
 }

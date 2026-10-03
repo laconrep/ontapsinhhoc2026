@@ -435,9 +435,23 @@ Kieu `getScreenDetails`: ep kieu hep `(window as Window & { getScreenDetails?: (
 ### Bao cao phien 4 (dien sau khi code)
 
 - Da lam:
+  - Tour 4 buoc (Win/Mac), detect OS, luu `edusync-tv-os`. Anh: ket noi, Mo rong (gach Nhan ban), quyen Chrome, day san khau. Phim Win+K, Win+P, Ctrl+Cmd+F2, Opt+F2.
+  - `openOnTv` trong click: khong `getScreenDetails` -> loi buoc 3, khong open. Khong man `!isPrimary` -> loi buoc 2, khong open. Popup null -> loi popup. Thanh cong: moveTo/resizeTo man phu, thu fullscreen 1 lan, `edusync-tv-tour-done=1`, dong tour.
+  - Preview `/tv-tour-preview` khong sessionId: khong goi present.
+  - Console nut TV mo tour; XOA `window.open(present)` ngay.
 - File da sua/tao:
+  - Tao: `components/live/tv-tour-illustrations.tsx`
+  - Tao: `components/live/tv-stage-tour.tsx`
+  - Tao: `app/tv-tour-preview/page.tsx`
+  - Sua: `components/live/teacher-console.tsx`
+  - Sua: `sualoifont.md`
 - Ket qua tsc/lint:
+  - `./node_modules/.bin/tsc --noEmit`: dat (exit 0).
+  - lint: fail san co — khong co `eslint` / `eslint.config.*`. Khong them thu vien. Khong phai loi moi.
 - Diem chua chac:
+  - `await getScreenDetails()` truoc `window.open` co the mat user-gesture -> popup null (da bao loi, khong mo uoc luong).
+  - `requestFullscreen` tren popup de bi chan; GV F11. Khong lap vong.
+  - Handle popup chua dua ra console (Tat TV = phien 5).
 - Viec tiep theo: phien 5 lan sau + Tat TV + ra soat.
 
 ---
@@ -545,17 +559,17 @@ Bat buoc `[text-align-last:left]`. Khong justify dong cuoi.
 
 ## Trang thai
 
-- Phien hien tai: xong phien 3
+- Phien hien tai: xong phien 4
 - Phien 1: xong (le, gian dong, A.A.)
 - Phien 2: xong (cau 22 inline + tach C/D)
 - Phien 3: xong (tivi ao 16:9)
-- Phien 4: chua (tour TV)
+- Phien 4: xong (tour TV)
 - Phien 5: chua (lan sau, Tat TV, ra soat)
 
 Diem moc truoc khi sua:
 
-- Nut TV van `window.open(present)` ngay (`teacher-console.tsx` ~325)
-- Chua file tv-tour
+- Nut TV mo tour (`teacher-console.tsx` ~330); `window.open(present)` chi trong `openOnTv` khi co man phu
+- Da co tv-tour + `/tv-tour-preview`
 - QuizStage fill flex-1, khong 16:9
 - Badge + content lap A.
 - Stem cau ngan text-center, leading-relaxed / p margin Word
