@@ -9,7 +9,12 @@ function sanitizeStemHtml(raw: string): string {
     const src = tag.match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1] ?? ""
     if (!/^data:image\/[a-zA-Z0-9.+-]+;base64,/i.test(src) && !src.startsWith("/")) return ""
     const alt = (tag.match(/\balt\s*=\s*["']([^"']*)["']/i)?.[1] ?? "").replace(/[<>"']/g, "")
-    return `<img src="${src}" alt="${alt}">`
+    const cls = tag.match(/\bclass\s*=\s*["'](eq-inline|eq-figure)["']/i)?.[1] ?? ""
+    const h = tag.match(/\bstyle\s*=\s*["']height:([\d.]+)em;width:auto["']/i)?.[1]
+    const extra =
+      (cls ? ` class="${cls}"` : "") +
+      (cls === "eq-inline" && h ? ` style="height:${h}em;width:auto"` : "")
+    return `<img src="${src}" alt="${alt}"${extra}>`
   })
   s = s.replace(/<(?!\/?(img|table|thead|tbody|tfoot|tr|th|td|caption|br|p|u)\b)[^>]+>/gi, "")
   s = s.replace(/<(table|thead|tbody|tfoot|tr|th|td|caption|br|p|u)(\s[^>]*)?>/gi, (_, name: string, attrs?: string) => {
@@ -38,12 +43,13 @@ export function QuestionStem({
   maxHeightClass?: string
 }) {
   const html = bodyHtml ? sanitizeStemHtml(bodyHtml) : null
+  const scroll = Boolean(maxHeightClass && maxHeightClass !== "max-h-none")
   return (
-    <div className={cn(maxHeightClass, "overflow-y-auto")}>
+    <div className={cn(maxHeightClass, scroll && "overflow-y-auto")}>
       {html ? (
         <div
           className={cn(
-            "leading-relaxed text-foreground [&_img]:mx-auto [&_img]:my-2 [&_img]:max-h-48 [&_img]:max-w-full [&_table]:my-2 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-border [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-border [&_th]:px-2 [&_th]:py-1",
+            "leading-relaxed text-foreground [&_img]:max-w-full [&_img.eq-inline]:inline-block [&_img.eq-inline]:align-middle [&_img.eq-inline]:mx-1 [&_img.eq-inline]:my-0 [&_img.eq-inline]:h-[1.5em] [&_img.eq-inline]:w-auto [&_img:not(.eq-inline)]:mx-auto [&_img:not(.eq-inline)]:my-2 [&_img:not(.eq-inline)]:max-h-48 [&_table]:my-2 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-border [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-border [&_th]:px-2 [&_th]:py-1",
             className,
           )}
           dangerouslySetInnerHTML={{ __html: html }}

@@ -2,7 +2,7 @@
 
 Muc tieu: man trinh chieu GV/TV tu chon co chu lon nhat vua man, so cot dap an, va chi chia khung 65/35 khi 28px van tran. Man dien thoai HS chia 65/35 khi cau dai, fit font theo thong so dien thoai (khong copy so TV). Cong thuc MathType/OMML inline co theo chu. Khong dong bo cuon TV-GV.
 
-Trang thai: **chua bat dau phien 1**. Day la nguon su that cho 6 phien. Phien sau CHI doc file nay + dung cac file duoc liet ke trong phien do. KHONG doc lai toan repo. KHONG doc `Ke-hoach-sua-loi-hien-thi-cau-hoi.docx` (ke hoach cu, lech repo).
+Trang thai: **xong phien 1**. Day la nguon su that cho 6 phien. Phien sau CHI doc file nay + dung cac file duoc liet ke trong phien do. KHONG doc lai toan repo. KHONG doc `Ke-hoach-sua-loi-hien-thi-cau-hoi.docx` (ke hoach cu, lech repo).
 
 File doi chieu (neu can thu cong thuc): `BAI 1 - GENE VA SU TAI BAN DNA.docx` o goc repo.
 
@@ -246,9 +246,19 @@ Style inline `height:Nem` se ghi de `h-[1.5em]` khi co. Giu cac class table nhu 
 ### Bao cao phien 1 (dien sau khi code)
 
 - Da lam:
+  - `sanitizeStemHtml` giu dung 2 class `eq-inline`/`eq-figure` va style `height:NNem;width:auto` tren `<img>`; src van chi `data:image/...;base64,` hoac path bat dau `/`.
+  - Wrapper chi gan `overflow-y-auto` khi `maxHeightClass` khac `"max-h-none"`. Default van `max-h-[40vh]`.
+  - CSS anh: `eq-inline` cung dong + `h-[1.5em]` fallback; anh khong inline van `max-h-48`. Khong dung `max-h-[28vh]` global. Giu class table.
+  - Khong dam quiz-stage / student / parser / extract.
 - File da sua/tao:
+  - `components/question/question-stem.tsx`
+  - `sualoidodaicauhoi.md`
 - Ket qua tsc/lint:
+  - `pnpm exec tsc --noEmit`: dat (exit 0).
+  - `pnpm lint`: fail san co — `eslint` khong co trong `package.json` / khong co `eslint.config.*`. Khong them thu vien. Khong phai loi moi cua phien 1.
 - Diem chua chac:
+  - Class `eq-inline`/`eq-figure` chua duoc gan luc extract (phien 4); hien moi anh van roi vao CSS `:not(.eq-inline)` = `max-h-48`.
+  - Regex class chi khop dung 1 class (`eq-inline` hoac `eq-figure`), khong khop `class="eq-inline foo"`. Dung voi quy uoc phien 4.
 - Viec tiep theo: phien 2 tao AdaptiveQuestion.
 
 ---
@@ -610,18 +620,19 @@ Xu ly:
 
 ## Trang thai
 
-- Phien hien tai: chua bat dau phien 1
-- Phien 1: chua
+- Phien hien tai: xong phien 1
+- Phien 1: xong
 - Phien 2: chua
 - Phien 3: chua
 - Phien 4: chua
 - Phien 5: chua
 - Phien 6: chua
 
-Diem moc truoc phien 1:
+Diem moc sau phien 1:
 
-- QuizStage font co dinh 4xl/5xl, stem max-h 40vh, khung overflow-hidden
+- `QuestionStem` giu class eq-inline/eq-figure + style height em; `max-h-none` khong overflow-y-auto; figure mac dinh van max-h-48
+- QuizStage font co dinh 4xl/5xl, stem max-h 40vh, khung overflow-hidden (chua dam)
 - StudentQuizView stem max-h 36vh, trang overflow-y-auto, chua chia 65/35
-- imgTagToPlaceholder bo class/style
-- extract-file OMML/WMF da ra SVG nhung `<img>` khong class eq-inline
+- imgTagToPlaceholder van bo class/style (phien 4)
+- extract-file OMML/WMF da ra SVG nhung `<img>` khong class eq-inline (phien 4)
 - Chua co adaptive-question.tsx / student-question-layout.tsx
