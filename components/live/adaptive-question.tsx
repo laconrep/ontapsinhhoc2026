@@ -1,0 +1,221 @@
+"use client"
+
+import { useCallback, useLayoutEffect, useRef, useState, type Ref } from "react"
+import { Check } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { QuestionStem } from "@/components/question/question-stem"
+import type { LiveQuizView } from "./use-live-quiz"
+
+type Q = NonNullable<LiveQuizView["question"]>
+type Revealed = LiveQuizView["revealed"]
+type Cols = 1 | 2 | 4
+
+const STAGE_MIN_FS = 28
+const STAGE_MAX_FS = 80
+const STAGE_SPLIT = 0.65
+const LETTERS = ["A", "B", "C", "D", "E", "F"]
+
+const FIGURE_CLASS = "[&_img:not(.eq-inline)]:max-h-[28vh]"
+
+export function AdaptiveQuestion({ question, revealed }: { question: Q; revealed: Revealed }) {
+  const boxRef = useRef<HTMLDivElement>(null)
+  const natRef = useRef<HTMLDivElement>(null)
+  const optsRef = useRef<HTMLDivElement>(null)
+  const [layout, setLayout] = useState<{ mode: "single" | "split"; fs: number; cols: Cols }>({
+    mode: "single",
+    fs: STAGE_MIN_FS,
+    cols: 1,
+  })
+  const n = question.options.length
+
+  const measure = useCallback(() => {
+    const box = boxRef.current
+    const nat = natRef.current
+    const opts = optsRef.current
+    if (!box || !nat || !opts) return
+    if (box.clientHeight < 8 || box.clientWidth < 8) return
+
+    const apply = (fs: number, cols: Cols) => {
+      nat.style.fontSize = `${fs}px`
+      opts.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`
+    }
+    const fits = (fs: number, cols: Cols) => {
+      apply(fs, cols)
+      return nat.offsetHeight <= box.clientHeight && nat.scrollWidth <= nat.clientWidth + 1
+    }
+
+    const candidates: Cols[] = n >= 4 ? [2, 1, 4] : n === 2 ? [2, 1] : [1]
+    let best: { fs: number; cols: Cols } | null = null
+
+    for (const cols of candidates) {
+      let fs: number
+      if (fits(STAGE_MAX_FS, cols)) fs = STAGE_MAX_FS
+      else if (!fits(STAGE_MIN_FS, cols)) continue
+      else {
+        let lo = STAGE_MIN_FS
+        let hi = STAGE_MAX_FS
+        while (hi - lo > 1) {
+          const mid = (lo + hi) >> 1
+          if (fits(mid, cols)) lo = mid
+          else hi = mid
+        }
+        fs = lo
+      }
+      if (!best || fs > best.fs) best = { fs, cols }
+    }
+
+    if (best) {
+      apply(best.fs, best.cols)
+      setLayout((prev) =>
+        prev.mode === "single" && prev.fs === best.fs && prev.cols === best.cols
+          ? prev
+          : { mode: "single", ...best },
+      )
+      return
+    }
+
+    let bestCols: Cols = 1
+    let bestH = Infinity
+    for (const cols of candidates.filter((c) => c <= 2)) {
+      apply(STAGE_MIN_FS, cols)
+      if (nat.offsetHeight < bestH) {
+        bestH = nat.offsetHeight
+        bestCols = cols
+      }
+    }
+    apply(STAGE_MIN_FS, bestCols)
+    setLayout((prev) =>
+      prev.mode === "split" && prev.fs === STAGE_MIN_FS && prev.cols === bestCols
+        ? prev
+        : { mode: "split", fs: STAGE_MIN_FS, cols: bestCols },
+    )
+  }, [n])
+
+  useLayoutEffect(() => {
+    measure()
+  }, [measure, question.id, revealed])
+
+  useLayoutEffect(() => {
+    const box = boxRef.current
+    if (!box) return
+    let raf = 0
+    const schedule = () => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => measure())
+    }
+    const ro = new ResizeObserver(schedule)
+    ro.observe(box)
+    box.addEventListener("load", schedule, true)
+    void document.fonts?.ready.then(schedule)
+    return () => {
+      cancelAnimationFrame(raf)
+      ro.disconnect()
+      box.removeEventListener("load", schedule, true)
+    }
+  }, [measure])
+
+  function stemNode() {
+    return (
+      <QuestionStem
+        content={question.content}
+        bodyHtml={question.bodyHtml ?? undefined}
+        className={cn(
+          "whitespace-pre-line font-heading font-bold leading-tight",
+          FIGURE_CLASS,
+          question.content.length < 140 && !question.bodyHtml && "text-balance text-center",
+        )}
+        maxHeightClass="max-h-none"
+      />
+    )
+  }
+
+  const optionsGrid = (ref?: Ref<HTMLDivElement>) => (
+    <div
+      ref={ref}
+      className="grid gap-[0.5em]"
+      style={{ gridTemplateColumns: `repeat(${layout.cols}, minmax(0, 1fr))` }}
+    >
+      {question.type === "SA" ? (
+        <p
+          className={cn(
+            "col-span-full text-center",
+            revealed
+              ? "rounded-[0.6em] border-2 border-primary bg-primary/10 px-[0.8em] py-[0.4em] font-semibold"
+              : "text-[0.7em] text-muted-foreground",
+          )}
+        >
+          {revealed ? revealed.correctText : "Nhập câu trả lời trên thiết bị của bạn"}
+        </p>
+      ) : (
+        question.options.map((o, i) => {
+          const isCorrect = revealed?.correctOptionIds.includes(o.id)
+          return (
+            <div
+              key={o.id}
+              className={cn(
+                "flex items-center gap-[0.5em] rounded-[0.6em] border-2 px-[0.6em] py-[0.35em]",
+                revealed && isCorrect
+                  ? "border-primary bg-primary/15"
+                  : revealed
+                    ? "border-border bg-card/40 text-muted-foreground opacity-60"
+                    : "border-border bg-card",
+              )}
+            >
+              <span
+                className={cn(
+                  "flex h-[1.5em] w-[1.5em] shrink-0 items-center justify-center rounded-full text-[0.75em] font-bold",
+                  revealed && isCorrect ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground",
+                )}
+              >
+                {revealed && isCorrect ? <Check className="h-[1em] w-[1em]" /> : LETTERS[i]}
+              </span>
+              <div className="min-w-0 flex-1">
+                <QuestionStem
+                  content={o.content}
+                  bodyHtml={o.bodyHtml}
+                  className={cn("font-medium leading-snug", FIGURE_CLASS)}
+                  maxHeightClass="max-h-none"
+                />
+              </div>
+            </div>
+          )
+        })
+      )}
+    </div>
+  )
+
+  return (
+    <div ref={boxRef} className="absolute inset-0 overflow-hidden">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 overflow-hidden"
+        style={{ visibility: "hidden" }}
+      >
+        <div ref={natRef} className="mx-auto flex w-full max-w-[1800px] flex-col gap-[0.7em]">
+          {stemNode()}
+          {optionsGrid(optsRef)}
+        </div>
+      </div>
+
+      {layout.mode === "single" ? (
+        <div className="flex h-full items-center">
+          <div
+            className="mx-auto flex w-full max-w-[1800px] flex-col gap-[0.7em]"
+            style={{ fontSize: layout.fs }}
+          >
+            {stemNode()}
+            {optionsGrid()}
+          </div>
+        </div>
+      ) : (
+        <div
+          className="grid h-full gap-3"
+          style={{ fontSize: layout.fs, gridTemplateRows: `${STAGE_SPLIT}fr ${1 - STAGE_SPLIT}fr` }}
+        >
+          <div className="min-h-0 overflow-y-auto pr-3">{stemNode()}</div>
+          <div className="min-h-0 overflow-y-auto border-t border-border pr-3 pt-3">{optionsGrid()}</div>
+        </div>
+      )}
+    </div>
+  )
+}
