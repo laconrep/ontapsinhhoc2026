@@ -5,6 +5,15 @@ import { preprocessOmml } from "./docx-omml"
 
 export const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 
+function tagEquationImages(html: string): string {
+  return html.replace(/<img\b[^>]*>/gi, (tag) => {
+    if (/\bclass\s*=\s*["'][^"']*\beq-(inline|figure)\b/i.test(tag)) return tag
+    const src = tag.match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1] ?? ""
+    const cls = /data:image\/svg\+xml/i.test(src) ? "eq-inline" : "eq-figure"
+    return tag.replace(/<img\b/i, `<img class="${cls}"`)
+  })
+}
+
 export type FileKind = "txt" | "pdf" | "docx"
 
 export interface ExtractResult {
@@ -70,9 +79,9 @@ export async function extractAndParse(buffer: Buffer, filename: string): Promise
     )
     const html = rawHtml.replace(/@@MATH(\d+)@@/g, (_, n: string) => {
       const src = maths[+n]
-      return src ? `<img src="${src}">` : "[công thức]"
+      return src ? `<img src="${src}" class="eq-inline" alt="">` : "[công thức]"
     })
-    return parseHtmlToResultAndText(html)
+    return parseHtmlToResultAndText(tagEquationImages(html))
   }
 
   const { PDFParse } = await import("pdf-parse")

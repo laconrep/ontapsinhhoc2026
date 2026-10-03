@@ -2,7 +2,7 @@
 
 Muc tieu: man trinh chieu GV/TV tu chon co chu lon nhat vua man, so cot dap an, va chi chia khung 65/35 khi 28px van tran. Man dien thoai HS chia 65/35 khi cau dai, fit font theo thong so dien thoai (khong copy so TV). Cong thuc MathType/OMML inline co theo chu. Khong dong bo cuon TV-GV.
 
-Trang thai: **xong phien 3**. Day la nguon su that cho 6 phien. Phien sau CHI doc file nay + dung cac file duoc liet ke trong phien do. KHONG doc lai toan repo. KHONG doc `Ke-hoach-sua-loi-hien-thi-cau-hoi.docx` (ke hoach cu, lech repo).
+Trang thai: **xong phien 4**. Day la nguon su that cho 6 phien. Phien sau CHI doc file nay + dung cac file duoc liet ke trong phien do. KHONG doc lai toan repo. KHONG doc `Ke-hoach-sua-loi-hien-thi-cau-hoi.docx` (ke hoach cu, lech repo).
 
 File doi chieu (neu can thu cong thuc): `BAI 1 - GENE VA SU TAI BAN DNA.docx` o goc repo.
 
@@ -468,10 +468,21 @@ Khong doi ham export. Khong doi `attachBodyHtml`.
 ### Bao cao phien 4 (dien sau khi code)
 
 - Da lam:
+  - `extract-file.ts`: helper `tagEquationImages` — anh chua co eq-inline/eq-figure thi SVG -> `eq-inline`, con lai -> `eq-figure`. Goi sau thay `@@MATH@@`, truoc `parseHtmlToResultAndText`.
+  - Thay `@@MATH@@` bang `<img src class="eq-inline" alt="">`. Khong sua convertImage (mammoth chi tra src); class gan o HTML.
+  - `imgTagToPlaceholder` giu class `eq-inline|eq-figure` va style `height:NNem;width:auto`. Khong nguong 70px. Khong doi ham export / attachBodyHtml / docx-omml / docx-equations.
 - File da sua/tao:
+  - `lib/extract-file.ts`
+  - `lib/worksheet-parser.ts` (chi imgTagToPlaceholder)
+  - `sualoidodaicauhoi.md`
 - Ket qua tsc/lint:
+  - `pnpm exec tsc --noEmit`: dat (exit 0).
+  - `pnpm lint`: fail san co (khong co eslint).
 - So cau/dap an file mau (neu do):
+  - Khong chay duoc `scripts/check-parser-phien8.mjs` (node khong resolve import `.ts` / khong co tsx trong repo). Khong them thu vien. Chu ky export parser khong doi.
 - Diem chua chac:
+  - WMF khong chuyen duoc SVG se mang contentType x-wmf -> `eq-figure` (dung theo helper).
+  - Moi SVG (ke ca hinh minh hoa SVG, neu co) thanh eq-inline. File mau chu yeu OMML/WMF -> SVG cong thuc.
 - Viec tiep theo: phien 5 man HS.
 
 ---
@@ -641,20 +652,19 @@ Xu ly:
 
 ## Trang thai
 
-- Phien hien tai: xong phien 3
+- Phien hien tai: xong phien 4
 - Phien 1: xong
 - Phien 2: xong
 - Phien 3: xong
-- Phien 4: chua
+- Phien 4: xong
 - Phien 5: chua
 - Phien 6: chua
 
-Diem moc sau phien 3:
+Diem moc sau phien 4:
 
 - `QuestionStem` giu class eq-inline/eq-figure + style height em; `max-h-none` khong overflow-y-auto; figure mac dinh van max-h-48
 - QuizStage dung AdaptiveQuestion (`key={question.id}`), pt-24, chip khong nam trong khoi do
 - present-view / teacher-console khong sua (van boc QuizStage)
+- extract-file: `tagEquationImages` + MATH `class="eq-inline"`; parser `imgTagToPlaceholder` giu class/style
 - StudentQuizView stem max-h 36vh, trang overflow-y-auto, chua chia 65/35 (phien 5)
-- imgTagToPlaceholder van bo class/style (phien 4)
-- extract-file OMML/WMF da ra SVG nhung `<img>` khong class eq-inline (phien 4)
 - Chua co student-question-layout.tsx

@@ -623,8 +623,13 @@ function imgTagToPlaceholder(tag: string, images: string[]): string {
   const src = tag.match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1] ?? ""
   if (!/^data:image\/[a-zA-Z0-9.+-]+;base64,/i.test(src) && !src.startsWith("/")) return ""
   const alt = (tag.match(/\balt\s*=\s*["']([^"']*)["']/i)?.[1] ?? "").replace(/[<>"']/g, "")
+  const cls = tag.match(/\bclass\s*=\s*["'](eq-inline|eq-figure)["']/i)?.[1] ?? ""
+  const h = tag.match(/\bstyle\s*=\s*["']height:([\d.]+)em;width:auto["']/i)?.[1]
+  const extra =
+    (cls ? ` class="${cls}"` : "") +
+    (cls === "eq-inline" && h ? ` style="height:${h}em;width:auto"` : "")
   const i = images.length
-  images.push(`<img src="${src}" alt="${alt}">`)
+  images.push(`<img src="${src}" alt="${alt}"${extra}>`)
   return `\n@@IMG${i}@@\n`
 }
 
