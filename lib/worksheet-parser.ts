@@ -306,7 +306,7 @@ function splitChoiceBlock(
   const positions: { letter: string; start: number }[] = []
   let from = 0
   for (const L of letters) {
-    const re = new RegExp(`(^|[\\s\\u00A0])\\s*(${L}[.)])`, "i")
+    const re = new RegExp(`(^|[\\s\\u00A0]|\\.)\\s*(${L}[.)])`, "i")
     const slice = searchable.slice(from)
     const m = slice.match(re)
     if (!m) break
@@ -630,7 +630,7 @@ function imgTagToPlaceholder(tag: string, images: string[]): string {
     (cls === "eq-inline" && h ? ` style="height:${h}em;width:auto"` : "")
   const i = images.length
   images.push(`<img src="${src}" alt="${alt}"${extra}>`)
-  return `\n@@IMG${i}@@\n`
+  return cls === "eq-inline" ? `@@IMG${i}@@` : `\n@@IMG${i}@@\n`
 }
 
 function sanitizeTableHtml(raw: string): string {

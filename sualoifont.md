@@ -310,9 +310,19 @@ Cau 22: `Ty le` + cong thuc cung dong, cao ~chu (`eq-inline`). 4 o A/B/C/D. Fit 
 ### Bao cao phien 2 (dien sau khi code)
 
 - Da lam:
+  - `imgTagToPlaceholder`: `eq-inline` tra `@@IMGn@@` khong newline; `eq-figure` / thieu class giu `\n@@IMGn@@\n`.
+  - `splitChoiceBlock`: ranh truoc marker them dau `.` — `nucleotide.D.` tach thanh C va D. Khong doi `mcOptionContent` / export.
+  - `extract-file.ts`: khong sua — `tagEquationImages` da gan SVG = eq-inline.
+  - Parse tam cau 22: 4 option, IMG nam A.
 - File da sua/tao:
+  - Sua: `lib/worksheet-parser.ts`
+  - Sua: `sualoifont.md`
 - Ket qua tsc/lint:
+  - `npx tsc --noEmit`: dat (exit 0).
+  - lint: fail san co — khong co `eslint.config.*`. Khong them thu vien.
 - Diem chua chac (WMF fail -> figure?):
+  - Neu MathType khong ra SVG, `tagEquationImages` van gan `eq-figure` + newline — o A co the cao. Chap nhan, khong fake.
+  - Marker sau `.` co the sai neu de bai co chu `A.` giua cau (hep, dung cho Cau 22).
 - Viec tiep theo: phien 3 khung 16:9.
 
 ---
@@ -523,9 +533,9 @@ Bat buoc `[text-align-last:left]`. Khong justify dong cuoi.
 
 ## Trang thai
 
-- Phien hien tai: xong phien 1
+- Phien hien tai: xong phien 2
 - Phien 1: xong (le, gian dong, A.A.)
-- Phien 2: chua (cau 22 inline + tach C/D)
+- Phien 2: xong (cau 22 inline + tach C/D)
 - Phien 3: chua (tivi ao 16:9)
 - Phien 4: chua (tour TV)
 - Phien 5: chua (lan sau, Tat TV, ra soat)
