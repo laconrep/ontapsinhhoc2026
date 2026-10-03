@@ -2,7 +2,7 @@
 
 Muc tieu: man trinh chieu GV/TV tu chon co chu lon nhat vua man, so cot dap an, va chi chia khung 65/35 khi 28px van tran. Man dien thoai HS chia 65/35 khi cau dai, fit font theo thong so dien thoai (khong copy so TV). Cong thuc MathType/OMML inline co theo chu. Khong dong bo cuon TV-GV.
 
-Trang thai: **xong phien 2**. Day la nguon su that cho 6 phien. Phien sau CHI doc file nay + dung cac file duoc liet ke trong phien do. KHONG doc lai toan repo. KHONG doc `Ke-hoach-sua-loi-hien-thi-cau-hoi.docx` (ke hoach cu, lech repo).
+Trang thai: **xong phien 3**. Day la nguon su that cho 6 phien. Phien sau CHI doc file nay + dung cac file duoc liet ke trong phien do. KHONG doc lai toan repo. KHONG doc `Ke-hoach-sua-loi-hien-thi-cau-hoi.docx` (ke hoach cu, lech repo).
 
 File doi chieu (neu can thu cong thuc): `BAI 1 - GENE VA SU TAI BAN DNA.docx` o goc repo.
 
@@ -395,9 +395,18 @@ Man TV va khung cau GV dung AdaptiveQuestion. Chip + dong ho khong de noi dung. 
 ### Bao cao phien 3 (dien sau khi code)
 
 - Da lam:
+  - QuizStage import AdaptiveQuestion. Vung cau hoi: `relative flex min-h-0 flex-1 flex-col px-8 pb-6 pt-24`. Chip "Cau x/y" + loai cau `absolute left-1/2 top-5`. AdaptiveQuestion `key={question.id}` trong `relative min-h-0 flex-1`.
+  - Overlay so HS / dong ho / canh bao fullscreen giu nguyen. Man "Dang cho bat dau…" giu nguyen.
+  - Xoa import `QuestionStem`, `Check`, `LETTERS`. Khong sua present-view / teacher-console.
 - File da sua/tao:
+  - `components/live/quiz-stage.tsx`
+  - `sualoidodaicauhoi.md`
 - Ket qua tsc/lint:
+  - `pnpm exec tsc --noEmit`: dat (exit 0).
+  - `pnpm lint`: fail san co (khong co eslint) — giong phien 1-2.
 - Diem chua chac:
+  - Chip giua va dong ho phai co the chong o man hep; `pt-24` du cho chieu cao dong ho 80px.
+  - Chua thu tren TV that (cau ngan/dai/fullscreen) — chi compile.
 - Viec tiep theo: phien 4 gan eq-inline luc extract.
 
 ---
@@ -632,20 +641,20 @@ Xu ly:
 
 ## Trang thai
 
-- Phien hien tai: xong phien 2
+- Phien hien tai: xong phien 3
 - Phien 1: xong
 - Phien 2: xong
-- Phien 3: chua
+- Phien 3: xong
 - Phien 4: chua
 - Phien 5: chua
 - Phien 6: chua
 
-Diem moc sau phien 2:
+Diem moc sau phien 3:
 
 - `QuestionStem` giu class eq-inline/eq-figure + style height em; `max-h-none` khong overflow-y-auto; figure mac dinh van max-h-48
-- Co `components/live/adaptive-question.tsx`, chua gan QuizStage
-- QuizStage font co dinh 4xl/5xl, stem max-h 40vh, khung overflow-hidden (phien 3)
-- StudentQuizView stem max-h 36vh, trang overflow-y-auto, chua chia 65/35
+- QuizStage dung AdaptiveQuestion (`key={question.id}`), pt-24, chip khong nam trong khoi do
+- present-view / teacher-console khong sua (van boc QuizStage)
+- StudentQuizView stem max-h 36vh, trang overflow-y-auto, chua chia 65/35 (phien 5)
 - imgTagToPlaceholder van bo class/style (phien 4)
 - extract-file OMML/WMF da ra SVG nhung `<img>` khong class eq-inline (phien 4)
 - Chua co student-question-layout.tsx
