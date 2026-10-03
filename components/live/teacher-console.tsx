@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Eye,
   Monitor,
+  MonitorOff,
   Play,
   Square,
   Check,
@@ -103,6 +104,8 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
   const [headerOpen, setHeaderOpen] = useState(false)
   const [leftOpen, setLeftOpen] = useState(false)
   const [tvTourOpen, setTvTourOpen] = useState(false)
+  const [tvOpen, setTvOpen] = useState(false)
+  const tvPopupRef = useRef<Window | null>(null)
   const leftOpenRef = useRef(false)
   const leftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -151,6 +154,18 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
   useEffect(() => {
     leftOpenRef.current = leftOpen
   }, [leftOpen])
+
+  useEffect(() => {
+    if (!tvOpen) return
+    const id = window.setInterval(() => {
+      const popup = tvPopupRef.current
+      if (!popup || popup.closed) {
+        tvPopupRef.current = null
+        setTvOpen(false)
+      }
+    }, 800)
+    return () => window.clearInterval(id)
+  }, [tvOpen])
 
   useEffect(() => {
     function onMove(e: MouseEvent) {
@@ -333,6 +348,23 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
             TV
           </Button>
 
+          {tvOpen && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                try {
+                  tvPopupRef.current?.close()
+                } catch {}
+                tvPopupRef.current = null
+                setTvOpen(false)
+              }}
+            >
+              <MonitorOff className="h-4 w-4" />
+              Tắt TV
+            </Button>
+          )}
+
           <Button
             size="sm"
             variant="destructive"
@@ -432,7 +464,15 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
         </div>
       </aside>
 
-      <TvStageTour open={tvTourOpen} onOpenChange={setTvTourOpen} sessionId={sessionId} />
+      <TvStageTour
+        open={tvTourOpen}
+        onOpenChange={setTvTourOpen}
+        sessionId={sessionId}
+        onPopupChange={(popup) => {
+          tvPopupRef.current = popup
+          setTvOpen(!!popup && !popup.closed)
+        }}
+      />
     </div>
   )
 }

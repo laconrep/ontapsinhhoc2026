@@ -2,7 +2,7 @@
 
 Muc tieu: (1) cau dan + lua chon sat trai, canh deu 2 bien, dong cuoi khong rai chu; (2) bot gian dong cau dan; (3) het trung nhan A.A.; (4) cau 22 cong thuc inline nho, 4 lua chon tach dung; (5) khung san khau GV la tivi ao 16:9, thuat toan fit GIU NGUYEN, nut TV day khung do sang man 2.
 
-Trang thai: **chua xong**. Day la nguon su that. Phien sau CHI doc file nay + mo dung file liet ke trong phien do. KHONG doc lai toan repo. KHONG doc `suaketnoimanhinh.md` / `sualoidodaicauhoi.md` (ke hoach cu, lech quyet dinh TV ao).
+Trang thai: **xong 5 phien**. Day la nguon su that. Phien sau CHI doc file nay + mo dung file liet ke trong phien do. KHONG doc lai toan repo. KHONG doc `suaketnoimanhinh.md` / `sualoidodaicauhoi.md` (ke hoach cu, lech quyet dinh TV ao).
 
 File doi chieu cong thuc: `BAI 1 - GENE VA SU TAI BAN DNA.docx` o goc repo (Cau 22).
 
@@ -496,10 +496,29 @@ Da chieu 1 lan: dialog ngan Mo ngay / Huong dan lai. Nut Tat TV dong popup. Grep
 ### Bao cao phien 5 (dien sau khi code)
 
 - Da lam:
+  - Doc `edusync-tv-tour-done`: lan sau dialog ngan "Mở sân khấu trên TV" (goi `openOnTv`) + "Hướng dẫn lại" (step=0). That bai: khong dong, nhay sang buoc loi.
+  - Ref popup qua `onPopupChange`. Nut "Tắt TV" canh nut TV, `popup.close()`, an khi chua mo / popup da dong.
+  - Safari/Firefox: `getScreenDetails` thieu / throw -> err ro, khong crash. Preview khong sessionId: khong open present.
+  - Giu `/tv-tour-preview`. Khong sua PresentView layout.
 - File da sua/tao:
+  - Sua: `components/live/tv-stage-tour.tsx`
+  - Sua: `components/live/teacher-console.tsx`
+  - Sua: `sualoifont.md`
 - Ket qua tsc/lint:
+  - `./node_modules/.bin/tsc --noEmit`: dat (exit 0).
+  - lint: fail san co — khong co `eslint` / `eslint.config.*`. Khong them thu vien.
 - Grep con sot:
+  - `window.open(present)`: CHI `tv-stage-tour.tsx` `openOnTv` (sau khi co man `!isPrimary`). Console nut TV khong open.
+  - `session-control.tsx` van `<a href=.../present>` "Mở TV" (tab thuong, khong phai nut TV console). Khong sua — ngoai pham vi phien.
 - Rui ro 6.x (bao cao, chua sua):
+  - 5.1 App khong Win+K/Win+P — tour + fail message.
+  - 5.2 getScreenDetails Chrome/Edge; Duplicate = 1 man.
+  - 5.3 Hai QuizStage (console + present), khong pixel 1:1.
+  - 5.4 requestFullscreen popup de chan; F11.
+  - 5.5 WMF MathType khong SVG van eq-figure.
+  - 5.6 `/tv-tour-preview` khong auth.
+  - 5.7 text-justify + last-left (phien 1).
+  - Them: `await getScreenDetails` co the mat user-gesture -> popup null (bao loi, khong mo uoc luong). Poll 800ms dong "Tắt TV" khi GV tu dong cua so.
 - Viec tiep theo: khong. Ke hoach xong.
 
 ---
@@ -559,19 +578,19 @@ Bat buoc `[text-align-last:left]`. Khong justify dong cuoi.
 
 ## Trang thai
 
-- Phien hien tai: xong phien 4
+- Phien hien tai: xong phien 5 (ke hoach xong)
 - Phien 1: xong (le, gian dong, A.A.)
 - Phien 2: xong (cau 22 inline + tach C/D)
 - Phien 3: xong (tivi ao 16:9)
 - Phien 4: xong (tour TV)
-- Phien 5: chua (lan sau, Tat TV, ra soat)
+- Phien 5: xong (lan sau ngan, Tat TV, ra soat)
 
-Diem moc truoc khi sua:
+Diem moc sau 5 phien:
 
-- Nut TV mo tour (`teacher-console.tsx` ~330); `window.open(present)` chi trong `openOnTv` khi co man phu
-- Da co tv-tour + `/tv-tour-preview`
-- QuizStage fill flex-1, khong 16:9
-- Badge + content lap A.
-- Stem cau ngan text-center, leading-relaxed / p margin Word
-- imgTagToPlaceholder boc newline — cong thuc block
-- splitChoiceBlock khong tach `.D.`
+- Nut TV mo tour / dialog ngan; `window.open(present)` chi trong `openOnTv` khi co man phu
+- Nut Tat TV dong popup
+- tv-tour + `/tv-tour-preview`
+- StageFrame 16:9 letterbox (console + present)
+- Badge + strip prefix (het A.A.)
+- Stem justify + last-left, leading-snug, p my-0
+- eq-inline khong newline; splitChoiceBlock tach `.D.`
