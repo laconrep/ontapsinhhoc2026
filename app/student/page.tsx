@@ -1,15 +1,22 @@
 import Link from "next/link"
+import { getAssignedLessonsForStudent } from "@/app/actions/assignments"
 import { getMyClasses } from "@/app/actions/student-class"
 import { getActiveSessionsForStudent } from "@/app/actions/sessions"
+import { AssignedWork } from "@/components/student/assigned-work"
 import { JoinClassCard } from "@/components/student/join-class-card"
 import { Users, Radio } from "lucide-react"
+import type { AssignedLessonDto } from "@/types"
 
 export const dynamic = "force-dynamic"
 
 export default async function StudentHomePage() {
-  const [classes, liveSessions] = await Promise.all([
+  const [classes, liveSessions, assigned] = await Promise.all([
     getMyClasses(),
     getActiveSessionsForStudent(),
+    getAssignedLessonsForStudent().catch((err) => {
+      console.error("[v0] getAssignedLessonsForStudent error:", err)
+      return [] as AssignedLessonDto[]
+    }),
   ])
 
   return (
@@ -48,6 +55,8 @@ export default async function StudentHomePage() {
           ))}
         </section>
       )}
+
+      <AssignedWork items={assigned} />
 
       <JoinClassCard />
 

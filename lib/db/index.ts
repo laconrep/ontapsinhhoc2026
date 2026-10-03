@@ -14,7 +14,7 @@ export const db = drizzle(pool, { schema })
 
 let schemaReady: Promise<void> | null = null
 
-/** Cot bodyHtml them o phien 2; lessonId/order/nullable KP o phien 1. */
+/** Cot bodyHtml them o phien 2; lessonId/order/nullable KP o phien 1; class_assignments o giao bai. */
 export function ensureSchema(): Promise<void> {
   if (!schemaReady) {
     schemaReady = pool
@@ -79,6 +79,23 @@ export function ensureSchema(): Promise<void> {
                   AND kp."lessonId" = q."lessonId"
              )
         `),
+      )
+      .then(() =>
+        pool.query(`
+          CREATE TABLE IF NOT EXISTS "class_assignments" (
+            "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            "classId" uuid NOT NULL REFERENCES "classes"("id") ON DELETE CASCADE,
+            "lessonId" uuid NOT NULL REFERENCES "lessons"("id") ON DELETE CASCADE,
+            "teacherId" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+            "dueAt" timestamp,
+            "note" text,
+            "createdAt" timestamp NOT NULL DEFAULT now(),
+            CONSTRAINT "ca_class_lesson_unique" UNIQUE ("classId", "lessonId")
+          )
+        `),
+      )
+      .then(() =>
+        pool.query(`CREATE INDEX IF NOT EXISTS "ca_class_idx" ON "class_assignments" ("classId")`),
       )
       .then(() => undefined)
       .catch((e) => {
