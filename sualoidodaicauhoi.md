@@ -2,7 +2,7 @@
 
 Muc tieu: man trinh chieu GV/TV tu chon co chu lon nhat vua man, so cot dap an, va chi chia khung 65/35 khi 28px van tran. Man dien thoai HS chia 65/35 khi cau dai, fit font theo thong so dien thoai (khong copy so TV). Cong thuc MathType/OMML inline co theo chu. Khong dong bo cuon TV-GV.
 
-Trang thai: **xong phien 4**. Day la nguon su that cho 6 phien. Phien sau CHI doc file nay + dung cac file duoc liet ke trong phien do. KHONG doc lai toan repo. KHONG doc `Ke-hoach-sua-loi-hien-thi-cau-hoi.docx` (ke hoach cu, lech repo).
+Trang thai: **xong phien 5**. Day la nguon su that cho 6 phien. Phien sau CHI doc file nay + dung cac file duoc liet ke trong phien do. KHONG doc lai toan repo. KHONG doc `Ke-hoach-sua-loi-hien-thi-cau-hoi.docx` (ke hoach cu, lech repo).
 
 File doi chieu (neu can thu cong thuc): `BAI 1 - GENE VA SU TAI BAN DNA.docx` o goc repo.
 
@@ -541,9 +541,19 @@ ResizeObserver khung ngoai. `key` = questionId (cha truyen).
 ### Bao cao phien 5 (dien sau khi code)
 
 - Da lam:
+  - Tao `StudentQuestionLayout`: `PHONE_MIN_FS=14`, `PHONE_MAX_FS=24`, `PHONE_SPLIT=0.65`, chi 1 cot. Do tren khoi an (natRef luon mount). Single: stem+options 1 cot; khong vua MIN -> split 65/35, moi phan overflow-y-auto. ResizeObserver chi box ngoai. `key` = questionId.
+  - `student-quiz-view`: khung `h-full min-h-0 flex-col`, bo overflow-y-auto toan trang, thanh tren `shrink-0`, giu `pb-36`. Khi co `q`: boc stem + MC/TF/SA trong layout. Stem `max-h-none`, bo `max-h-[36vh]` va `text-2xl`. Markup button MC/TF/SA / nut Gui / het gio giu nguyen. Khong dung AdaptiveQuestion. Khong sua tab4-quiz.
 - File da sua/tao:
+  - `components/live/student-question-layout.tsx` (tao)
+  - `components/live/student-quiz-view.tsx`
+  - `sualoidodaicauhoi.md`
 - Ket qua tsc/lint:
+  - `pnpm exec tsc --noEmit`: dat (exit 0).
+  - `pnpm lint`: fail san co (khong co eslint).
 - Diem chua chac:
+  - Button `text-lg` / `min-h-14` khong doi sang em; font layout 14-24px chi ke thua cho stem la chinh. Nut bam van du lon.
+  - Ket qua "Chinh xac" nam ngoai layout (`shrink-0`) de khong an dien tich do.
+  - Chua thu tren dien thoai that.
 - Viec tiep theo: phien 6 ra soat + chot.
 
 ---
@@ -652,19 +662,19 @@ Xu ly:
 
 ## Trang thai
 
-- Phien hien tai: xong phien 4
+- Phien hien tai: xong phien 5
 - Phien 1: xong
 - Phien 2: xong
 - Phien 3: xong
 - Phien 4: xong
-- Phien 5: chua
+- Phien 5: xong
 - Phien 6: chua
 
-Diem moc sau phien 4:
+Diem moc sau phien 5:
 
 - `QuestionStem` giu class eq-inline/eq-figure + style height em; `max-h-none` khong overflow-y-auto; figure mac dinh van max-h-48
 - QuizStage dung AdaptiveQuestion (`key={question.id}`), pt-24, chip khong nam trong khoi do
 - present-view / teacher-console khong sua (van boc QuizStage)
 - extract-file: `tagEquationImages` + MATH `class="eq-inline"`; parser `imgTagToPlaceholder` giu class/style
-- StudentQuizView stem max-h 36vh, trang overflow-y-auto, chua chia 65/35 (phien 5)
-- Chua co student-question-layout.tsx
+- StudentQuizView dung StudentQuestionLayout (14-24px, 1 cot, split 65/35); stem max-h-none; nut Gui van fixed bottom
+- Co `components/live/student-question-layout.tsx`

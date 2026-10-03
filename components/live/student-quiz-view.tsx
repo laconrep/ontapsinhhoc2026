@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { useLiveQuiz } from "./use-live-quiz"
 import { joinQuiz, submitLiveAnswer, reportFullscreen } from "@/app/actions/live-quiz"
 import { QuestionStem } from "@/components/question/question-stem"
+import { StudentQuestionLayout } from "./student-question-layout"
 
 const LETTERS = ["A", "B", "C", "D", "E", "F"]
 
@@ -170,9 +171,9 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
         </button>
       )}
 
-      <div className="fixed inset-0 z-[80] mx-auto flex max-w-2xl flex-col gap-5 overflow-y-auto bg-background p-4 pb-36">
+      <div className="fixed inset-0 z-[80] mx-auto flex h-full min-h-0 max-w-2xl flex-col gap-3 bg-background p-4 pb-36">
         {/* Thanh trên: tiến độ + đồng hồ */}
-        <div className="flex items-center justify-between">
+        <div className="flex shrink-0 items-center justify-between">
         <span className="rounded-full bg-secondary px-3 py-1 text-sm font-medium text-secondary-foreground">
           {view.currentIndex >= 0 ? `Câu ${view.currentIndex + 1}/${view.total}` : "Đang chờ"}
         </span>
@@ -195,121 +196,126 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
         </div>
       ) : (
         <>
-          <QuestionStem
-            content={q.content}
-            bodyHtml={q.bodyHtml}
-            className="text-balance font-heading text-2xl font-bold leading-snug"
-            maxHeightClass="max-h-[36vh]"
+          <StudentQuestionLayout
+            key={q.id}
+            questionId={q.id}
+            stem={
+              <QuestionStem
+                content={q.content}
+                bodyHtml={q.bodyHtml}
+                className="text-balance font-heading font-bold leading-snug"
+                maxHeightClass="max-h-none"
+              />
+            }
+            options={
+              <>
+                {q.type === "MC" && (
+                  <div className="relative z-20 flex flex-col gap-3 pointer-events-auto">
+                    {q.options.map((o, i) => {
+                      const isCorrect = view.revealed?.correctOptionIds.includes(o.id)
+                      const isMine = mcChoice === o.id
+                      return (
+                        <button
+                          key={o.id}
+                          type="button"
+                          disabled={locked}
+                          onClick={() => {
+                            if (locked) return
+                            setMcChoice(o.id)
+                          }}
+                          className={cn(
+                            "relative z-20 flex min-h-14 w-full cursor-pointer touch-manipulation items-center gap-3 rounded-xl border-2 px-4 py-3 text-left text-lg transition-colors disabled:cursor-not-allowed",
+                            view.revealed && isCorrect
+                              ? "border-primary bg-primary/10"
+                              : view.revealed && isMine
+                                ? "border-destructive bg-destructive/10"
+                                : isMine
+                                  ? "border-primary bg-primary/5"
+                                  : "border-border bg-card",
+                          )}
+                        >
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary text-sm font-bold text-secondary-foreground">
+                            {LETTERS[i]}
+                          </span>
+                          <span>{o.content}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {q.type === "TF" && (
+                  <div className="flex flex-col gap-3">
+                    {q.options.map((o) => {
+                      const picked = tfChoices[o.id]
+                      const isCorrect = view.revealed?.correctOptionIds.includes(o.id)
+                      return (
+                        <div
+                          key={o.id}
+                          className={cn(
+                            "flex items-center gap-3 rounded-xl border-2 px-4 py-3",
+                            view.revealed
+                              ? isCorrect
+                                ? "border-primary bg-primary/10"
+                                : "border-border bg-card"
+                              : "border-border bg-card",
+                          )}
+                        >
+                          <span className="flex-1 text-base">{o.content}</span>
+                          <div className="flex shrink-0 gap-1">
+                            <button
+                              type="button"
+                              disabled={locked}
+                              onClick={() => setTfChoices((s) => ({ ...s, [o.id]: true }))}
+                              className={cn(
+                                "min-h-10 touch-manipulation rounded-lg px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed",
+                                picked === true ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground",
+                              )}
+                            >
+                              Đúng
+                            </button>
+                            <button
+                              type="button"
+                              disabled={locked}
+                              onClick={() => setTfChoices((s) => ({ ...s, [o.id]: false }))}
+                              className={cn(
+                                "min-h-10 touch-manipulation rounded-lg px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed",
+                                picked === false ? "bg-destructive text-primary-foreground" : "bg-secondary text-secondary-foreground",
+                              )}
+                            >
+                              Sai
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {q.type === "SA" && (
+                  <div className="flex flex-col gap-3">
+                    <Input
+                      value={saText}
+                      onChange={(e) => setSaText(e.target.value)}
+                      disabled={locked}
+                      placeholder="Nhập câu trả lời…"
+                      className="text-lg"
+                    />
+                    {view.revealed?.correctText && (
+                      <p className="rounded-lg border-2 border-primary bg-primary/10 px-4 py-2 text-base">
+                        Đáp án: <span className="font-semibold">{view.revealed.correctText}</span>
+                      </p>
+                    )}
+                  </div>
+                )}
+              </>
+            }
           />
 
-          {/* MC */}
-          {q.type === "MC" && (
-            <div key={q.id} className="relative z-20 flex flex-col gap-3 pointer-events-auto">
-              {q.options.map((o, i) => {
-                const isCorrect = view.revealed?.correctOptionIds.includes(o.id)
-                const isMine = mcChoice === o.id
-                return (
-                  <button
-                    key={o.id}
-                    type="button"
-                    disabled={locked}
-                    onClick={() => {
-                      if (locked) return
-                      setMcChoice(o.id)
-                    }}
-                    className={cn(
-                      "relative z-20 flex min-h-14 w-full cursor-pointer touch-manipulation items-center gap-3 rounded-xl border-2 px-4 py-3 text-left text-lg transition-colors disabled:cursor-not-allowed",
-                      view.revealed && isCorrect
-                        ? "border-primary bg-primary/10"
-                        : view.revealed && isMine
-                          ? "border-destructive bg-destructive/10"
-                          : isMine
-                            ? "border-primary bg-primary/5"
-                            : "border-border bg-card",
-                    )}
-                  >
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary text-sm font-bold text-secondary-foreground">
-                      {LETTERS[i]}
-                    </span>
-                    <span>{o.content}</span>
-                  </button>
-                )
-              })}
-            </div>
-          )}
-
-          {/* TF */}
-          {q.type === "TF" && (
-            <div className="flex flex-col gap-3">
-              {q.options.map((o) => {
-                const picked = tfChoices[o.id]
-                const isCorrect = view.revealed?.correctOptionIds.includes(o.id)
-                return (
-                  <div
-                    key={o.id}
-                    className={cn(
-                      "flex items-center gap-3 rounded-xl border-2 px-4 py-3",
-                      view.revealed
-                        ? isCorrect
-                          ? "border-primary bg-primary/10"
-                          : "border-border bg-card"
-                        : "border-border bg-card",
-                    )}
-                  >
-                    <span className="flex-1 text-base">{o.content}</span>
-                    <div className="flex shrink-0 gap-1">
-                      <button
-                        type="button"
-                        disabled={locked}
-                        onClick={() => setTfChoices((s) => ({ ...s, [o.id]: true }))}
-                        className={cn(
-                          "min-h-10 touch-manipulation rounded-lg px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed",
-                          picked === true ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground",
-                        )}
-                      >
-                        Đúng
-                      </button>
-                      <button
-                        type="button"
-                        disabled={locked}
-                        onClick={() => setTfChoices((s) => ({ ...s, [o.id]: false }))}
-                        className={cn(
-                          "min-h-10 touch-manipulation rounded-lg px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed",
-                          picked === false ? "bg-destructive text-primary-foreground" : "bg-secondary text-secondary-foreground",
-                        )}
-                      >
-                        Sai
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
-          {/* SA */}
-          {q.type === "SA" && (
-            <div className="flex flex-col gap-3">
-              <Input
-                value={saText}
-                onChange={(e) => setSaText(e.target.value)}
-                disabled={locked}
-                placeholder="Nhập câu trả lời…"
-                className="text-lg"
-              />
-              {view.revealed?.correctText && (
-                <p className="rounded-lg border-2 border-primary bg-primary/10 px-4 py-2 text-base">
-                  Đáp án: <span className="font-semibold">{view.revealed.correctText}</span>
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Kết quả của mình */}
           {answered && myCorrect != null && (
             <div
               className={cn(
-                "flex items-center gap-2 rounded-xl px-4 py-3 text-lg font-semibold",
+                "flex shrink-0 items-center gap-2 rounded-xl px-4 py-3 text-lg font-semibold",
                 myCorrect ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive",
               )}
             >
