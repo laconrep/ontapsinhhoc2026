@@ -92,4 +92,23 @@ if (!firstSvg.includes('xmlns="http://www.w3.org/2000/svg"')) {
   console.error("THAT BAI: SVG thieu default namespace, browser se khong render")
   process.exit(1)
 }
+
+const inlineHeights = []
+for (const tag of result.images) {
+  const cls = tag.match(/\bclass\s*=\s*["']([^"']*)["']/i)?.[1] ?? ""
+  if (!/\beq-inline\b/.test(cls)) continue
+  const h = tag.match(/\bstyle\s*=\s*["']height:([\d.]+)em;width:auto["']/i)?.[1]
+  const em = Number(h)
+  if (!Number.isFinite(em) || em < 1.0 || em > 6) {
+    console.error(`THAT BAI: eq-inline height ${h} ngoai [1.0em, 6em]`)
+    process.exit(1)
+  }
+  inlineHeights.push(em)
+}
+console.log("eq-inline heights:", inlineHeights.join(", "))
+if (inlineHeights.includes(3.3)) {
+  console.error("THAT BAI: van con height 3.3em (cong thuc cu)")
+  process.exit(1)
+}
+
 console.log("OK: khong con WMF, OMML da thay bang anh SVG, khong sot @@MATH")
