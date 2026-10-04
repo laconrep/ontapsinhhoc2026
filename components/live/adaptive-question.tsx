@@ -13,11 +13,25 @@ type Cols = 1 | 2 | 4
 
 const STAGE_MIN_FS = 28
 const STAGE_MAX_FS = 80
-const STAGE_SPLIT = 0.65
+const SPLIT_GAP = 12
+const SPLIT_OPTS_CHROME = 13
+const SPLIT_MIN_SHARE = 0.2
 const LETTERS = ["A", "B", "C", "D", "E", "F"]
 const FOUR_COL_MAX_CHARS = 14
 
 const FIGURE_CLASS = "[&_img:not(.eq-inline)]:max-h-[28vh]"
+
+export function computeSplitRatio(stemH: number, optsH: number, avail: number): number {
+  if (avail <= 0 || stemH + optsH <= 0) return 0.65
+  const total = stemH + optsH
+  const half = avail / 2
+  let stem: number
+  if (total <= avail) stem = stemH + (avail - total) / 2
+  else if (stemH <= half) stem = stemH
+  else if (optsH <= half) stem = avail - optsH
+  else stem = (avail * stemH) / total
+  return Math.min(1 - SPLIT_MIN_SHARE, Math.max(SPLIT_MIN_SHARE, stem / avail))
+}
 
 function optionOverflowsX(opts: HTMLElement): boolean {
   for (const cell of opts.children) {
@@ -31,10 +45,18 @@ export function AdaptiveQuestion({ question, revealed }: { question: Q; revealed
   const boxRef = useRef<HTMLDivElement>(null)
   const natRef = useRef<HTMLDivElement>(null)
   const optsRef = useRef<HTMLDivElement>(null)
-  const [layout, setLayout] = useState<{ mode: "single" | "split"; fs: number; cols: Cols }>({
+  const stemWrapRef = useRef<HTMLDivElement>(null)
+  const optsWrapRef = useRef<HTMLDivElement>(null)
+  const [layout, setLayout] = useState<{
+    mode: "single" | "split"
+    fs: number
+    cols: Cols
+    ratio: number
+  }>({
     mode: "single",
     fs: STAGE_MIN_FS,
     cols: 1,
+    ratio: 0.65,
   })
   const n = question.options.length
   const allowFourCols = useMemo(
@@ -93,7 +115,7 @@ export function AdaptiveQuestion({ question, revealed }: { question: Q; revealed
       setLayout((prev) =>
         prev.mode === "single" && prev.fs === best.fs && prev.cols === best.cols
           ? prev
-          : { mode: "single", ...best },
+          : { mode: "single", ratio: prev.ratio, ...best },
       )
       return
     }
@@ -108,10 +130,13 @@ export function AdaptiveQuestion({ question, revealed }: { question: Q; revealed
       }
     }
     apply(STAGE_MIN_FS, bestCols)
+    const stemH = stemWrapRef.current?.offsetHeight ?? 0
+    const optsH = (optsWrapRef.current?.offsetHeight ?? 0) + SPLIT_OPTS_CHROME
+    const ratio = Math.round(computeSplitRatio(stemH, optsH, box.clientHeight - SPLIT_GAP) * 100) / 100
     setLayout((prev) =>
-      prev.mode === "split" && prev.fs === STAGE_MIN_FS && prev.cols === bestCols
+      prev.mode === "split" && prev.fs === STAGE_MIN_FS && prev.cols === bestCols && prev.ratio === ratio
         ? prev
-        : { mode: "split", fs: STAGE_MIN_FS, cols: bestCols },
+        : { mode: "split", fs: STAGE_MIN_FS, cols: bestCols, ratio },
     )
   }, [n, allowFourCols])
 
@@ -218,8 +243,8 @@ export function AdaptiveQuestion({ question, revealed }: { question: Q; revealed
         style={{ visibility: "hidden" }}
       >
         <div ref={natRef} className="mx-auto flex w-full max-w-[1800px] flex-col gap-[0.7em]">
-          {stemNode()}
-          {optionsGrid(optsRef)}
+          <div ref={stemWrapRef}>{stemNode()}</div>
+          <div ref={optsWrapRef}>{optionsGrid(optsRef)}</div>
         </div>
       </div>
 
@@ -236,7 +261,10 @@ export function AdaptiveQuestion({ question, revealed }: { question: Q; revealed
       ) : (
         <div
           className="grid h-full gap-3"
-          style={{ fontSize: layout.fs, gridTemplateRows: `${STAGE_SPLIT}fr ${1 - STAGE_SPLIT}fr` }}
+          style={{
+            fontSize: layout.fs,
+            gridTemplateRows: `minmax(0, ${layout.ratio}fr) minmax(0, ${1 - layout.ratio}fr)`,
+          }}
         >
           <div className="min-h-0 overflow-y-auto pr-3">{stemNode()}</div>
           <div className="min-h-0 overflow-y-auto border-t border-border pr-3 pt-3">{optionsGrid()}</div>
