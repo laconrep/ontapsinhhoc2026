@@ -53,7 +53,7 @@ export function QuizStage({ view }: { view: LiveQuizView }) {
         </div>
       )}
 
-      <div className="relative flex min-h-0 flex-1 flex-col px-8 pb-6 pt-24 md:px-16">
+      <div className="relative flex min-h-0 flex-1 flex-col px-8 pb-6 pt-10 md:px-16">
         {question ? (
           <div className="relative min-h-0 flex-1">
             <AdaptiveQuestion key={question.id} question={question} revealed={revealed} />
