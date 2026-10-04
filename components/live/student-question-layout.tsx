@@ -10,10 +10,12 @@ import {
   useState,
   type ReactNode,
 } from "react"
+import { computeSplitRatio } from "./adaptive-question"
 
 const PHONE_MIN_FS = 14
 const PHONE_MAX_FS = 24
-const PHONE_SPLIT = 0.65
+const SPLIT_GAP = 8
+const SPLIT_OPTS_CHROME = 9
 
 function dup(node: ReactNode): ReactNode {
   if (node == null || typeof node === "boolean") return node
@@ -35,9 +37,12 @@ export function StudentQuestionLayout({
 }) {
   const boxRef = useRef<HTMLDivElement>(null)
   const natRef = useRef<HTMLDivElement>(null)
-  const [layout, setLayout] = useState<{ mode: "single" | "split"; fs: number }>({
+  const stemWrapRef = useRef<HTMLDivElement>(null)
+  const optsWrapRef = useRef<HTMLDivElement>(null)
+  const [layout, setLayout] = useState<{ mode: "single" | "split"; fs: number; ratio: number }>({
     mode: "single",
     fs: PHONE_MIN_FS,
+    ratio: 0.65,
   })
 
   const measure = useCallback(() => {
@@ -76,7 +81,16 @@ export function StudentQuestionLayout({
       apply(fs)
     }
 
-    setLayout((prev) => (prev.mode === mode && prev.fs === fs ? prev : { mode, fs }))
+    let ratio = 0.65
+    if (mode === "split") {
+      const stemH = stemWrapRef.current?.offsetHeight ?? 0
+      const optsH = (optsWrapRef.current?.offsetHeight ?? 0) + SPLIT_OPTS_CHROME
+      ratio = Math.round(computeSplitRatio(stemH, optsH, box.clientHeight - SPLIT_GAP) * 100) / 100
+    }
+
+    setLayout((prev) =>
+      prev.mode === mode && prev.fs === fs && prev.ratio === ratio ? prev : { mode, fs, ratio },
+    )
   }, [questionId])
 
   useLayoutEffect(() => {
@@ -110,8 +124,8 @@ export function StudentQuestionLayout({
         style={{ visibility: "hidden" }}
       >
         <div ref={natRef} className="flex w-full flex-col gap-[0.7em]">
-          {dup(stem)}
-          {dup(options)}
+          <div ref={stemWrapRef}>{dup(stem)}</div>
+          <div ref={optsWrapRef}>{dup(options)}</div>
         </div>
       </div>
 
@@ -125,7 +139,10 @@ export function StudentQuestionLayout({
       ) : (
         <div
           className="grid h-full min-h-0 gap-2"
-          style={{ fontSize: layout.fs, gridTemplateRows: `${PHONE_SPLIT}fr ${1 - PHONE_SPLIT}fr` }}
+          style={{
+            fontSize: layout.fs,
+            gridTemplateRows: `minmax(0, ${layout.ratio}fr) minmax(0, ${1 - layout.ratio}fr)`,
+          }}
         >
           <div className="min-h-0 overflow-y-auto pr-1">{stem}</div>
           <div className="min-h-0 overflow-y-auto border-t border-border pr-1 pt-2">{options}</div>
