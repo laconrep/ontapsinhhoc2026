@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useLayoutEffect, useRef, useState, type Ref } from "react"
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type Ref } from "react"
 import { Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { stripOptionPrefix, stripOptionPrefixHtml } from "@/lib/option-prefix"
@@ -15,8 +15,17 @@ const STAGE_MIN_FS = 28
 const STAGE_MAX_FS = 80
 const STAGE_SPLIT = 0.65
 const LETTERS = ["A", "B", "C", "D", "E", "F"]
+const FOUR_COL_MAX_CHARS = 14
 
 const FIGURE_CLASS = "[&_img:not(.eq-inline)]:max-h-[28vh]"
+
+function optionOverflowsX(opts: HTMLElement): boolean {
+  for (const cell of opts.children) {
+    if (!(cell instanceof HTMLElement)) continue
+    if (cell.clientWidth > 0 && cell.scrollWidth > cell.clientWidth + 1) return true
+  }
+  return false
+}
 
 export function AdaptiveQuestion({ question, revealed }: { question: Q; revealed: Revealed }) {
   const boxRef = useRef<HTMLDivElement>(null)
@@ -28,6 +37,16 @@ export function AdaptiveQuestion({ question, revealed }: { question: Q; revealed
     cols: 1,
   })
   const n = question.options.length
+  const allowFourCols = useMemo(
+    () =>
+      question.type !== "SA" &&
+      question.options.every(
+        (o) =>
+          !/<img\b/i.test(o.bodyHtml ?? "") &&
+          stripOptionPrefix(o.content).replace(/@@\w+@@/g, "").trim().length <= FOUR_COL_MAX_CHARS,
+      ),
+    [question.options, question.type],
+  )
 
   const measure = useCallback(() => {
     const box = boxRef.current
@@ -42,10 +61,14 @@ export function AdaptiveQuestion({ question, revealed }: { question: Q; revealed
     }
     const fits = (fs: number, cols: Cols) => {
       apply(fs, cols)
-      return nat.offsetHeight <= box.clientHeight && nat.scrollWidth <= nat.clientWidth + 1
+      return (
+        nat.offsetHeight <= box.clientHeight &&
+        nat.scrollWidth <= nat.clientWidth + 1 &&
+        !optionOverflowsX(opts)
+      )
     }
 
-    const candidates: Cols[] = n >= 4 ? [2, 1, 4] : n === 2 ? [2, 1] : [1]
+    const candidates: Cols[] = n >= 4 ? (allowFourCols ? [2, 1, 4] : [2, 1]) : n === 2 ? [2, 1] : [1]
     let best: { fs: number; cols: Cols } | null = null
 
     for (const cols of candidates) {
@@ -90,7 +113,7 @@ export function AdaptiveQuestion({ question, revealed }: { question: Q; revealed
         ? prev
         : { mode: "split", fs: STAGE_MIN_FS, cols: bestCols },
     )
-  }, [n])
+  }, [n, allowFourCols])
 
   useLayoutEffect(() => {
     measure()
@@ -153,7 +176,7 @@ export function AdaptiveQuestion({ question, revealed }: { question: Q; revealed
             <div
               key={o.id}
               className={cn(
-                "flex items-center gap-[0.5em] rounded-[0.6em] border-2 px-[0.6em] py-[0.35em]",
+                "flex min-w-0 items-center gap-[0.5em] rounded-[0.6em] border-2 px-[0.6em] py-[0.35em]",
                 revealed && isCorrect
                   ? "border-primary bg-primary/15"
                   : revealed

@@ -5,12 +5,49 @@ import { preprocessOmml } from "./docx-omml"
 
 export const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 
+const EQ_SVG_FONT_PX = 18
+const EQ_TEXT_RATIO = 0.85
+const EQ_MIN_EM = 1.5
+const EQ_MAX_EM = 3.6
+
+function equationHeightEm(src: string): number | null {
+  const b64 = src.match(/^data:image\/svg\+xml;base64,(.+)$/i)?.[1]
+  if (!b64) return null
+  try {
+    const svg = Buffer.from(b64, "base64").toString("utf8")
+    const vb = svg.match(/viewBox\s*=\s*["'][\d.\-]+[ ,]+[\d.\-]+[ ,]+[\d.]+[ ,]+([\d.]+)["']/i)?.[1]
+    const h = Number(vb ?? svg.match(/<svg\b[^>]*\bheight\s*=\s*["']([\d.]+)/i)?.[1])
+    if (!Number.isFinite(h) || h <= 0) return null
+    const em = (h * EQ_TEXT_RATIO) / EQ_SVG_FONT_PX
+    return Math.round(Math.min(EQ_MAX_EM, Math.max(EQ_MIN_EM, em)) * 10) / 10
+  } catch {
+    return null
+  }
+}
+
+function withEqInlineStyle(tag: string, em: number | null): string {
+  if (!em) return tag
+  const style = `height:${em}em;width:auto`
+  if (/\bstyle\s*=/.test(tag)) {
+    return tag.replace(/\bstyle\s*=\s*["'][^"']*["']/i, `style="${style}"`)
+  }
+  return tag.replace(/<img\b/i, `<img style="${style}"`)
+}
+
 function tagEquationImages(html: string): string {
   return html.replace(/<img\b[^>]*>/gi, (tag) => {
-    if (/\bclass\s*=\s*["'][^"']*\beq-(inline|figure)\b/i.test(tag)) return tag
     const src = tag.match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1] ?? ""
-    const cls = /data:image\/svg\+xml/i.test(src) ? "eq-inline" : "eq-figure"
-    return tag.replace(/<img\b/i, `<img class="${cls}"`)
+    const cls = tag.match(/\bclass\s*=\s*["']([^"']*)["']/i)?.[1] ?? ""
+    const isInline = /\beq-inline\b/.test(cls)
+    const isFigure = /\beq-figure\b/.test(cls)
+    if (!/data:image\/svg\+xml/i.test(src)) {
+      if (isInline || isFigure) return tag
+      return tag.replace(/<img\b/i, `<img class="eq-figure"`)
+    }
+    const em = equationHeightEm(src)
+    if (isFigure) return tag
+    const next = isInline ? tag : tag.replace(/<img\b/i, `<img class="eq-inline"`)
+    return withEqInlineStyle(next, em)
   })
 }
 
