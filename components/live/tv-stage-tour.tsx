@@ -199,8 +199,17 @@ export function TvStageTour({
   const isLast = step === STEP_COUNT - 1
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg" showCloseButton>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (typeof next === "boolean") onOpenChange(next)
+      }}
+    >
+      <DialogContent
+        className="z-[200] sm:max-w-lg"
+        overlayClassName="z-[200]"
+        showCloseButton
+      >
         {short ? (
           <>
             <DialogHeader>

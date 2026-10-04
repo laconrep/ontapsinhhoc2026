@@ -249,6 +249,7 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
   }
 
   return (
+    <>
     <div className="fixed inset-0 z-[80] flex overflow-hidden bg-background">
       <div
         className="absolute inset-x-0 top-0 z-[90]"
@@ -464,15 +465,16 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
         </div>
       </aside>
 
-      <TvStageTour
-        open={tvTourOpen}
-        onOpenChange={setTvTourOpen}
-        sessionId={sessionId}
-        onPopupChange={(popup) => {
-          tvPopupRef.current = popup
-          setTvOpen(!!popup && !popup.closed)
-        }}
-      />
     </div>
+    <TvStageTour
+      open={tvTourOpen}
+      onOpenChange={setTvTourOpen}
+      sessionId={sessionId}
+      onPopupChange={(popup) => {
+        tvPopupRef.current = popup
+        setTvOpen(!!popup && !popup.closed)
+      }}
+    />
+    </>
   )
 }
