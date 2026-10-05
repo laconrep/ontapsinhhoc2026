@@ -6,8 +6,8 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { api } from "@/lib/api"
 import { useLiveQuiz } from "./use-live-quiz"
-import { joinQuiz, submitLiveAnswer, reportFullscreen } from "@/app/actions/live-quiz"
 import { QuestionStem } from "@/components/question/question-stem"
 import { stripOptionPrefix, stripOptionPrefixHtml } from "@/lib/option-prefix"
 import { StudentQuestionLayout } from "./student-question-layout"
@@ -46,7 +46,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
     (fs: boolean) => {
       startTransition(async () => {
         try {
-          await reportFullscreen(sessionId, fs)
+          await api.post(`/sessions/${sessionId}/live`, { action: "fullscreen", isFullscreen: fs })
         } catch {
           /* bỏ qua */
         }
@@ -71,7 +71,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
     setJoinError(null)
     try {
       await document.documentElement.requestFullscreen?.().catch(() => {})
-      await joinQuiz(sessionId)
+      await api.post(`/sessions/${sessionId}/live`, { action: "join" })
       setJoined(true)
       report(!!document.fullscreenElement)
       void view.refresh()
@@ -89,7 +89,11 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
     if (!view.question) return
     setSubmitting(true)
     try {
-      const res = await submitLiveAnswer(sessionId, view.question.id, answer)
+      const res = await api.post<{ correct: boolean }>(`/sessions/${sessionId}/live`, {
+        action: "answer",
+        questionId: view.question.id,
+        answer,
+      })
       setAnsweredId(view.question.id)
       setMyCorrect(res.correct)
     } catch (err) {

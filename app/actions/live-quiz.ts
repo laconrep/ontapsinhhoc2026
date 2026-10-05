@@ -47,18 +47,21 @@ async function emit(
     id,
     sessionId,
     studentId: opts.studentId ?? null,
-    studentName: opts.studentName ?? null,
     questionId: opts.questionId ?? null,
     eventType: type,
     payload: opts.payload ?? null,
     createdAt,
   }
-  await db.insert(sessionEvents).values(event)
+  try {
+    await db.insert(sessionEvents).values(event)
+  } catch (err) {
+    console.error("[live] emit persist failed", type, err)
+  }
   publish(sessionId, {
     id: event.id,
     type,
     studentId: event.studentId,
-    studentName: event.studentName,
+    studentName: opts.studentName ?? null,
     questionId: event.questionId,
     payload: (opts.livePayload ?? event.payload) as Record<string, unknown> | undefined,
     createdAt: event.createdAt.toISOString(),

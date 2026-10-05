@@ -5,6 +5,9 @@ import {
   goToQuestion,
   revealCurrent,
   endQuizSession,
+  joinQuiz,
+  submitLiveAnswer,
+  reportFullscreen,
 } from "@/app/actions/live-quiz"
 
 export const dynamic = "force-dynamic"
@@ -40,9 +43,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params
   const user = await getCurrentUser()
   if (!user) return jsonError("Chưa đăng nhập", 401)
-  if (user.role !== "teacher") return jsonError("Không có quyền", 403)
 
-  let body: { action?: string; index?: number }
+  let body: {
+    action?: string
+    index?: number
+    questionId?: string
+    answer?: string
+    isFullscreen?: boolean
+  }
   try {
     body = await req.json()
   } catch {
@@ -50,6 +58,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   try {
+    if (body.action === "join") {
+      if (user.role !== "student") return jsonError("Không có quyền", 403)
+      await joinQuiz(id)
+      return NextResponse.json({ success: true, data: { joined: true } })
+    }
+    if (body.action === "answer") {
+      if (user.role !== "student") return jsonError("Không có quyền", 403)
+      if (typeof body.questionId !== "string" || !body.questionId) {
+        return jsonError("Thiếu câu hỏi", 400)
+      }
+      if (typeof body.answer !== "string") return jsonError("Thiếu câu trả lời", 400)
+      const data = await submitLiveAnswer(id, body.questionId, body.answer)
+      return NextResponse.json({ success: true, data })
+    }
+    if (body.action === "fullscreen") {
+      if (user.role !== "student") return jsonError("Không có quyền", 403)
+      await reportFullscreen(id, !!body.isFullscreen)
+      return NextResponse.json({ success: true, data: { ok: true } })
+    }
+
+    if (user.role !== "teacher") return jsonError("Không có quyền", 403)
     if (body.action === "goto") {
       if (typeof body.index !== "number" || !Number.isFinite(body.index)) {
         return jsonError("Thiếu chỉ số câu", 400)
