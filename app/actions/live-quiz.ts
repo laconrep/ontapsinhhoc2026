@@ -16,8 +16,7 @@ import {
   sessionEvents,
 } from "@/lib/db/schema"
 import { requireRole, getCurrentUser } from "@/lib/auth-helpers"
-import { normalizeAnswer, seededRng } from "@/lib/grading"
-import { selectQuizQuestions } from "@/lib/quiz-selection"
+import { normalizeAnswer } from "@/lib/grading"
 import { publish } from "@/lib/realtime"
 import {
   initLiveState,
@@ -96,21 +95,21 @@ async function loadQuizQuestions(lessonId: string, defaultTimeSec: number): Prom
 
   if (rows.length === 0) return []
 
+  const typeOrder: Record<string, number> = { MC: 0, TF: 1, SA: 2 }
+  const ordered = [...rows].sort((a, b) => {
+    const ta = typeOrder[a.type] ?? 3
+    const tb = typeOrder[b.type] ?? 3
+    if (ta !== tb) return ta - tb
+    if (a.order !== b.order) return a.order - b.order
+    return a.createdAt.getTime() - b.createdAt.getTime()
+  })
+
   const kps = await db
     .select({ id: knowledgePoints.id, order: knowledgePoints.order, content: knowledgePoints.content })
     .from(knowledgePoints)
     .where(eq(knowledgePoints.lessonId, lessonId))
     .orderBy(asc(knowledgePoints.order))
   const kpContent = new Map(kps.map((k) => [k.id, k.content]))
-
-  const selected = selectQuizQuestions(
-    rows,
-    kps,
-    (q) => q.knowledgePointId != null,
-    seededRng(`live:${lessonId}`),
-  )
-  const byId = new Map(rows.map((r) => [r.id, r]))
-  const ordered = selected.chosen.map((id) => byId.get(id)).filter((r): r is (typeof rows)[number] => Boolean(r))
 
   const opts = await db
     .select()
