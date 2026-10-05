@@ -54,6 +54,7 @@ type Snapshot = {
 export interface LiveQuizView {
   connected: boolean
   loading: boolean
+  error: string | null
   phase: "lobby" | "question" | "revealed" | "ended"
   className: string
   isTeacher: boolean
@@ -92,6 +93,7 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
   const [state, setState] = useState<LiveQuizState>({
     connected: false,
     loading: true,
+    error: null,
     phase: "lobby",
     className: "",
     isTeacher: false,
@@ -125,6 +127,16 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
   }, [])
 
   const applySnap = useCallback((snap: Snapshot) => {
+    if (snap.error && snap.total === 0) {
+      setState((s) => ({
+        ...s,
+        loading: false,
+        error: snap.error,
+        className: snap.className || s.className,
+        isTeacher: snap.isTeacher,
+      }))
+      return
+    }
     const started = snap.questionStartedAt ?? 0
     if (
       snap.phase !== "ended" &&
@@ -134,6 +146,7 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
       setState((s) => ({
         ...s,
         loading: false,
+        error: snap.error ?? null,
         joinedCount: snap.joinedCount,
         joined: snap.joined ?? s.joined,
         answers: snap.answers,
@@ -155,6 +168,7 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
     setState((s) => ({
       ...s,
       loading: false,
+      error: snap.error ?? null,
       phase: snap.phase as LiveQuizView["phase"],
       className: snap.className,
       isTeacher: snap.isTeacher,
@@ -178,8 +192,12 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
     try {
       const snap = await api.get<Snapshot>(`/sessions/${sessionId}/live`)
       applySnap(snap)
-    } catch {
-      setState((s) => ({ ...s, loading: false }))
+    } catch (err) {
+      setState((s) => ({
+        ...s,
+        loading: false,
+        error: err instanceof Error ? err.message : "Không tải được phiên",
+      }))
     } finally {
       refreshInFlight.current = false
     }
@@ -192,8 +210,14 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
       .then((snap) => {
         if (!cancelled) applySnap(snap)
       })
-      .catch(() => {
-        if (!cancelled) setState((s) => ({ ...s, loading: false }))
+      .catch((err) => {
+        if (!cancelled) {
+          setState((s) => ({
+            ...s,
+            loading: false,
+            error: err instanceof Error ? err.message : "Không tải được phiên",
+          }))
+        }
       })
     return () => {
       cancelled = true
@@ -241,6 +265,7 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
             setRemainingSec(limit)
             setState((s) => ({
               ...s,
+              error: null,
               phase: "question",
               currentIndex: idx >= 0 ? idx : s.currentIndex,
               total: (p.total as number) ?? s.total,
@@ -372,6 +397,7 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
       setRemainingSec(limit)
       setState((s) => ({
         ...s,
+        error: null,
         phase: "question",
         currentIndex: payload.index,
         total: payload.total,

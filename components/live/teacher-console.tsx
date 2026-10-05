@@ -348,7 +348,7 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
             <Button
               size="sm"
               onClick={() => run(() => api.post(`/sessions/${sessionId}/live`, { action: "goto", index: 0 }))}
-              disabled={pending || view.total === 0}
+              disabled={pending}
             >
               <Play className="h-4 w-4" />
               Bắt đầu

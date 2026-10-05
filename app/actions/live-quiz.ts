@@ -395,8 +395,6 @@ export async function getLiveQuizSnapshot(sessionId: string) {
     .limit(1)
   if (!s) throw new Error("Không tìm thấy phiên")
 
-  // state null = phiên không có câu hỏi hợp lệ (không phải "ended")
-  // Chỉ trả về "ended" nếu session status là "completed"
   if (!state) {
     if (s.status === "ended") {
       return {
@@ -416,11 +414,29 @@ export async function getLiveQuizSnapshot(sessionId: string) {
         question: null,
         revealed: null,
         teacherExtras: null,
+        error: null,
       }
     }
-    // status khác "completed" nhưng state null = lỗi
     console.error("[v0] getLiveQuizSnapshot: state is null but status is", s.status)
-    throw new Error("Phiên không thể tải. Vui lòng kiểm tra lại.")
+    return {
+      sessionId,
+      className: s.className,
+      status: s.status,
+      isTeacher: s.teacherId === user.id,
+      phase: "lobby" as const,
+      currentIndex: -1,
+      total: 0,
+      questionStartedAt: null,
+      serverNow: Date.now(),
+      joinedCount: 0,
+      joined: [],
+      answers: [],
+      notFullscreen: [],
+      question: null,
+      revealed: null,
+      teacherExtras: null,
+      error: "Không tải được câu hỏi. Thử bắt đầu lại hoặc tải lại trang.",
+    }
   }
 
   const isTeacher = s.teacherId === user.id
@@ -448,6 +464,7 @@ export async function getLiveQuizSnapshot(sessionId: string) {
                 : null,
           }
         : null,
+    error: null,
   }
 }
 

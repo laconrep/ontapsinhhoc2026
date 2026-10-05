@@ -66,6 +66,9 @@ export function QuizStage({ view }: { view: LiveQuizView }) {
               <p className="text-2xl text-muted-foreground">
                 {view.joinedCount > 0 ? `${view.joinedCount} học sinh đã sẵn sàng` : "Học sinh chưa tham gia"}
               </p>
+              {view.error ? (
+                <p className="max-w-xl text-lg text-destructive">{view.error}</p>
+              ) : null}
             </div>
           </div>
         )}
