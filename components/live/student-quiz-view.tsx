@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { useLiveQuiz } from "./use-live-quiz"
 import { joinQuiz, submitLiveAnswer, reportFullscreen } from "@/app/actions/live-quiz"
 import { QuestionStem } from "@/components/question/question-stem"
-import { stripOptionPrefix } from "@/lib/option-prefix"
+import { stripOptionPrefix, stripOptionPrefixHtml } from "@/lib/option-prefix"
 import { StudentQuestionLayout } from "./student-question-layout"
 
 const LETTERS = ["A", "B", "C", "D", "E", "F"]
@@ -238,7 +238,14 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
                           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary text-sm font-bold text-secondary-foreground">
                             {LETTERS[i]}
                           </span>
-                          <span>{stripOptionPrefix(o.content)}</span>
+                          <div className="min-w-0 flex-1">
+                            <QuestionStem
+                              content={stripOptionPrefix(o.content)}
+                              bodyHtml={o.bodyHtml ? stripOptionPrefixHtml(o.bodyHtml) : o.bodyHtml}
+                              className="font-medium leading-snug [&_p]:my-0"
+                              maxHeightClass="max-h-none"
+                            />
+                          </div>
                         </button>
                       )
                     })}
@@ -262,7 +269,14 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
                               : "border-border bg-card",
                           )}
                         >
-                          <span className="flex-1 text-base">{stripOptionPrefix(o.content)}</span>
+                          <div className="min-w-0 flex-1 text-base">
+                            <QuestionStem
+                              content={stripOptionPrefix(o.content)}
+                              bodyHtml={o.bodyHtml ? stripOptionPrefixHtml(o.bodyHtml) : o.bodyHtml}
+                              className="font-medium leading-snug [&_p]:my-0"
+                              maxHeightClass="max-h-none"
+                            />
+                          </div>
                           <div className="flex shrink-0 gap-1">
                             <button
                               type="button"

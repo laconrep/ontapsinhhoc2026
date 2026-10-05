@@ -60,6 +60,20 @@ export function maskQuestion(q: LiveQuestionFull): LiveQuestion {
   }
 }
 
+/** Outline GV: bỏ bodyHtml (SVG base64) để snapshot không vượt giới hạn Server Action. */
+export function slimQuestion(q: LiveQuestionFull): LiveQuestion {
+  return {
+    id: q.id,
+    index: q.index,
+    type: q.type,
+    content: q.content,
+    bodyHtml: null,
+    knowledgePointContent: q.knowledgePointContent,
+    options: q.options.map((o) => ({ ...o, bodyHtml: null })),
+    timeLimitSec: q.timeLimitSec,
+  }
+}
+
 const globalForLive = globalThis as unknown as {
   __edusyncLive?: Map<string, LiveSessionState>
 }

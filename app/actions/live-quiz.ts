@@ -23,6 +23,7 @@ import {
   getLiveState,
   clearLiveState,
   maskQuestion,
+  slimQuestion,
   serializeState,
   type LiveQuestionFull,
   type LiveSessionState,
@@ -474,7 +475,7 @@ export async function getLiveQuizSnapshot(sessionId: string) {
             current: current ? { correctOptionIds: current.correctOptionIds, correctText: current.correctText } : null,
             next:
               state.currentIndex + 1 < state.total
-                ? maskQuestion(state.questions[state.currentIndex + 1])
+                ? slimQuestion(state.questions[state.currentIndex + 1])
                 : null,
           }
         : null,
@@ -510,7 +511,7 @@ export async function goToQuestion(sessionId: string, index: number) {
   const question = maskQuestion(q)
   const startedAt = state.questionStartedAt
   const serverNow = Date.now()
-  const next = index + 1 < state.total ? maskQuestion(state.questions[index + 1]) : null
+  const next = index + 1 < state.total ? slimQuestion(state.questions[index + 1]) : null
   await emit(sessionId, "question_changed", {
     questionId: q.id,
     payload: {
