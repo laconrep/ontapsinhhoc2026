@@ -321,6 +321,14 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
           </StageFrame>
         </div>
 
+        {view.error && (
+          <div className="relative z-[100] flex shrink-0 items-center justify-center gap-3 border-t border-destructive/30 bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
+            <span>Không tải được trạng thái phiên: {view.error}</span>
+            <Button size="sm" variant="outline" onClick={() => void view.refresh()}>
+              Thử lại
+            </Button>
+          </div>
+        )}
         <div className="relative z-[100] flex shrink-0 flex-wrap items-center justify-center gap-1.5 border-t bg-card px-3 py-2">
           <Button
             size="sm"
@@ -348,7 +356,7 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
             <Button
               size="sm"
               onClick={() => run(() => api.post(`/sessions/${sessionId}/live`, { action: "goto", index: 0 }))}
-              disabled={pending}
+              disabled={pending || view.loading}
             >
               <Play className="h-4 w-4" />
               Bắt đầu

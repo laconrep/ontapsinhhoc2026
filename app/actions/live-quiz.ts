@@ -137,10 +137,21 @@ async function loadQuizQuestions(lessonId: string, defaultTimeSec: number): Prom
   })
 }
 
-// Khôi phục state in-memory từ DB nếu bị mất (server restart).
+const restoring = new Map<string, Promise<LiveSessionState | null>>()
+
 async function ensureLiveState(sessionId: string): Promise<LiveSessionState | null> {
   const existing = getLiveState(sessionId)
   if (existing) return existing
+  const inflight = restoring.get(sessionId)
+  if (inflight) return inflight
+  const p = restoreLiveState(sessionId).finally(() => restoring.delete(sessionId))
+  restoring.set(sessionId, p)
+  return p
+}
+
+async function restoreLiveState(sessionId: string): Promise<LiveSessionState | null> {
+  const again = getLiveState(sessionId)
+  if (again) return again
 
   const [s] = await db.select().from(sessions).where(eq(sessions.id, sessionId)).limit(1)
   if (!s || s.status !== "active") return null
@@ -418,6 +429,10 @@ export async function getLiveQuizSnapshot(sessionId: string) {
       }
     }
     console.error("[v0] getLiveQuizSnapshot: state is null but status is", s.status)
+    const error =
+      s.status === "created"
+        ? "Phiên này đang ở trạng thái nháp — hãy kích hoạt phiên trước khi mở bảng điều khiển."
+        : "Phiên thiếu dữ liệu bài học/câu hỏi nên không khôi phục được. Hãy kết thúc và mở lớp lại."
     return {
       sessionId,
       className: s.className,
@@ -435,7 +450,7 @@ export async function getLiveQuizSnapshot(sessionId: string) {
       question: null,
       revealed: null,
       teacherExtras: null,
-      error: "Không tải được câu hỏi. Thử bắt đầu lại hoặc tải lại trang.",
+      error,
     }
   }
 

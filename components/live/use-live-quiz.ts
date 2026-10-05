@@ -49,6 +49,7 @@ type Snapshot = {
     current: RevealInfo | null
     next: LiveQuestionView | null
   } | null
+  error?: string | null
 }
 
 export interface LiveQuizView {
@@ -193,10 +194,11 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
       const snap = await api.get<Snapshot>(`/sessions/${sessionId}/live`)
       applySnap(snap)
     } catch (err) {
+      console.error("[live] getLiveQuizSnapshot failed", err)
       setState((s) => ({
         ...s,
         loading: false,
-        error: err instanceof Error ? err.message : "Không tải được phiên",
+        error: err instanceof Error && err.message ? err.message : "Không tải được trạng thái phiên",
       }))
     } finally {
       refreshInFlight.current = false
@@ -211,13 +213,13 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
         if (!cancelled) applySnap(snap)
       })
       .catch((err) => {
-        if (!cancelled) {
+        console.error("[live] getLiveQuizSnapshot failed", err)
+        if (!cancelled)
           setState((s) => ({
             ...s,
             loading: false,
-            error: err instanceof Error ? err.message : "Không tải được phiên",
+            error: err instanceof Error && err.message ? err.message : "Không tải được trạng thái phiên",
           }))
-        }
       })
     return () => {
       cancelled = true
