@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { getLiveQuizSnapshot } from "@/app/actions/live-quiz"
+import { api } from "@/lib/api"
 
 export interface LiveQuestionView {
   id: string
@@ -31,7 +31,25 @@ export interface RevealInfo {
   correctText: string | null
 }
 
-type Snapshot = Awaited<ReturnType<typeof getLiveQuizSnapshot>>
+type Snapshot = {
+  className: string
+  isTeacher: boolean
+  phase: string
+  currentIndex: number
+  total: number
+  questionStartedAt: number | null
+  serverNow: number
+  joinedCount: number
+  joined?: JoinedStudent[]
+  answers: AnswerTally[]
+  notFullscreen: { studentId: string; name: string }[]
+  question: LiveQuestionView | null
+  revealed: RevealInfo | null
+  teacherExtras: {
+    current: RevealInfo | null
+    next: LiveQuestionView | null
+  } | null
+}
 
 export interface LiveQuizView {
   connected: boolean
@@ -93,7 +111,6 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
 
   const clockOffsetRef = useRef(0)
   const questionStartedAtRef = useRef<number | null>(null)
-  const outlineRef = useRef<LiveQuestionView[]>([])
   const [remainingSec, setRemainingSec] = useState<number | null>(null)
   const joinBadgeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const refreshInFlight = useRef(false)
@@ -127,9 +144,6 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
     if (started > 0) lastStartedAtRef.current = started
     clockOffsetRef.current = Date.now() - snap.serverNow
     questionStartedAtRef.current = snap.questionStartedAt
-    if (snap.teacherExtras?.outline) {
-      outlineRef.current = snap.teacherExtras.outline as LiveQuestionView[]
-    }
     const limit = snap.question?.timeLimitSec ?? null
     if (snap.phase === "question" && started && limit) {
       const serverNow = snap.serverNow
@@ -162,7 +176,7 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
     if (refreshInFlight.current) return
     refreshInFlight.current = true
     try {
-      const snap = await getLiveQuizSnapshot(sessionId)
+      const snap = await api.get<Snapshot>(`/sessions/${sessionId}/live`)
       applySnap(snap)
     } catch {
       setState((s) => ({ ...s, loading: false }))
@@ -173,7 +187,8 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
 
   useEffect(() => {
     let cancelled = false
-    getLiveQuizSnapshot(sessionId)
+    api
+      .get<Snapshot>(`/sessions/${sessionId}/live`)
       .then((snap) => {
         if (!cancelled) applySnap(snap)
       })
@@ -216,10 +231,13 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
             if (startedAt > 0) lastStartedAtRef.current = Math.max(lastStartedAtRef.current, startedAt)
             questionStartedAtRef.current = startedAt
             if (typeof p.serverNow === "number") clockOffsetRef.current = Date.now() - (p.serverNow as number)
-            const q = p.question as LiveQuestionView
+            const q = p.question as LiveQuestionView | undefined
             const idx = (p.index as number) ?? -1
-            const next = idx >= 0 && idx + 1 < outlineRef.current.length ? outlineRef.current[idx + 1] : null
-            const limit = q?.timeLimitSec ?? null
+            if (!q) {
+              void refresh()
+              break
+            }
+            const limit = q.timeLimitSec ?? null
             setRemainingSec(limit)
             setState((s) => ({
               ...s,
@@ -231,7 +249,7 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
               timeLimitSec: limit,
               answers: [],
               teacherCurrentAnswer: null,
-              teacherNext: next,
+              teacherNext: (p.next as LiveQuestionView | null | undefined) ?? null,
             }))
             break
           }
@@ -349,11 +367,7 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
       if (startedAt > 0) lastStartedAtRef.current = Math.max(lastStartedAtRef.current, startedAt)
       questionStartedAtRef.current = startedAt
       clockOffsetRef.current = Date.now() - payload.serverNow
-      const next =
-        payload.next ??
-        (payload.index >= 0 && payload.index + 1 < outlineRef.current.length
-          ? outlineRef.current[payload.index + 1]
-          : null)
+      const next = payload.next ?? null
       const limit = payload.question?.timeLimitSec ?? null
       setRemainingSec(limit)
       setState((s) => ({

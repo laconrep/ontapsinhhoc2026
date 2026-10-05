@@ -23,9 +23,10 @@ import { QuizStage } from "./quiz-stage"
 import { StageFrame } from "./stage-frame"
 import { TvStageTour } from "./tv-stage-tour"
 import { useLiveQuiz } from "./use-live-quiz"
-import { goToQuestion, revealCurrent, endQuizSession } from "@/app/actions/live-quiz"
+import { api } from "@/lib/api"
 import { cn } from "@/lib/utils"
-import { stripOptionPrefix } from "@/lib/option-prefix"
+import { stripOptionPrefix, stripOptionPrefixHtml } from "@/lib/option-prefix"
+import { QuestionStem } from "@/components/question/question-stem"
 
 const LEFT_REVEAL_MS = 1500
 const LEFT_EDGE_PX = 24
@@ -34,11 +35,13 @@ const LEFT_PANEL_PX = 160
 function NextQuestionPreview({
   indexLabel,
   content,
+  bodyHtml,
   options,
 }: {
   indexLabel: string
   content: string
-  options: { id: string; content: string }[]
+  bodyHtml?: string | null
+  options: { id: string; content: string; bodyHtml?: string | null }[]
 }) {
   const boxRef = useRef<HTMLDivElement>(null)
   const innerRef = useRef<HTMLDivElement>(null)
@@ -73,8 +76,13 @@ function NextQuestionPreview({
     fit()
     const ro = new ResizeObserver(fit)
     ro.observe(box)
-    return () => ro.disconnect()
-  }, [content, options, indexLabel])
+    const onLoad = () => fit()
+    inner.addEventListener("load", onLoad, true)
+    return () => {
+      ro.disconnect()
+      inner.removeEventListener("load", onLoad, true)
+    }
+  }, [content, bodyHtml, options, indexLabel])
 
   return (
     <div ref={boxRef} className="min-h-0 flex-1 overflow-hidden rounded-md border border-border/60 bg-background p-1.5 shadow-inner">
@@ -82,12 +90,23 @@ function NextQuestionPreview({
         <span className="w-fit rounded-full bg-primary/15 px-1.5 py-px text-[0.85em] font-semibold text-primary">
           {indexLabel}
         </span>
-        <p className="font-medium break-words text-foreground">{content}</p>
+        <QuestionStem
+          content={content}
+          bodyHtml={bodyHtml}
+          className="font-medium break-words leading-snug [&_p]:my-0"
+          maxHeightClass="max-h-none"
+        />
         {options.length > 0 && (
           <ul className="space-y-0.5 text-[0.85em] text-muted-foreground">
             {options.map((o, i) => (
               <li key={o.id} className="break-words">
-                {["A", "B", "C", "D", "E", "F"][i] ?? i + 1}. {stripOptionPrefix(o.content)}
+                {["A", "B", "C", "D", "E", "F"][i] ?? i + 1}.{" "}
+                <QuestionStem
+                  content={stripOptionPrefix(o.content)}
+                  bodyHtml={o.bodyHtml ? stripOptionPrefixHtml(o.bodyHtml) : o.bodyHtml}
+                  className="inline font-normal leading-snug [&_p]:my-0 [&_img.eq-inline]:h-[1.2em]"
+                  maxHeightClass="max-h-none"
+                />
               </li>
             ))}
           </ul>
@@ -139,7 +158,12 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
       autoRevealedFor.current !== view.currentIndex
     ) {
       autoRevealedFor.current = view.currentIndex
-      revealCurrent(sessionId, view.currentIndex)
+      api
+        .post<{
+          revealed: boolean
+          correctOptionIds: string[]
+          correctText: string | null
+        }>(`/sessions/${sessionId}/live`, { action: "reveal", index: view.currentIndex })
         .then((res) => {
           if (!res.revealed) return
           applyReveal({
@@ -301,7 +325,7 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => run(() => goToQuestion(sessionId, view.currentIndex - 1))}
+            onClick={() => run(() => api.post(`/sessions/${sessionId}/live`, { action: "goto", index: view.currentIndex - 1 }))}
             disabled={pending || atStart || notStarted}
           >
             <ChevronLeft className="h-4 w-4" />
@@ -312,7 +336,7 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
             <Button
               size="sm"
               variant="secondary"
-              onClick={() => run(() => revealCurrent(sessionId, view.currentIndex))}
+              onClick={() => run(() => api.post(`/sessions/${sessionId}/live`, { action: "reveal", index: view.currentIndex }))}
               disabled={pending}
             >
               <Eye className="h-4 w-4" />
@@ -323,7 +347,7 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
           {notStarted ? (
             <Button
               size="sm"
-              onClick={() => run(() => goToQuestion(sessionId, 0))}
+              onClick={() => run(() => api.post(`/sessions/${sessionId}/live`, { action: "goto", index: 0 }))}
               disabled={pending || view.total === 0}
             >
               <Play className="h-4 w-4" />
@@ -332,7 +356,7 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
           ) : (
             <Button
               size="sm"
-              onClick={() => run(() => goToQuestion(sessionId, view.currentIndex + 1))}
+              onClick={() => run(() => api.post(`/sessions/${sessionId}/live`, { action: "goto", index: view.currentIndex + 1 }))}
               disabled={pending || atEnd}
             >
               Tiếp
@@ -370,7 +394,7 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
             size="sm"
             variant="destructive"
             onClick={() => {
-              if (confirm("Kết thúc phiên trình chiếu?")) run(() => endQuizSession(sessionId))
+              if (confirm("Kết thúc phiên trình chiếu?")) run(() => api.post(`/sessions/${sessionId}/live`, { action: "end" }))
             }}
             disabled={pending}
           >
@@ -453,6 +477,7 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
             <NextQuestionPreview
               indexLabel={`Câu ${view.currentIndex + 2}/${view.total}`}
               content={view.teacherNext.content}
+              bodyHtml={view.teacherNext.bodyHtml}
               options={view.teacherNext.type === "SA" ? [] : view.teacherNext.options}
             />
           ) : (

@@ -18,7 +18,7 @@ import {
 import { requireRole, getCurrentUser } from "@/lib/auth-helpers"
 import { normalizeAnswer, seededRng } from "@/lib/grading"
 import { selectQuizQuestions } from "@/lib/quiz-selection"
-import { publish, type RealtimeEvent } from "@/lib/realtime"
+import { publish } from "@/lib/realtime"
 import {
   initLiveState,
   getLiveState,
@@ -38,6 +38,7 @@ async function emit(
     studentName?: string | null
     questionId?: string | null
     payload?: Record<string, unknown> | null
+    livePayload?: Record<string, unknown> | null
   } = {},
 ) {
   const id = randomUUID()
@@ -52,16 +53,14 @@ async function emit(
     payload: opts.payload ?? null,
     createdAt,
   }
-  // Ghi vào DB
   await db.insert(sessionEvents).values(event)
-  // Phát event ngay đến tất cả subscriber (realtime in-memory)
   publish(sessionId, {
     id: event.id,
     type,
     studentId: event.studentId,
     studentName: event.studentName,
     questionId: event.questionId,
-    payload: event.payload as Record<string, unknown> | undefined,
+    payload: (opts.livePayload ?? event.payload) as Record<string, unknown> | undefined,
     createdAt: event.createdAt.toISOString(),
   })
 }
@@ -443,16 +442,19 @@ export async function getLiveQuizSnapshot(sessionId: string) {
       isTeacher
         ? {
             current: current ? { correctOptionIds: current.correctOptionIds, correctText: current.correctText } : null,
-            next: state.currentIndex + 1 < state.total ? maskQuestion(state.questions[state.currentIndex + 1]) : null,
-            // toàn bộ đề (đã che đáp án) để GV tính câu kế tiếp mà không phải hỏi lại server
-            outline: state.questions.map(maskQuestion),
+            next:
+              state.currentIndex + 1 < state.total
+                ? maskQuestion(state.questions[state.currentIndex + 1])
+                : null,
           }
         : null,
   }
 }
 
 async function requireOwner(sessionId: string) {
-  const teacher = await requireRole("teacher")
+  const teacher = await getCurrentUser()
+  if (!teacher) throw new Error("Chưa đăng nhập")
+  if (teacher.role !== "teacher") throw new Error("Không có quyền")
   const [s] = await db.select().from(sessions).where(and(eq(sessions.id, sessionId), eq(sessions.teacherId, teacher.id))).limit(1)
   if (!s) throw new Error("Không tìm thấy phiên")
   return { teacher, session: s }
@@ -477,12 +479,20 @@ export async function goToQuestion(sessionId: string, index: number) {
   const question = maskQuestion(q)
   const startedAt = state.questionStartedAt
   const serverNow = Date.now()
+  const next = index + 1 < state.total ? maskQuestion(state.questions[index + 1]) : null
   await emit(sessionId, "question_changed", {
     questionId: q.id,
     payload: {
       index,
       total: state.total,
+      startedAt,
+      serverNow,
+    },
+    livePayload: {
+      index,
+      total: state.total,
       question,
+      next,
       startedAt,
       serverNow,
     },
@@ -491,7 +501,7 @@ export async function goToQuestion(sessionId: string, index: number) {
     index,
     total: state.total,
     question,
-    next: index + 1 < state.total ? maskQuestion(state.questions[index + 1]) : null,
+    next,
     startedAt,
     serverNow,
   }
