@@ -132,7 +132,7 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
       setState((s) => ({
         ...s,
         loading: false,
-        error: snap.error,
+        error: snap.error ?? null,
         className: snap.className || s.className,
         isTeacher: snap.isTeacher,
       }))
