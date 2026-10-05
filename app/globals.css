@@ -164,8 +164,18 @@
   }
 }
 
-.dark img.eq-inline {
-  filter: invert(1) hue-rotate(180deg);
+.dark img.eq-inline,
+.dark img[src^="data:image/svg+xml"] {
+  filter: invert(1) hue-rotate(180deg) !important;
+}
+
+img.eq-inline,
+img[src^="data:image/svg+xml"]:not(.eq-figure) {
+  display: inline-block;
+  vertical-align: middle;
+  width: auto !important;
+  max-width: none;
+  height: var(--eq-h, 4.5em) !important;
 }
 
 .dark img.eq-figure {
