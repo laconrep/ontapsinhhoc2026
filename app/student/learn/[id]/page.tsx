@@ -20,8 +20,10 @@ export default async function StudentLessonPage({
       lessonId={id}
       lesson={data.lesson}
       knowledgePoints={data.knowledgePoints}
-      tab1Locked={data.tab1Locked}
       savedAssessments={data.savedAssessments}
+      stage={data.stage}
+      skippedTab2={data.skippedTab2}
+      quizQuestionCount={data.quizQuestionCount}
     />
   )
 }

@@ -29,6 +29,10 @@ import {
 import { selectQuizQuestions } from "@/lib/quiz-selection"
 import type { KnowledgePointDto, QuestionDto, UnderlinedTerm, QuizResultDto } from "@/types"
 
+export type StudyStage = "tab1" | "tab2" | "tab3" | "tab4" | "done"
+
+const TAB1_LOCKED_MSG = "Bạn đã nộp bước Tự đánh giá"
+
 // ============ Helpers ============
 
 /** Xác thực HS có quyền học bài này (bài ready + thuộc giáo viên dạy lớp HS). */
@@ -60,11 +64,43 @@ async function getKpIdsOfLesson(lessonId: string): Promise<string[]> {
 
 // ============ Tab 1 — Nội dung + tự đánh giá ============
 
+function knownCountOf(assessments: Record<string, "known" | "unknown">) {
+  return Object.values(assessments).filter((v) => v === "known").length
+}
+
+async function resolveStudyStage(
+  studentId: string,
+  lessonId: string,
+  submittedAt: Date | null,
+  skippedTab2: boolean,
+): Promise<StudyStage> {
+  if (!submittedAt) return "tab1"
+  const attempts = await db
+    .select({
+      startedAt: quizAttempts.startedAt,
+      completedAt: quizAttempts.completedAt,
+    })
+    .from(quizAttempts)
+    .where(and(eq(quizAttempts.studentId, studentId), eq(quizAttempts.lessonId, lessonId)))
+
+  const after = attempts.filter((a) => a.startedAt.getTime() > submittedAt.getTime())
+  const completed = after.find(
+    (a) => a.completedAt != null && a.completedAt.getTime() > submittedAt.getTime(),
+  )
+  if (completed) return "done"
+  const inProgress = after.find((a) => a.completedAt == null)
+  if (inProgress) return "tab4"
+  return skippedTab2 ? "tab3" : "tab2"
+}
+
 export async function getLessonForStudy(lessonId: string): Promise<{
   lesson: { id: string; title: string; chapterTitle: string }
   knowledgePoints: KnowledgePointDto[]
   tab1Locked: boolean
   savedAssessments: Record<string, "known" | "unknown">
+  stage: StudyStage
+  skippedTab2: boolean
+  quizQuestionCount: number
 }> {
   const student = await requireRole("student")
   await assertLessonAccess(student.id, lessonId)
@@ -112,6 +148,19 @@ export async function getLessonForStudy(lessonId: string): Promise<{
     }
   }
 
+  const skippedTab2 = knownCountOf(savedAssessments) === 0
+  const stage = await resolveStudyStage(
+    student.id,
+    lessonId,
+    submission?.submittedAt ?? null,
+    skippedTab2,
+  )
+
+  const [{ questionCount }] = await db
+    .select({ questionCount: sql<number>`count(*)::int` })
+    .from(questions)
+    .where(and(eq(questions.lessonId, lessonId), inArray(questions.type, ["MC", "TF", "SA"])))
+
   return {
     lesson: { id: lesson.id, title: lesson.title, chapterTitle: lesson.chapterTitle },
     knowledgePoints: kps.map((k) => ({
@@ -121,14 +170,37 @@ export async function getLessonForStudy(lessonId: string): Promise<{
       underlinedTerms: (k.underlinedTerms as UnderlinedTerm[]) ?? [],
       order: k.order,
     })),
-    tab1Locked: Boolean(submission?.isLocked),
+    tab1Locked: Boolean(submission),
     savedAssessments,
+    stage,
+    skippedTab2,
+    quizQuestionCount: Number(questionCount) || 0,
   }
 }
 
 /** [SIM-04] Lưu tự đánh giá NGAY khi HS click Biết/Chưa biết. */
 export async function saveTab1Progress(kpId: string, assessment: "known" | "unknown") {
   const student = await requireRole("student")
+
+  const [kp] = await db
+    .select({ id: knowledgePoints.id, lessonId: knowledgePoints.lessonId })
+    .from(knowledgePoints)
+    .where(eq(knowledgePoints.id, kpId))
+    .limit(1)
+  if (!kp) throw new Error("Không tìm thấy điểm kiến thức")
+  await assertLessonAccess(student.id, kp.lessonId)
+
+  const [locked] = await db
+    .select({ id: studentTab1Submissions.id })
+    .from(studentTab1Submissions)
+    .where(
+      and(
+        eq(studentTab1Submissions.studentId, student.id),
+        eq(studentTab1Submissions.lessonId, kp.lessonId),
+      ),
+    )
+    .limit(1)
+  if (locked) throw new Error(TAB1_LOCKED_MSG)
 
   const [existing] = await db
     .select()
@@ -166,6 +238,18 @@ export async function saveTab1Progress(kpId: string, assessment: "known" | "unkn
 export async function submitTab1(lessonId: string, assessments: Record<string, "known" | "unknown">) {
   const student = await requireRole("student")
   await assertLessonAccess(student.id, lessonId)
+
+  const [existingSub] = await db
+    .select({ id: studentTab1Submissions.id })
+    .from(studentTab1Submissions)
+    .where(
+      and(
+        eq(studentTab1Submissions.studentId, student.id),
+        eq(studentTab1Submissions.lessonId, lessonId),
+      ),
+    )
+    .limit(1)
+  if (existingSub) throw new Error(TAB1_LOCKED_MSG)
 
   const kpIds = Object.keys(assessments)
   for (const kpId of kpIds) {
@@ -219,6 +303,38 @@ export async function submitTab1(lessonId: string, assessments: Record<string, "
 export async function resetLessonProgress(lessonId: string): Promise<{ success: true }> {
   const student = await requireRole("student")
   await assertLessonAccess(student.id, lessonId)
+
+  const [submission] = await db
+    .select({ submittedAt: studentTab1Submissions.submittedAt })
+    .from(studentTab1Submissions)
+    .where(
+      and(
+        eq(studentTab1Submissions.studentId, student.id),
+        eq(studentTab1Submissions.lessonId, lessonId),
+      ),
+    )
+    .limit(1)
+  const kpIds = await getKpIdsOfLesson(lessonId)
+  let skippedTab2 = true
+  if (kpIds.length > 0) {
+    const knownRows = await db
+      .select({ sa: studentProgress.selfAssessment })
+      .from(studentProgress)
+      .where(
+        and(
+          eq(studentProgress.studentId, student.id),
+          inArray(studentProgress.knowledgePointId, kpIds),
+        ),
+      )
+    skippedTab2 = knownRows.every((r) => r.sa !== "known")
+  }
+  const stage = await resolveStudyStage(
+    student.id,
+    lessonId,
+    submission?.submittedAt ?? null,
+    skippedTab2,
+  )
+  if (stage !== "done") throw new Error("Hãy hoàn thành bài kiểm tra trước")
 
   await db
     .delete(studentTab1Submissions)
@@ -734,6 +850,18 @@ export async function submitQuiz(
 /** Lấy kết quả quiz gần nhất (để re-fetch khi HS quay lại Tab 4). */
 export async function getLatestQuizResult(lessonId: string): Promise<QuizResultDto | null> {
   const student = await requireRole("student")
+  const [submission] = await db
+    .select({ submittedAt: studentTab1Submissions.submittedAt })
+    .from(studentTab1Submissions)
+    .where(
+      and(
+        eq(studentTab1Submissions.studentId, student.id),
+        eq(studentTab1Submissions.lessonId, lessonId),
+      ),
+    )
+    .limit(1)
+  if (!submission) return null
+
   const [attempt] = await db
     .select()
     .from(quizAttempts)
@@ -742,6 +870,7 @@ export async function getLatestQuizResult(lessonId: string): Promise<QuizResultD
         eq(quizAttempts.studentId, student.id),
         eq(quizAttempts.lessonId, lessonId),
         sql`${quizAttempts.completedAt} is not null`,
+        sql`${quizAttempts.startedAt} > ${submission.submittedAt}`,
       ),
     )
     .orderBy(sql`${quizAttempts.completedAt} desc`)

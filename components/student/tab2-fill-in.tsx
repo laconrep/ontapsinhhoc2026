@@ -30,39 +30,53 @@ export function Tab2FillIn({
   const [index, setIndex] = useState(0)
   const [countdown, setCountdown] = useState(3)
   const [empty, setEmpty] = useState(false)
+  const [error, setError] = useState(false)
+  const [finished, setFinished] = useState(false)
 
-  useEffect(() => {
-    let active = true
+  const load = () => {
+    setLoading(true)
+    setError(false)
     getTab2Questions(lessonId)
       .then((res) => {
-        if (!active) return
         setQuestions(res.questions)
         setEmpty(res.empty)
         setLoading(false)
       })
       .catch(() => {
-        if (!active) return
-        setEmpty(true)
+        setError(true)
+        setEmpty(false)
         setLoading(false)
       })
-    return () => {
-      active = false
-    }
+  }
+
+  useEffect(() => {
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lessonId])
 
-  // Empty → đếm ngược sang Tab 3
   useEffect(() => {
-    if (!empty || loading) return
+    if (!empty || loading || error) return
     if (countdown <= 0) {
       onComplete()
       return
     }
     const t = setTimeout(() => setCountdown((c) => c - 1), 1000)
     return () => clearTimeout(t)
-  }, [empty, loading, countdown, onComplete])
+  }, [empty, loading, error, countdown, onComplete])
 
   if (loading) {
     return <p className="py-10 text-center text-sm text-muted-foreground">Đang tải câu hỏi...</p>
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-6 text-center">
+        <p className="font-heading font-semibold text-foreground">Không tải được câu hỏi</p>
+        <Button className="mt-4 min-h-11" onClick={load}>
+          Thử lại
+        </Button>
+      </div>
+    )
   }
 
   if (empty) {
@@ -72,6 +86,21 @@ export function Tab2FillIn({
           Bạn chưa tự tin với kiến thức nào. Bước Kéo thả sẽ giúp bạn ôn tập toàn bộ.
         </p>
         <p className="mt-2 text-sm text-muted-foreground">Chuyển sang bước Kéo thả trong {countdown} giây...</p>
+        <Button className="mt-4 min-h-11 w-full" onClick={onComplete}>
+          Chuyển ngay
+        </Button>
+      </div>
+    )
+  }
+
+  if (finished) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-6 text-center">
+        <p className="font-heading font-semibold text-foreground">Hoàn thành điền khuyết</p>
+        <p className="mt-2 text-sm text-muted-foreground">Tiếp tục sang bước Kéo thả.</p>
+        <Button className="mt-4 min-h-11 w-full" onClick={onComplete}>
+          Tiếp tục
+        </Button>
       </div>
     )
   }
@@ -90,7 +119,7 @@ export function Tab2FillIn({
         onCorrect={() => {
           if (isLast) {
             toast.success("Hoàn thành điền khuyết!")
-            onComplete()
+            setFinished(true)
           } else {
             setIndex((i) => i + 1)
           }
@@ -110,6 +139,7 @@ function FillInCard({
   const [answers, setAnswers] = useState<Record<number, string>>({})
   const [results, setResults] = useState<Record<number, SlotResult>>({})
   const [graded, setGraded] = useState(false)
+  const [wrongTries, setWrongTries] = useState(0)
   const [pending, startTransition] = useTransition()
   const inputsRef = useRef<Record<number, HTMLInputElement | null>>({})
 
@@ -135,8 +165,10 @@ function FillInCard({
         setResults(map)
         setGraded(true)
         if (res.allCorrect) {
+          setWrongTries(0)
           toast.success("Chính xác!")
         } else {
+          setWrongTries((n) => n + 1)
           toast.error("Có ô chưa đúng, thử lại nhé")
         }
       } catch (err) {
@@ -156,6 +188,14 @@ function FillInCard({
     })
     setGraded(false)
     setResults({})
+  }
+
+  const focusNext = (slotIndex: number) => {
+    const ordered = terms.map((t) => t.slotIndex)
+    const i = ordered.indexOf(slotIndex)
+    const next = ordered[i + 1]
+    if (next != null) inputsRef.current[next]?.focus()
+    else if (allFilled) handleSubmit()
   }
 
   const allCorrect = graded && terms.every((t) => results[t.slotIndex]?.isCorrect)
@@ -178,6 +218,12 @@ function FillInCard({
                 }}
                 value={answers[t.slotIndex] ?? ""}
                 onChange={(e) => setAnswer(t.slotIndex, e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    focusNext(t.slotIndex)
+                  }
+                }}
                 disabled={locked || pending}
                 aria-label={`Ô trống ${t.slotIndex + 1}`}
                 size={Math.max((answers[t.slotIndex] ?? "").length + 1, 10)}
@@ -202,18 +248,23 @@ function FillInCard({
         <div className="mt-3 rounded-lg bg-destructive/5 p-2 text-xs text-destructive">
           {terms
             .filter((t) => !results[t.slotIndex]?.isCorrect)
-            .map((t) => (
-              <div key={t.slotIndex}>
-                ✗ Ô {t.slotIndex + 1}: đáp án đúng là <strong>{results[t.slotIndex]?.correctAnswer}</strong>
-              </div>
-            ))}
+            .map((t) => {
+              const ans = results[t.slotIndex]?.correctAnswer ?? ""
+              return (
+                <div key={t.slotIndex}>
+                  {wrongTries < 2
+                    ? `✗ Ô ${t.slotIndex + 1} chưa đúng. Gợi ý: bắt đầu bằng "${ans.charAt(0)}"`
+                    : `✗ Ô ${t.slotIndex + 1}: đáp án đúng là ${ans}`}
+                </div>
+              )
+            })}
         </div>
       )}
 
       <div className="mt-4 flex gap-2">
         {!graded && (
           <Button className="min-h-11 flex-1" onClick={handleSubmit} disabled={!allFilled || pending}>
-            {pending ? "Đang chấm..." : "Nộp câu này"}
+            {pending ? "Đang chấm..." : "Kiểm tra"}
           </Button>
         )}
         {graded && !allCorrect && (

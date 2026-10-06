@@ -16,7 +16,7 @@ export function JoinClassCard() {
 
   const handleJoin = () => {
     if (code.trim().length !== 6) {
-      toast.error("Mã mời gồm 6 ký tự")
+      toast.error("Mã lớp gồm 6 ký tự")
       return
     }
     startTransition(async () => {
@@ -38,8 +38,9 @@ export function JoinClassCard() {
   return (
     <div className="rounded-xl border border-border bg-card p-4">
       <Label htmlFor="invite-code" className="text-sm font-semibold text-foreground">
-        Nhập mã mời
+        Nhập mã lớp
       </Label>
+      <p className="mt-1 text-xs text-muted-foreground">Mã gồm 6 ký tự do giáo viên cấp</p>
       <div className="mt-2 flex gap-2">
         <Input
           id="invite-code"

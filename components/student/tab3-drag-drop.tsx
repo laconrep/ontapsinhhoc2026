@@ -41,38 +41,53 @@ export function Tab3DragDrop({
   const [index, setIndex] = useState(0)
   const [empty, setEmpty] = useState(false)
   const [countdown, setCountdown] = useState(3)
+  const [error, setError] = useState(false)
+  const [finished, setFinished] = useState(false)
 
-  useEffect(() => {
-    let active = true
+  const load = () => {
+    setLoading(true)
+    setError(false)
     getTab3Questions(lessonId)
       .then((res) => {
-        if (!active) return
         setQuestions(res.questions)
         setEmpty(res.empty)
         setLoading(false)
       })
       .catch(() => {
-        if (!active) return
-        setEmpty(true)
+        setError(true)
+        setEmpty(false)
         setLoading(false)
       })
-    return () => {
-      active = false
-    }
+  }
+
+  useEffect(() => {
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lessonId])
 
   useEffect(() => {
-    if (!empty || loading) return
+    if (!empty || loading || error) return
     if (countdown <= 0) {
       onComplete()
       return
     }
     const t = setTimeout(() => setCountdown((c) => c - 1), 1000)
     return () => clearTimeout(t)
-  }, [empty, loading, countdown, onComplete])
+  }, [empty, loading, error, countdown, onComplete])
 
   if (loading) {
     return <p className="py-10 text-center text-sm text-muted-foreground">Đang tải câu hỏi...</p>
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-6 text-center">
+        <p className="font-heading font-semibold text-foreground">Không tải được câu hỏi</p>
+        <Button className="mt-4 min-h-11" onClick={load}>
+          Thử lại
+        </Button>
+      </div>
+    )
   }
 
   if (empty) {
@@ -82,6 +97,21 @@ export function Tab3DragDrop({
           Xuất sắc! Bạn đã nắm vững tất cả kiến thức. Tiến thẳng đến bài kiểm tra.
         </p>
         <p className="mt-2 text-sm text-muted-foreground">Chuyển sang bước Kiểm tra trong {countdown} giây...</p>
+        <Button className="mt-4 min-h-11 w-full" onClick={onComplete}>
+          Chuyển ngay
+        </Button>
+      </div>
+    )
+  }
+
+  if (finished) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-6 text-center">
+        <p className="font-heading font-semibold text-foreground">Hoàn thành kéo thả</p>
+        <p className="mt-2 text-sm text-muted-foreground">Tiếp tục sang bước Kiểm tra.</p>
+        <Button className="mt-4 min-h-11 w-full" onClick={onComplete}>
+          Tiếp tục
+        </Button>
       </div>
     )
   }
@@ -100,7 +130,7 @@ export function Tab3DragDrop({
         onCorrect={() => {
           if (isLast) {
             toast.success("Hoàn thành ôn tập kéo thả!")
-            onComplete()
+            setFinished(true)
           } else {
             setIndex((i) => i + 1)
           }

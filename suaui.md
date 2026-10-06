@@ -2,7 +2,7 @@
 
 Muc tieu: app trong chuyen nghiep, dong nhat, de dung tren dien thoai 360px truoc, roi moi toi may tinh. Hoc sinh nhin la biet minh dang o buoc nao, bam trung nut, doc duoc chu, lam bai khong mat du lieu. Giao vien thao tac xoa/sua co xac nhan dep, bang khong tran, header khong tu bien mat. Dark mode dung mau thuong hieu. Popup mo phien trinh chieu khong de chu/khung nhay ra ngoai.
 
-Trang thai: **phien 2 xong**. Day la nguon su that cho 6 phien. Phien sau CHI doc file nay + dung cac file duoc liet ke trong phien do. KHONG doc lai toan repo.
+Trang thai: **phien 3 xong**. Day la nguon su that cho 6 phien. Phien sau CHI doc file nay + dung cac file duoc liet ke trong phien do. KHONG doc lai toan repo.
 
 Nguon: ra soat code that (repo `ontapsinhhoc2026`). Moi diem moc ben duoi da doi chieu code **sau** cac commit live (`5097e11` va truoc do). Moi phien phai tu kiem tra bang mat tren man 360px va man desktop.
 
@@ -286,10 +286,10 @@ Hoc sinh biet dang o buoc may/4, khong bi tu chuyen bat ngo, dung duoc tren may 
 
 ### Bao cao phien 3 (dien sau khi code)
 
-- Da lam:
-- File da sua/tao:
-- Viec chua lam / de phien sau:
-- Commit:
+- Da lam: luong tuan tu muc 1.8 — `getLessonForStudy` tra `stage`/`skippedTab2`/`quizQuestionCount`; `saveTab1Progress`/`submitTab1` chan sau nop (`TAB1_LOCKED_MSG` + assertLessonAccess); `resetLessonProgress` chi khi `stage === "done"`; `getLatestQuizResult` chi lay attempt sau lan nop Tab 1. Client: Stepper 4 buoc (✓ / ring / khoa / Bo qua / Xem lai); chi di tien; Dialog Tab 1 chi doc; nop Tab 1 -> nut "Tiep tuc sang ..."; Tab 2/3 tach error vs empty, dem lui 3s + "Chuyen ngay", man ket qua + "Tiep tuc"; Tab 2 Enter/gợi ý 2 lần/"Kiem tra"; Tab4 `onFinished` + intro "N cau · khoang M phut"; nut "Lam lai tu dau" chi khi done; student-shell `max-w-md md:max-w-3xl` + sidebar `lg:`; Tab 1 `pb-40` + thanh tien do; home: ma lop len dau khi chua co lop, the lop bam duoc.
+- File da sua/tao: `components/shared/stepper.tsx` (moi), `components/student/{lesson-study,tab1-self-assess,tab1-readonly,tab2-fill-in,tab3-drag-drop,tab4-quiz,student-shell,student-nav,join-class-card}.tsx`, `app/actions/student-learn.ts`, `app/student/page.tsx`, `app/student/learn/[id]/page.tsx`.
+- Viec chua lam / de phien sau: keo tha tap-to-place / id chip / nut Kiem tra / KeyboardSensor (phien 4); quiz localStorage + thanh so cau + ConfirmDialog nop (phien 4); live iPhone fullscreen (phien 4). `tab1Locked` con trong `getLessonForStudy` (tuong thich). `pnpm lint` khong chay duoc (thieu eslint.config).
+- Commit: `070ba85` `wip(ui): phien 3 - luong tuan tu, stepper, khung HS`
 
 ---
 

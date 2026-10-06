@@ -24,7 +24,7 @@ export function StudentShell({
   return (
     <div className="min-h-svh bg-background">
       <header className="sticky top-0 z-30 border-b border-border bg-card">
-        <div className="mx-auto flex max-w-md items-center justify-between px-4 py-3">
+        <div className="mx-auto flex max-w-md items-center justify-between px-4 py-3 md:max-w-3xl lg:max-w-5xl">
           <div className="flex items-center gap-2">
             <Logo size="sm" />
             <p className="text-xs text-muted-foreground">{userName}</p>
@@ -36,9 +36,18 @@ export function StudentShell({
         </div>
       </header>
 
-      <main className="mx-auto max-w-md px-4 pb-24 pt-4">{children}</main>
+      <div className="mx-auto flex max-w-md gap-4 px-4 pb-24 pt-4 md:max-w-3xl lg:max-w-5xl lg:pb-8">
+        <aside className="hidden w-48 shrink-0 lg:block">
+          <div className="sticky top-20">
+            <StudentNav variant="sidebar" />
+          </div>
+        </aside>
+        <main className="min-w-0 flex-1">{children}</main>
+      </div>
 
-      <StudentNav />
+      <div className="lg:hidden">
+        <StudentNav />
+      </div>
     </div>
   )
 }

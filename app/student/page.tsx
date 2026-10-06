@@ -24,9 +24,11 @@ export default async function StudentHomePage() {
       <div>
         <h1 className="font-heading text-xl font-bold text-foreground text-balance">Trang chủ</h1>
         <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
-          Tham gia lớp bằng mã mời để bắt đầu học.
+          Tham gia lớp bằng mã do giáo viên cấp để bắt đầu học.
         </p>
       </div>
+
+      {classes.length === 0 && <JoinClassCard />}
 
       {liveSessions.length > 0 && (
         <section aria-labelledby="live-heading" className="flex flex-col gap-2">
@@ -58,7 +60,7 @@ export default async function StudentHomePage() {
 
       <AssignedWork items={assigned} />
 
-      <JoinClassCard />
+      {classes.length > 0 && <JoinClassCard />}
 
       <section aria-labelledby="my-classes-heading" className="flex flex-col gap-3">
         <h2 id="my-classes-heading" className="font-heading text-sm font-semibold text-foreground">
@@ -68,21 +70,23 @@ export default async function StudentHomePage() {
           <div className="rounded-xl border border-dashed border-border bg-card p-6 text-center">
             <Users className="mx-auto h-8 w-8 text-muted-foreground" aria-hidden="true" />
             <p className="mt-2 text-sm text-muted-foreground">
-              Bạn chưa tham gia lớp nào. Nhập mã mời phía trên.
+              Bạn chưa tham gia lớp nào. Nhập mã lớp phía trên.
             </p>
           </div>
         ) : (
           <ul className="flex flex-col gap-2">
             {classes.map((c) => (
-              <li
-                key={c.id}
-                className="rounded-xl border border-border bg-card p-4"
-              >
-                <p className="font-heading font-semibold text-foreground">{c.name}</p>
-                <p className="mt-0.5 text-sm text-muted-foreground">
-                  {c.subject} · {c.schoolYear}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">Giáo viên: {c.teacherName}</p>
+              <li key={c.id}>
+                <Link
+                  href="/student/learn"
+                  className="block rounded-xl border border-border bg-card p-4 transition-colors hover:bg-secondary"
+                >
+                  <p className="font-semibold text-foreground">{c.name}</p>
+                  <p className="mt-0.5 text-sm text-muted-foreground">
+                    {c.subject} · {c.schoolYear}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">Giáo viên: {c.teacherName}</p>
+                </Link>
               </li>
             ))}
           </ul>

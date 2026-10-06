@@ -13,6 +13,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
+import { useRouter } from "next/navigation"
 import { saveTab1Progress, submitTab1 } from "@/app/actions/student-learn"
 import { cleanContentDisplay } from "@/lib/content-display"
 import type { KnowledgePointDto } from "@/types"
@@ -28,8 +29,9 @@ export function Tab1SelfAssess({
   lessonId: string
   knowledgePoints: KnowledgePointDto[]
   savedAssessments: Record<string, Assessment>
-  onSubmitted: (knownCount: number) => void
+  onSubmitted: (knownCount: number, assessments: Record<string, Assessment>) => void
 }) {
+  const router = useRouter()
   const storageKey = `edusync:tab1:${lessonId}`
   const [assessments, setAssessments] = useState<Record<string, Assessment>>(savedAssessments)
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -75,8 +77,10 @@ export function Tab1SelfAssess({
     startTransition(async () => {
       try {
         await saveTab1Progress(kpId, value)
-      } catch {
-        /* im lặng — đã lưu localStorage */
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Không thể lưu đánh giá"
+        toast.error(msg)
+        if (msg.includes("Tự đánh giá")) router.refresh()
       }
     })
   }
@@ -92,14 +96,16 @@ export function Tab1SelfAssess({
           /* ignore */
         }
         setConfirmOpen(false)
-        setTimeout(() => onSubmitted(res.knownCount), 3000)
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Không thể nộp bài")
+        const msg = err instanceof Error ? err.message : "Không thể nộp bài"
+        toast.error(msg)
+        if (msg.includes("Tự đánh giá")) router.refresh()
       }
     })
   }
 
   if (summary) {
+    const nextLabel = summary.knownCount > 0 ? "Điền khuyết" : "Kéo thả"
     return (
       <div className="rounded-xl border border-border bg-card p-6 text-center">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -110,13 +116,18 @@ export function Tab1SelfAssess({
             ? `Bạn tự tin với ${summary.knownCount}/${summary.total} kiến thức. Bước Điền khuyết sẽ kiểm tra ${summary.knownCount} kiến thức đó.`
             : "Bạn chưa tự tin với kiến thức nào. Bước Kéo thả sẽ giúp bạn ôn tập toàn bộ."}
         </p>
-        <p className="mt-2 text-sm text-muted-foreground">Đang chuyển bước tiếp theo...</p>
+        <Button
+          className="mt-4 min-h-11 w-full"
+          onClick={() => onSubmitted(summary.knownCount, assessments)}
+        >
+          Tiếp tục sang {nextLabel}
+        </Button>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col gap-3 pb-20">
+    <div className="flex flex-col gap-3 pb-40">
       <p className="text-sm text-muted-foreground leading-relaxed">
         Đọc từng kiến thức và tự đánh giá bạn đã nắm được hay chưa. Bạn có thể đổi lựa chọn trước khi nộp.
       </p>
@@ -132,8 +143,8 @@ export function Tab1SelfAssess({
       ))}
 
       {/* Bottom progress bar */}
-      <div className="fixed inset-x-0 bottom-[56px] z-30 border-t border-border bg-card px-4 py-3">
-        <div className="mx-auto max-w-md">
+      <div className="fixed inset-x-0 bottom-[56px] z-30 border-t border-border bg-card px-4 py-3 lg:bottom-0">
+        <div className="mx-auto max-w-md md:max-w-3xl">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>
               Đã đánh giá {assessedCount}/{total} kiến thức
@@ -179,16 +190,18 @@ export function Tab1SelfAssess({
   )
 }
 
-function KPCard({
+export function KPCard({
   index,
   content,
   value,
   onChoose,
+  readOnly,
 }: {
   index: number
   content: string
   value?: Assessment
-  onChoose: (v: Assessment) => void
+  onChoose?: (v: Assessment) => void
+  readOnly?: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
   const isLong = content.length > 120
@@ -229,30 +242,57 @@ function KPCard({
       </div>
 
       <div className="mt-3 flex gap-2">
-        <button
-          type="button"
-          onClick={() => onChoose("known")}
-          className={cn(
-            "flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg border text-sm font-medium transition-colors",
-            value === "known"
-              ? "border-primary bg-primary text-primary-foreground"
-              : "border-border text-foreground hover:bg-secondary",
-          )}
-        >
-          <Check className="h-4 w-4" /> Tôi đã biết
-        </button>
-        <button
-          type="button"
-          onClick={() => onChoose("unknown")}
-          className={cn(
-            "flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg border text-sm font-medium transition-colors",
-            value === "unknown"
-              ? "border-accent bg-accent text-accent-foreground"
-              : "border-border text-foreground hover:bg-secondary",
-          )}
-        >
-          <X className="h-4 w-4" /> Chưa biết
-        </button>
+        {readOnly ? (
+          <p
+            className={cn(
+              "flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg border text-sm font-medium",
+              value === "known"
+                ? "border-primary bg-primary/10 text-primary"
+                : value === "unknown"
+                  ? "border-accent bg-accent/20 text-accent-foreground"
+                  : "border-border text-muted-foreground",
+            )}
+          >
+            {value === "known" ? (
+              <>
+                <Check className="h-4 w-4" /> Biết
+              </>
+            ) : value === "unknown" ? (
+              <>
+                <X className="h-4 w-4" /> Chưa biết
+              </>
+            ) : (
+              "Chưa đánh giá"
+            )}
+          </p>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => onChoose?.("known")}
+              className={cn(
+                "flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg border text-sm font-medium transition-colors",
+                value === "known"
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border text-foreground hover:bg-secondary",
+              )}
+            >
+              <Check className="h-4 w-4" /> Tôi đã biết
+            </button>
+            <button
+              type="button"
+              onClick={() => onChoose?.("unknown")}
+              className={cn(
+                "flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg border text-sm font-medium transition-colors",
+                value === "unknown"
+                  ? "border-accent bg-accent text-accent-foreground"
+                  : "border-border text-foreground hover:bg-secondary",
+              )}
+            >
+              <X className="h-4 w-4" /> Chưa biết
+            </button>
+          </>
+        )}
       </div>
     </div>
   )

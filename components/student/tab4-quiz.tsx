@@ -21,7 +21,15 @@ type QuizQuestion = {
 
 type Answer = string | Record<string, "D" | "S">
 
-export function Tab4Quiz({ lessonId }: { lessonId: string }) {
+export function Tab4Quiz({
+  lessonId,
+  quizQuestionCount = 0,
+  onFinished,
+}: {
+  lessonId: string
+  quizQuestionCount?: number
+  onFinished?: () => void
+}) {
   const [phase, setPhase] = useState<"intro" | "quiz" | "result">("intro")
   const [loading, setLoading] = useState(true)
   const [quizId, setQuizId] = useState<string | null>(null)
@@ -40,6 +48,7 @@ export function Tab4Quiz({ lessonId }: { lessonId: string }) {
         if (res) {
           setResult(res)
           setPhase("result")
+          onFinished?.()
         }
         setLoading(false)
       })
@@ -71,6 +80,7 @@ export function Tab4Quiz({ lessonId }: { lessonId: string }) {
         const res = await submitQuiz(quizId, answers)
         setResult(res)
         setPhase("result")
+        onFinished?.()
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Không thể nộp bài")
       }
@@ -88,7 +98,9 @@ export function Tab4Quiz({ lessonId }: { lessonId: string }) {
           Sẵn sàng làm bài kiểm tra tổng hợp?
         </p>
         <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-          Bài gồm câu trắc nghiệm, đúng/sai và trả lời ngắn. Điểm tối đa 10.
+          {quizQuestionCount > 0
+            ? `${quizQuestionCount} câu · khoảng ${Math.max(1, Math.ceil(quizQuestionCount * 0.75))} phút. Điểm tối đa 10.`
+            : "Bài gồm câu trắc nghiệm, đúng/sai và trả lời ngắn. Điểm tối đa 10."}
         </p>
         <Button className="mt-4 min-h-11 w-full" onClick={begin} disabled={pending}>
           {pending ? "Đang chuẩn bị..." : "Bắt đầu bài kiểm tra"}
