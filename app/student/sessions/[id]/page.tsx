@@ -45,7 +45,7 @@ export default async function StudentSessionPage({
           </h1>
           <p className="mt-2 max-w-sm text-pretty text-muted-foreground">
             {ended
-              ? "Giáo viên đã kết thúc phiên này. Em có thể tiếp tục tự học các bài trên lớp."
+              ? "Giáo viên đã kết thúc phiên này. Bạn có thể tiếp tục tự học các bài trên lớp."
               : "Giáo viên chưa mở phiên trình chiếu. Vui lòng chờ giáo viên bắt đầu nhé."}
           </p>
         </div>

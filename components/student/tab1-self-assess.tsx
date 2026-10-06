@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 import { toast } from "sonner"
 import { Check, X, ChevronDown, ChevronUp } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -107,8 +107,8 @@ export function Tab1SelfAssess({
         </div>
         <p className="mt-3 font-heading font-semibold text-foreground text-balance">
           {summary.knownCount > 0
-            ? `Bạn tự tin với ${summary.knownCount}/${summary.total} kiến thức. Tab 2 sẽ kiểm tra ${summary.knownCount} kiến thức đó.`
-            : "Bạn chưa tự tin với kiến thức nào. Tab 3 sẽ giúp bạn ôn tập toàn bộ."}
+            ? `Bạn tự tin với ${summary.knownCount}/${summary.total} kiến thức. Bước Điền khuyết sẽ kiểm tra ${summary.knownCount} kiến thức đó.`
+            : "Bạn chưa tự tin với kiến thức nào. Bước Kéo thả sẽ giúp bạn ôn tập toàn bộ."}
         </p>
         <p className="mt-2 text-sm text-muted-foreground">Đang chuyển bước tiếp theo...</p>
       </div>
@@ -162,7 +162,7 @@ export function Tab1SelfAssess({
           <DialogHeader>
             <DialogTitle>Xác nhận nộp</DialogTitle>
             <DialogDescription>
-              Bạn không thể quay lại Tab 1 sau khi nộp. Tiếp tục?
+              Bạn không thể quay lại bước Tự đánh giá sau khi nộp. Tiếp tục?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -202,7 +202,7 @@ function KPCard({
         <div className="min-w-0 flex-1">
           <p
             className={cn(
-              "text-sm leading-relaxed text-foreground",
+              "max-w-prose text-base leading-relaxed text-foreground",
               isLong && !expanded && "line-clamp-3",
             )}
           >
@@ -247,7 +247,7 @@ function KPCard({
           className={cn(
             "flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg border text-sm font-medium transition-colors",
             value === "unknown"
-              ? "border-destructive bg-destructive text-white"
+              ? "border-accent bg-accent text-accent-foreground"
               : "border-border text-foreground hover:bg-secondary",
           )}
         >

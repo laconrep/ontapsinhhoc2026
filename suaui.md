@@ -2,7 +2,7 @@
 
 Muc tieu: app trong chuyen nghiep, dong nhat, de dung tren dien thoai 360px truoc, roi moi toi may tinh. Hoc sinh nhin la biet minh dang o buoc nao, bam trung nut, doc duoc chu, lam bai khong mat du lieu. Giao vien thao tac xoa/sua co xac nhan dep, bang khong tran, header khong tu bien mat. Dark mode dung mau thuong hieu. Popup mo phien trinh chieu khong de chu/khung nhay ra ngoai.
 
-Trang thai: **phien 1 xong**. Day la nguon su that cho 6 phien. Phien sau CHI doc file nay + dung cac file duoc liet ke trong phien do. KHONG doc lai toan repo.
+Trang thai: **phien 2 xong**. Day la nguon su that cho 6 phien. Phien sau CHI doc file nay + dung cac file duoc liet ke trong phien do. KHONG doc lai toan repo.
 
 Nguon: ra soat code that (repo `ontapsinhhoc2026`). Moi diem moc ben duoi da doi chieu code **sau** cac commit live (`5097e11` va truoc do). Moi phien phai tu kiem tra bang mat tren man 360px va man desktop.
 
@@ -212,7 +212,7 @@ Dark mode dung mau xanh. Mot logo, mot title template. Landing khong con ghi chu
 - Da lam: xoa `@media (prefers-color-scheme: dark)` ghi de mau xam; them ThemeProvider + ThemeToggle (landing, HS, GV); metadata title template `%s · EduSync`, bo generator, them openGraph; Logo dung chung (Leaf + EduSync) thay Sprout/BookOpen; xoa BuildStatus khoi landing, them section Cach hoat dong 3 buoc; don 11 dong `[v0]`; doi package name `edusync`; gitignore `*.tsbuildinfo`; favicon `icon.svg` logo la.
 - File da sua/tao: `app/globals.css`, `app/layout.tsx`, `app/page.tsx`, `app/sign-in/page.tsx`, `app/sign-up/page.tsx`, `app/onboarding/page.tsx`, `app/student/layout.tsx`, `app/teacher/layout.tsx`, `app/student/page.tsx`, `app/student/learn/page.tsx`, `app/student/sessions/[id]/error.tsx`, `app/teacher/classes/[id]/page.tsx`, `app/actions/live-quiz.ts`, `components/theme-provider.tsx` (moi), `components/shared/logo.tsx` (moi), `components/shared/theme-toggle.tsx` (moi), `components/landing/how-it-works.tsx` (moi), `components/landing/site-header.tsx`, `components/auth/auth-form.tsx`, `components/student/student-shell.tsx`, `components/teacher/teacher-shell.tsx`, `.gitignore`, `package.json`, `public/icon.svg`. `components/landing/build-status.tsx` va `public/placeholder*` van con tren disk (khong xoa file).
 - Viec chua lam / de phien sau: kich thuoc nut/o, chu nho, tuong phan, giong van (phien 2); luong tuan tu HS (phien 3); keo tha/quiz/live (phien 4). Khong xoa `build-status.tsx` / placeholder.
-- Commit: `wip(ui): phien 1 - dark mode, logo, don rac`
+- Commit: `3ce014f` `wip(ui): phien 1 - dark mode, logo, don rac`
 
 ---
 
@@ -240,11 +240,11 @@ Nut/o nhap du lon de cham; chu khong qua nho; tuong phan dat chuan; giong van th
 
 ### Bao cao phien 2 (dien sau khi code)
 
-- Da lam:
-- Ket qua do tuong phan:
-- File da sua/tao:
-- Viec chua lam / de phien sau:
-- Commit:
+- Da lam: Button `h-10 md:h-9` / sm `h-9 md:h-8` / lg `h-11` / icon `size-10 md:size-9`; Input `h-11 md:h-9`; chu `text-[9|10|11px]` o stats/progress/console doi `text-xs` (giu TV tour); `font-heading` bo o tieu de sm/base trong pham vi phien; StatCard dung o student-stats, quiz-progress, dashboard GV; KP/tab 1-3 `text-base leading-relaxed max-w-prose`; body `text-rendering: optimizeLegibility`; "Chua biet" sang accent; icon ✓/✗ o tab 2/3/4; "em" → "ban" o student toast + quiz-progress + app/student sessions.
+- Ket qua do tuong phan: light `--primary` L 0.58 + chu trang = 3.93:1 (chua dat AA) → ha sang L 0.53 = 4.78:1. Light muted-fg/bg 5.31, muted-fg/card 5.45. Dark primary/fg 7.98, muted-fg/bg 7.48, muted-fg/card 6.82. Dat WCAG AA.
+- File da sua/tao: `components/ui/button.tsx`, `components/ui/input.tsx`, `app/globals.css`, `components/shared/stat-card.tsx` (moi), `components/student/{student-stats,quiz-progress,tab1-self-assess,tab2-fill-in,tab3-drag-drop,tab4-quiz,lesson-study}.tsx`, `components/teacher/class-stats-panel.tsx`, `components/live/teacher-console.tsx`, `app/teacher/page.tsx`, `app/student/sessions/[id]/page.tsx`.
+- Viec chua lam / de phien sau: luong tuan tu + stepper (phien 3); keo tha tap-to-place / quiz localStorage / live iPhone (phien 4). `font-heading text-sm` con o assigned-work / student home / teacher-shell (ngoai file liet ke).
+- Commit: `bc854ca` `wip(ui): phien 2 - kich thuoc, chu, mau, giong van`
 
 ---
 
@@ -452,9 +452,9 @@ Mau cap nhat trang thai (copy vao bao cao):
 
 ## Trang thai
 
-- Phien hien tai: 2
+- Phien hien tai: 3
 - Phien 1: xong
-- Phien 2: chua
+- Phien 2: xong
 - Phien 3: chua
 - Phien 4: chua
 - Phien 5: chua (gom popup mo phien)

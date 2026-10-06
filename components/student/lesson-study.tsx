@@ -42,7 +42,7 @@ export function LessonStudy({
         setLocked(false)
         setUnlocked(1)
         setCurrent(1)
-        toast.success("Đã mở lại bài học. Em có thể làm lại từ đầu!")
+        toast.success("Đã mở lại bài học. Bạn có thể làm lại từ đầu!")
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Không thể làm lại")
       }
@@ -85,7 +85,7 @@ export function LessonStudy({
         </Link>
         <div className="min-w-0 flex-1">
           <p className="truncate text-xs text-muted-foreground">{lesson.chapterTitle}</p>
-          <h1 className="truncate font-heading text-base font-bold text-foreground">
+          <h1 className="truncate text-base font-semibold text-foreground">
             {lesson.title}
           </h1>
         </div>

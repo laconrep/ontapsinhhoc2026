@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth-helpers"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Users, BookOpen, Library, ArrowRight, Plus } from "lucide-react"
+import { StatCard } from "@/components/shared/stat-card"
 
 export const dynamic = "force-dynamic"
 
@@ -47,17 +48,13 @@ export default async function TeacherHomePage() {
         {stats.map((s) => {
           const Icon = s.icon
           return (
-            <Card key={s.label}>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  {s.label}
-                </CardTitle>
-                <Icon className="h-4 w-4 text-primary" aria-hidden="true" />
-              </CardHeader>
-              <CardContent>
-                <p className="font-heading text-3xl font-bold text-foreground">{s.value}</p>
-              </CardContent>
-            </Card>
+            <Link key={s.label} href={s.href} className="block">
+              <StatCard
+                label={s.label}
+                value={s.value}
+                icon={<Icon className="h-5 w-5" aria-hidden="true" />}
+              />
+            </Link>
           )
         })}
       </div>

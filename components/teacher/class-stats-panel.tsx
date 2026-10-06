@@ -81,7 +81,7 @@ function OverviewCards({ overview }: { overview: ClassOverviewStats }) {
       {cards.map((c) => (
         <div key={c.label} className="rounded-lg border border-border bg-secondary/40 p-3">
           <p className="text-xs text-muted-foreground">{c.label}</p>
-          <p className="mt-1 font-heading text-xl font-bold text-foreground">{c.value}</p>
+          <p className="mt-1 font-heading text-xl font-bold tabular-nums text-foreground">{c.value}</p>
         </div>
       ))}
     </div>
@@ -98,7 +98,7 @@ function AssignmentCards({ rows }: { rows: AssignmentStatRow[] }) {
         <li key={a.assignmentId} className="rounded-lg border border-border p-4">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <p className="font-heading text-sm font-semibold text-foreground">{a.lessonTitle}</p>
+              <p className="text-sm font-semibold text-foreground">{a.lessonTitle}</p>
               <p className="text-xs text-muted-foreground">{a.chapterTitle}</p>
             </div>
             <p className="text-xs text-muted-foreground">
@@ -301,14 +301,14 @@ export function ClassStatsPanel({ stats }: { stats: ClassStatsDto }) {
           <div className="flex flex-col gap-6">
             <OverviewCards overview={overview} />
             <div>
-              <h3 className="mb-3 flex items-center gap-2 font-heading text-sm font-semibold text-foreground">
+               <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
                 <ClipboardList className="h-4 w-4" aria-hidden="true" />
                 Theo bài giao
               </h3>
               <AssignmentCards rows={assignments} />
             </div>
             <div>
-              <h3 className="mb-3 font-heading text-sm font-semibold text-foreground">Theo học sinh</h3>
+              <h3 className="mb-3 text-sm font-semibold text-foreground">Theo học sinh</h3>
               <StudentTable students={stats.students} />
             </div>
           </div>
@@ -321,7 +321,7 @@ export function ClassStatsPanel({ stats }: { stats: ClassStatsDto }) {
                 <p className="text-sm text-foreground line-clamp-2">
                   {k.content}
                   {k.hardFlag ? (
-                    <span className="ml-2 inline-flex items-center rounded-full bg-destructive/15 px-2 py-0.5 text-[11px] font-medium text-destructive">
+                    <span className="ml-2 inline-flex items-center rounded-full bg-destructive/15 px-2 py-0.5 text-xs font-medium text-destructive">
                       Khó
                     </span>
                   ) : null}

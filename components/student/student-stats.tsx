@@ -2,6 +2,7 @@
 
 import type { StudentStatsDto, BadgeType } from "@/types"
 import { cn } from "@/lib/utils"
+import { StatCard } from "@/components/shared/stat-card"
 import { Flame, BookOpenCheck, Award, Trophy, Zap, Star, GraduationCap, Target } from "lucide-react"
 
 const BADGE_META: Record<BadgeType, { label: string; icon: typeof Flame; description: string }> = {
@@ -28,38 +29,26 @@ export function StudentStats({ stats }: { stats: StudentStatsDto }) {
     <div className="flex flex-col gap-6">
       {/* Chỉ số tổng quan */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <Flame className="h-5 w-5 text-primary" aria-hidden="true" />
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-foreground">{stats.streak}</p>
-            <p className="text-xs text-muted-foreground">ngày liên tục</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <BookOpenCheck className="h-5 w-5 text-primary" aria-hidden="true" />
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-foreground">{stats.totalReviewed}</p>
-            <p className="text-xs text-muted-foreground">kiến thức đã ôn</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <Award className="h-5 w-5 text-primary" aria-hidden="true" />
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-foreground">{stats.badges.length}</p>
-            <p className="text-xs text-muted-foreground">huy hiệu</p>
-          </div>
-        </div>
+        <StatCard
+          label="ngày liên tục"
+          value={stats.streak}
+          icon={<Flame className="h-5 w-5" aria-hidden="true" />}
+        />
+        <StatCard
+          label="kiến thức đã ôn"
+          value={stats.totalReviewed}
+          icon={<BookOpenCheck className="h-5 w-5" aria-hidden="true" />}
+        />
+        <StatCard
+          label="huy hiệu"
+          value={stats.badges.length}
+          icon={<Award className="h-5 w-5" aria-hidden="true" />}
+        />
       </div>
 
       {/* Biểu đồ hoạt động tuần */}
       <section className="rounded-xl border border-border bg-card p-5">
-        <h2 className="font-heading text-sm font-semibold text-foreground">Hoạt động 7 ngày qua</h2>
+        <h2 className="text-sm font-semibold text-foreground">Hoạt động 7 ngày qua</h2>
         <div className="mt-4 flex items-end justify-between gap-2" style={{ height: 140 }}>
           {stats.weeklyProgress.map((w) => {
             const heightPct = (w.activityCount / maxActivity) * 100
@@ -85,7 +74,7 @@ export function StudentStats({ stats }: { stats: StudentStatsDto }) {
 
       {/* Huy hiệu */}
       <section className="rounded-xl border border-border bg-card p-5">
-        <h2 className="font-heading text-sm font-semibold text-foreground">Huy hiệu</h2>
+        <h2 className="text-sm font-semibold text-foreground">Huy hiệu</h2>
         {stats.badges.length === 0 ? (
           <p className="mt-3 text-sm text-muted-foreground">
             Chưa có huy hiệu. Hãy học đều đặn để mở khoá huy hiệu đầu tiên!
@@ -104,7 +93,7 @@ export function StudentStats({ stats }: { stats: StudentStatsDto }) {
                     <Icon className="h-5 w-5 text-primary" aria-hidden="true" />
                   </div>
                   <p className="text-xs font-semibold text-foreground text-balance">{meta.label}</p>
-                  <p className="text-[11px] leading-tight text-muted-foreground text-pretty">{meta.description}</p>
+                  <p className="text-xs leading-tight text-muted-foreground text-pretty">{meta.description}</p>
                 </div>
               )
             })}
@@ -114,7 +103,7 @@ export function StudentStats({ stats }: { stats: StudentStatsDto }) {
 
       {/* Tiến độ theo bài */}
       <section className="rounded-xl border border-border bg-card p-5">
-        <h2 className="font-heading text-sm font-semibold text-foreground">Tiến độ theo bài học</h2>
+        <h2 className="text-sm font-semibold text-foreground">Tiến độ theo bài học</h2>
         {stats.lessonProgress.length === 0 ? (
           <p className="mt-3 text-sm text-muted-foreground">Chưa có bài học nào được ghi nhận tiến độ.</p>
         ) : (

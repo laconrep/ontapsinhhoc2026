@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { toast } from "sonner"
+import { Check, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { getTab2Questions, submitTab2Question } from "@/app/actions/student-learn"
@@ -68,9 +69,9 @@ export function Tab2FillIn({
     return (
       <div className="rounded-xl border border-border bg-card p-6 text-center">
         <p className="font-heading font-semibold text-foreground text-balance">
-          Bạn chưa tự tin với kiến thức nào. Tab 3 sẽ giúp bạn ôn tập toàn bộ.
+          Bạn chưa tự tin với kiến thức nào. Bước Kéo thả sẽ giúp bạn ôn tập toàn bộ.
         </p>
-        <p className="mt-2 text-sm text-muted-foreground">Chuyển sang Tab 3 trong {countdown} giây...</p>
+        <p className="mt-2 text-sm text-muted-foreground">Chuyển sang bước Kéo thả trong {countdown} giây...</p>
       </div>
     )
   }
@@ -162,7 +163,7 @@ function FillInCard({
 
   return (
     <div className="rounded-xl border border-border bg-card p-4">
-      <p className="text-sm leading-loose text-foreground">
+      <p className="max-w-prose text-base leading-relaxed text-foreground">
         {parts.map((part, i) => {
           if (part.type === "text") return <span key={i}>{part.value}</span>
           const t = part.term
@@ -170,25 +171,28 @@ function FillInCard({
           const locked = lockedCorrect(t.slotIndex)
           const wrong = graded && res && !res.isCorrect
           return (
-            <input
-              key={i}
-              ref={(el) => {
-                inputsRef.current[t.slotIndex] = el
-              }}
-              value={answers[t.slotIndex] ?? ""}
-              onChange={(e) => setAnswer(t.slotIndex, e.target.value)}
-              disabled={locked || pending}
-              aria-label={`Ô trống ${t.slotIndex + 1}`}
-              size={Math.max((answers[t.slotIndex] ?? "").length + 1, 10)}
-              className={cn(
-                "mx-1 inline-block rounded-md border-2 border-dashed px-2 py-0.5 text-center text-base outline-none",
-                "focus:border-primary focus:border-solid",
-                locked && "border-solid border-[color:var(--color-primary)] bg-primary/10 text-primary",
-                wrong && "border-solid border-destructive bg-destructive/10 text-destructive",
-                !graded && "border-border",
-              )}
-              style={{ fontSize: 16 }}
-            />
+            <span key={i} className="mx-1 inline-flex items-center align-middle">
+              <input
+                ref={(el) => {
+                  inputsRef.current[t.slotIndex] = el
+                }}
+                value={answers[t.slotIndex] ?? ""}
+                onChange={(e) => setAnswer(t.slotIndex, e.target.value)}
+                disabled={locked || pending}
+                aria-label={`Ô trống ${t.slotIndex + 1}`}
+                size={Math.max((answers[t.slotIndex] ?? "").length + 1, 10)}
+                className={cn(
+                  "inline-block rounded-md border-2 border-dashed px-2 py-0.5 text-center text-base outline-none",
+                  "focus:border-primary focus:border-solid",
+                  locked && "border-solid border-[color:var(--color-primary)] bg-primary/10 text-primary",
+                  wrong && "border-solid border-destructive bg-destructive/10 text-destructive",
+                  !graded && "border-border",
+                )}
+                style={{ fontSize: 16 }}
+              />
+              {locked ? <Check className="ml-0.5 inline size-3.5 text-primary" aria-hidden="true" /> : null}
+              {wrong ? <X className="ml-0.5 inline size-3.5 text-destructive" aria-hidden="true" /> : null}
+            </span>
           )
         })}
       </p>
@@ -200,7 +204,7 @@ function FillInCard({
             .filter((t) => !results[t.slotIndex]?.isCorrect)
             .map((t) => (
               <div key={t.slotIndex}>
-                Ô {t.slotIndex + 1}: đáp án đúng là <strong>{results[t.slotIndex]?.correctAnswer}</strong>
+                ✗ Ô {t.slotIndex + 1}: đáp án đúng là <strong>{results[t.slotIndex]?.correctAnswer}</strong>
               </div>
             ))}
         </div>

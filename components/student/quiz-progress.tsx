@@ -1,14 +1,14 @@
 import { TrendingUp, TrendingDown, Minus, Repeat2, Trophy } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { StatCard } from "@/components/shared/stat-card"
 import type { LessonAttemptProgress } from "@/app/actions/student-stats"
 
 export function QuizProgress({ items }: { items: LessonAttemptProgress[] }) {
   if (items.length === 0) {
     return (
       <section className="rounded-xl border border-border bg-card p-6 text-center">
-        <h2 className="font-heading text-base font-semibold text-foreground">Mức tiến bộ qua bài kiểm tra</h2>
+        <h2 className="text-base font-semibold text-foreground">Mức tiến bộ qua bài kiểm tra</h2>
         <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-          Chưa có lần làm bài kiểm tra nào. Hãy hoàn thành một bài học để theo dõi sự tiến bộ của em.
+          Chưa có lần làm bài kiểm tra nào. Hãy hoàn thành một bài học để theo dõi sự tiến bộ của bạn.
         </p>
       </section>
     )
@@ -27,45 +27,21 @@ export function QuizProgress({ items }: { items: LessonAttemptProgress[] }) {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="truncate text-xs text-muted-foreground">{it.chapterTitle}</p>
-                <h3 className="truncate font-heading text-sm font-bold text-foreground">{it.title}</h3>
+                <h3 className="truncate text-sm font-semibold text-foreground">{it.title}</h3>
               </div>
               <ImprovementBadge value={it.improvement} />
             </div>
 
             <div className="mt-3 grid grid-cols-4 gap-2 text-center">
-              <Stat label="Số lần" value={String(it.attempts)} icon={<Repeat2 className="h-3.5 w-3.5" />} />
-              <Stat label="Lần đầu" value={it.firstScore.toFixed(1)} />
-              <Stat label="Mới nhất" value={it.latestScore.toFixed(1)} highlight />
-              <Stat label="Cao nhất" value={it.bestScore.toFixed(1)} icon={<Trophy className="h-3.5 w-3.5 text-primary" />} />
+              <StatCard compact label="Số lần" value={String(it.attempts)} icon={<Repeat2 className="h-3.5 w-3.5" />} />
+              <StatCard compact label="Lần đầu" value={it.firstScore.toFixed(1)} />
+              <StatCard compact label="Mới nhất" value={it.latestScore.toFixed(1)} highlight />
+              <StatCard compact label="Cao nhất" value={it.bestScore.toFixed(1)} icon={<Trophy className="h-3.5 w-3.5 text-primary" />} />
             </div>
           </article>
         ))}
       </div>
     </section>
-  )
-}
-
-function Stat({
-  label,
-  value,
-  highlight,
-  icon,
-}: {
-  label: string
-  value: string
-  highlight?: boolean
-  icon?: React.ReactNode
-}) {
-  return (
-    <div className="flex flex-col items-center gap-0.5">
-      <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-        {icon}
-        {label}
-      </span>
-      <span className={cn("font-heading text-lg font-bold", highlight ? "text-primary" : "text-foreground")}>
-        {value}
-      </span>
-    </div>
   )
 }
 

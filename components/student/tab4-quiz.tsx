@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { startQuiz, submitQuiz, getLatestQuizResult } from "@/app/actions/student-learn"
-import { Award, RotateCcw } from "lucide-react"
+import { Award, Check, RotateCcw, X } from "lucide-react"
 import type { QuizResultDto } from "@/types"
 import { QuestionStem } from "@/components/question/question-stem"
 
@@ -291,7 +291,7 @@ function QuizResult({
         >
           <Award className="h-8 w-8" />
         </div>
-        <p className="mt-3 font-heading text-3xl font-bold text-foreground">
+        <p className="mt-3 font-heading text-3xl font-bold tabular-nums text-foreground">
           {result.score.toFixed(1)}
           <span className="text-lg text-muted-foreground">/10</span>
         </p>
@@ -300,7 +300,7 @@ function QuizResult({
 
       {result.details.length > 0 && (
         <div className="flex flex-col gap-2">
-          <h3 className="font-heading text-sm font-semibold text-foreground">Chi tiết</h3>
+          <h3 className="text-sm font-semibold text-foreground">Chi tiết</h3>
           {result.details.map((d, i) => (
             <div
               key={d.questionId}
@@ -309,7 +309,14 @@ function QuizResult({
                 d.isCorrect ? "border-primary/40 bg-primary/5" : "border-destructive/40 bg-destructive/5",
               )}
             >
-              <p className="font-medium text-foreground">Câu {i + 1}</p>
+              <p className="flex items-center gap-1.5 font-medium text-foreground">
+                {d.isCorrect ? (
+                  <Check className="size-4 text-primary" aria-hidden="true" />
+                ) : (
+                  <X className="size-4 text-destructive" aria-hidden="true" />
+                )}
+                Câu {i + 1} {d.isCorrect ? "đúng" : "sai"}
+              </p>
               {d.questionType !== "TF" && (
                 <>
                   <p className="mt-1 text-muted-foreground">

@@ -12,6 +12,7 @@ import {
   useDroppable,
   type DragEndEvent,
 } from "@dnd-kit/core"
+import { Check, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { getTab3Questions, submitTab3Question } from "@/app/actions/student-learn"
@@ -80,7 +81,7 @@ export function Tab3DragDrop({
         <p className="font-heading font-semibold text-foreground text-balance">
           Xuất sắc! Bạn đã nắm vững tất cả kiến thức. Tiến thẳng đến bài kiểm tra.
         </p>
-        <p className="mt-2 text-sm text-muted-foreground">Chuyển sang Tab 4 trong {countdown} giây...</p>
+        <p className="mt-2 text-sm text-muted-foreground">Chuyển sang bước Kiểm tra trong {countdown} giây...</p>
       </div>
     )
   }
@@ -207,7 +208,7 @@ function DragDropCard({
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
       <div className="rounded-xl border border-border bg-card p-4">
-        <p className="text-sm leading-loose text-foreground">
+        <p className="max-w-prose text-base leading-relaxed text-foreground">
           {parts.map((part, i) => {
             if (part.type === "text") return <span key={i}>{part.value}</span>
             const t = part.term
@@ -230,7 +231,7 @@ function DragDropCard({
               .filter((t) => !results[t.slotIndex]?.isCorrect)
               .map((t) => (
                 <div key={t.slotIndex}>
-                  Ô {t.slotIndex + 1}: đáp án đúng là <strong>{results[t.slotIndex]?.correctAnswer}</strong>
+                  ✗ Ô {t.slotIndex + 1}: đáp án đúng là <strong>{results[t.slotIndex]?.correctAnswer}</strong>
                 </div>
               ))}
           </div>
@@ -304,6 +305,8 @@ function DropZone({
       )}
     >
       {chip ?? "\u00A0\u00A0\u00A0"}
+      {correct ? <Check className="ml-1 inline size-3.5 text-primary" aria-hidden="true" /> : null}
+      {wrong ? <X className="ml-1 inline size-3.5 text-destructive" aria-hidden="true" /> : null}
     </span>
   )
 }
