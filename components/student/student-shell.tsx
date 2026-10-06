@@ -2,9 +2,10 @@
 
 import type { ReactNode } from "react"
 import { usePathname } from "next/navigation"
-import { BookOpen } from "lucide-react"
 import { StudentNav } from "@/components/student/student-nav"
 import { SignOutButton } from "@/components/auth/sign-out-button"
+import { Logo } from "@/components/shared/logo"
+import { ThemeToggle } from "@/components/shared/theme-toggle"
 
 export function StudentShell({
   userName,
@@ -25,15 +26,13 @@ export function StudentShell({
       <header className="sticky top-0 z-30 border-b border-border bg-card">
         <div className="mx-auto flex max-w-md items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <BookOpen className="h-4 w-4" />
-            </span>
-            <div className="leading-tight">
-              <p className="font-heading text-sm font-bold text-foreground">EduSync</p>
-              <p className="text-xs text-muted-foreground">{userName}</p>
-            </div>
+            <Logo size="sm" />
+            <p className="text-xs text-muted-foreground">{userName}</p>
           </div>
-          <SignOutButton />
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <SignOutButton />
+          </div>
         </div>
       </header>
 

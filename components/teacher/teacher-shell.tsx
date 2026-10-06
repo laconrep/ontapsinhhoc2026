@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react"
 import { usePathname } from "next/navigation"
 import { SignOutButton } from "@/components/auth/sign-out-button"
 import { TeacherNav } from "@/components/teacher/teacher-nav"
+import { ThemeToggle } from "@/components/shared/theme-toggle"
 import { cn } from "@/lib/utils"
 
 function isLiveConsolePath(pathname: string) {
@@ -99,6 +100,7 @@ export function TeacherShell({
           </p>
           <div className="flex items-center gap-3">
             <span className="hidden text-sm text-muted-foreground sm:inline">{userName}</span>
+            <ThemeToggle />
             <SignOutButton />
           </div>
         </div>
@@ -111,6 +113,7 @@ export function TeacherShell({
           </p>
           <div className="flex items-center gap-3">
             <span className="text-sm text-muted-foreground">{userName}</span>
+            <ThemeToggle />
             <SignOutButton />
           </div>
         </div>

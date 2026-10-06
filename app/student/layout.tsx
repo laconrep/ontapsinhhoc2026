@@ -1,6 +1,9 @@
 import type React from "react"
+import type { Metadata } from "next"
 import { requireRole } from "@/lib/auth-helpers"
 import { StudentShell } from "@/components/student/student-shell"
+
+export const metadata: Metadata = { title: "Học sinh" }
 
 export default async function StudentLayout({ children }: { children: React.ReactNode }) {
   const user = await requireRole("student")

@@ -2,7 +2,7 @@
 
 Muc tieu: app trong chuyen nghiep, dong nhat, de dung tren dien thoai 360px truoc, roi moi toi may tinh. Hoc sinh nhin la biet minh dang o buoc nao, bam trung nut, doc duoc chu, lam bai khong mat du lieu. Giao vien thao tac xoa/sua co xac nhan dep, bang khong tran, header khong tu bien mat. Dark mode dung mau thuong hieu. Popup mo phien trinh chieu khong de chu/khung nhay ra ngoai.
 
-Trang thai: **chua bat dau**. Day la nguon su that cho 6 phien. Phien sau CHI doc file nay + dung cac file duoc liet ke trong phien do. KHONG doc lai toan repo.
+Trang thai: **phien 1 xong**. Day la nguon su that cho 6 phien. Phien sau CHI doc file nay + dung cac file duoc liet ke trong phien do. KHONG doc lai toan repo.
 
 Nguon: ra soat code that (repo `ontapsinhhoc2026`). Moi diem moc ben duoi da doi chieu code **sau** cac commit live (`5097e11` va truoc do). Moi phien phai tu kiem tra bang mat tren man 360px va man desktop.
 
@@ -209,10 +209,10 @@ Dark mode dung mau xanh. Mot logo, mot title template. Landing khong con ghi chu
 
 ### Bao cao phien 1 (dien sau khi code)
 
-- Da lam:
-- File da sua/tao:
-- Viec chua lam / de phien sau:
-- Commit:
+- Da lam: xoa `@media (prefers-color-scheme: dark)` ghi de mau xam; them ThemeProvider + ThemeToggle (landing, HS, GV); metadata title template `%s · EduSync`, bo generator, them openGraph; Logo dung chung (Leaf + EduSync) thay Sprout/BookOpen; xoa BuildStatus khoi landing, them section Cach hoat dong 3 buoc; don 11 dong `[v0]`; doi package name `edusync`; gitignore `*.tsbuildinfo`; favicon `icon.svg` logo la.
+- File da sua/tao: `app/globals.css`, `app/layout.tsx`, `app/page.tsx`, `app/sign-in/page.tsx`, `app/sign-up/page.tsx`, `app/onboarding/page.tsx`, `app/student/layout.tsx`, `app/teacher/layout.tsx`, `app/student/page.tsx`, `app/student/learn/page.tsx`, `app/student/sessions/[id]/error.tsx`, `app/teacher/classes/[id]/page.tsx`, `app/actions/live-quiz.ts`, `components/theme-provider.tsx` (moi), `components/shared/logo.tsx` (moi), `components/shared/theme-toggle.tsx` (moi), `components/landing/how-it-works.tsx` (moi), `components/landing/site-header.tsx`, `components/auth/auth-form.tsx`, `components/student/student-shell.tsx`, `components/teacher/teacher-shell.tsx`, `.gitignore`, `package.json`, `public/icon.svg`. `components/landing/build-status.tsx` va `public/placeholder*` van con tren disk (khong xoa file).
+- Viec chua lam / de phien sau: kich thuoc nut/o, chu nho, tuong phan, giong van (phien 2); luong tuan tu HS (phien 3); keo tha/quiz/live (phien 4). Khong xoa `build-status.tsx` / placeholder.
+- Commit: `wip(ui): phien 1 - dark mode, logo, don rac`
 
 ---
 
@@ -452,8 +452,8 @@ Mau cap nhat trang thai (copy vao bao cao):
 
 ## Trang thai
 
-- Phien hien tai: chua bat dau
-- Phien 1: chua
+- Phien hien tai: 2
+- Phien 1: xong
 - Phien 2: chua
 - Phien 3: chua
 - Phien 4: chua
@@ -462,4 +462,6 @@ Mau cap nhat trang thai (copy vao bao cao):
 
 Diem moc sau phien 1 (dien sau):
 
--
+- ThemeProvider class + `.dark` xanh; khong con media prefers-color-scheme ghi de xam
+- Logo dung chung; landing Cach hoat dong; metadata template
+- `[v0]` da doi thanh log thuong; package name `edusync`

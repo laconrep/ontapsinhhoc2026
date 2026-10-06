@@ -10,7 +10,7 @@ export default async function StudentLearnPage() {
   try {
     assigned = await getAssignedLessonsForStudent()
   } catch (err) {
-    console.error("[v0] getAssignedLessonsForStudent error:", err)
+    console.error("getAssignedLessonsForStudent error:", err)
   }
   const assignmentByLessonId: Record<string, AssignedLessonDto> = {}
   for (const item of assigned) assignmentByLessonId[item.lessonId] = item

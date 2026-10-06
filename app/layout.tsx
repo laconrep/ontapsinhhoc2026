@@ -2,6 +2,7 @@ import { Analytics } from "@vercel/analytics/next"
 import type { Metadata, Viewport } from "next"
 import { Inter, Bricolage_Grotesque } from "next/font/google"
 import { Toaster } from "@/components/ui/sonner"
+import { ThemeProvider } from "@/components/theme-provider"
 import "./globals.css"
 
 const inter = Inter({
@@ -17,10 +18,24 @@ const bricolage = Bricolage_Grotesque({
 })
 
 export const metadata: Metadata = {
-  title: "EduSync — Ôn tập Sinh học thông minh",
+  title: {
+    default: "EduSync — Ôn tập Sinh học thông minh",
+    template: "%s · EduSync",
+  },
   description:
     "Nền tảng ôn tập Sinh học cho giáo viên và học sinh: bài giảng, điểm kiến thức, luyện tập tương tác và theo dõi tiến độ.",
-  generator: "v0.app",
+  openGraph: {
+    title: "EduSync — Ôn tập Sinh học thông minh",
+    description:
+      "Nền tảng ôn tập Sinh học cho giáo viên và học sinh: bài giảng, điểm kiến thức, luyện tập tương tác và theo dõi tiến độ.",
+    locale: "vi_VN",
+    type: "website",
+    siteName: "EduSync",
+  },
+  icons: {
+    icon: "/icon.svg",
+    apple: "/apple-icon.png",
+  },
 }
 
 export const viewport: Viewport = {
@@ -37,10 +52,16 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="vi" className={`bg-background ${inter.variable} ${bricolage.variable}`}>
+    <html
+      lang="vi"
+      suppressHydrationWarning
+      className={`bg-background ${inter.variable} ${bricolage.variable}`}
+    >
       <body className="font-sans antialiased">
-        {children}
-        <Toaster richColors position="top-center" />
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          {children}
+          <Toaster richColors position="top-center" />
+        </ThemeProvider>
         {process.env.NODE_ENV === "production" && <Analytics />}
       </body>
     </html>

@@ -10,7 +10,7 @@ export default function StudentSessionError({
   error: Error & { digest?: string }
   reset: () => void
 }) {
-  console.error("[v0] StudentSession error:", error)
+  console.error("StudentSession error:", error)
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-6 text-center">

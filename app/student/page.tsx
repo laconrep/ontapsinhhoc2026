@@ -14,7 +14,7 @@ export default async function StudentHomePage() {
     getMyClasses(),
     getActiveSessionsForStudent(),
     getAssignedLessonsForStudent().catch((err) => {
-      console.error("[v0] getAssignedLessonsForStudent error:", err)
+      console.error("getAssignedLessonsForStudent error:", err)
       return [] as AssignedLessonDto[]
     }),
   ])

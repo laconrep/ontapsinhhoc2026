@@ -170,7 +170,7 @@ async function restoreLiveState(sessionId: string): Promise<LiveSessionState | n
     if (state.currentIndex >= 0 && state.phase === "question") state.questionStartedAt = Date.now()
     return state
   } catch (err) {
-    console.error("[v0] ensureLiveState error loading questions:", err)
+    console.error("ensureLiveState error loading questions:", err)
     return null
   }
 }
@@ -340,7 +340,7 @@ export async function getDraftSessions(classId: string): Promise<DraftSessionDto
         createdAt: r.createdAt.toISOString(),
       })
     } catch (err) {
-      console.error("[v0] Error loading draft session:", err)
+      console.error("Error loading draft session:", err)
       continue
     }
   }
@@ -431,7 +431,7 @@ export async function getLiveQuizSnapshot(sessionId: string) {
         error: null,
       }
     }
-    console.error("[v0] getLiveQuizSnapshot: state is null but status is", s.status)
+    console.error("getLiveQuizSnapshot: state is null but status is", s.status)
     const error =
       s.status === "created"
         ? "Phiên này đang ở trạng thái nháp — hãy kích hoạt phiên trước khi mở bảng điều khiển."
@@ -591,7 +591,7 @@ export async function joinQuiz(sessionId: string): Promise<void> {
   const student = await requireRole("student")
   const state = await ensureLiveState(sessionId)
   if (!state) {
-    console.error("[v0] joinQuiz: ensureLiveState returned null for", sessionId)
+    console.error("joinQuiz: ensureLiveState returned null for", sessionId)
     throw new Error("Phiên học không tồn tại hoặc đã kết thúc")
   }
   // xác thực thuộc lớp

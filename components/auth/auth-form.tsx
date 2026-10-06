@@ -8,8 +8,9 @@ import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { GraduationCap, BookOpen, Sprout } from "lucide-react"
+import { GraduationCap, BookOpen } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Logo } from "@/components/shared/logo"
 import type { UserRole } from "@/types"
 
 export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
@@ -47,11 +48,8 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
   return (
     <main className="min-h-svh bg-background flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-md">
-        <Link href="/" className="mb-8 flex items-center justify-center gap-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Sprout className="h-5 w-5" />
-          </span>
-          <span className="font-heading text-xl font-bold text-foreground">EduSync</span>
+        <Link href="/" className="mb-8 flex items-center justify-center">
+          <Logo size="md" />
         </Link>
 
         <div className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">

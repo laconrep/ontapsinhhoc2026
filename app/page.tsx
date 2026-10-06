@@ -2,7 +2,7 @@ import { SiteHeader } from "@/components/landing/site-header"
 import { Hero } from "@/components/landing/hero"
 import { RoleCards } from "@/components/landing/role-cards"
 import { FeatureGrid } from "@/components/landing/feature-grid"
-import { BuildStatus } from "@/components/landing/build-status"
+import { HowItWorks } from "@/components/landing/how-it-works"
 import { SiteFooter } from "@/components/landing/site-footer"
 
 export default function Page() {
@@ -11,9 +11,9 @@ export default function Page() {
       <SiteHeader />
       <main className="flex-1">
         <Hero />
+        <HowItWorks />
         <RoleCards />
         <FeatureGrid />
-        <BuildStatus />
       </main>
       <SiteFooter />
     </div>

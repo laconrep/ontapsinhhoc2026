@@ -27,25 +27,25 @@ export default async function ClassDetailPage({
   try {
     stats = await getClassStats(id)
   } catch (err) {
-    console.error("[v0] getClassStats error:", err)
+    console.error("getClassStats error:", err)
   }
 
   try {
     activeSession = await getActiveSessionForClass(id)
   } catch (err) {
-    console.error("[v0] getActiveSessionForClass error:", err)
+    console.error("getActiveSessionForClass error:", err)
   }
 
   try {
     drafts = await getDraftSessions(id)
   } catch (err) {
-    console.error("[v0] getDraftSessions error:", err)
+    console.error("getDraftSessions error:", err)
   }
 
   try {
     assignments = await getClassAssignments(id)
   } catch (err) {
-    console.error("[v0] getClassAssignments error:", err)
+    console.error("getClassAssignments error:", err)
   }
 
   return (
