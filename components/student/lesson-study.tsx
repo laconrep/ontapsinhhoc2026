@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Stepper, type StepIndex } from "@/components/shared/stepper"
+import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { resetLessonProgress } from "@/app/actions/student-learn"
 import { Tab1SelfAssess } from "./tab1-self-assess"
 import { Tab1Readonly } from "./tab1-readonly"
@@ -30,6 +31,7 @@ function stageToStep(stage: StudyStage): StepIndex {
 
 export function LessonStudy({
   lessonId,
+  userId,
   lesson,
   knowledgePoints,
   savedAssessments,
@@ -38,6 +40,7 @@ export function LessonStudy({
   quizQuestionCount,
 }: {
   lessonId: string
+  userId: string
   lesson: { id: string; title: string; chapterTitle: string }
   knowledgePoints: KnowledgePointDto[]
   savedAssessments: Record<string, "known" | "unknown">
@@ -48,6 +51,7 @@ export function LessonStudy({
   const [stage, setStage] = useState<StudyStage>(initialStage)
   const [assessments, setAssessments] = useState(savedAssessments)
   const [reviewOpen, setReviewOpen] = useState(false)
+  const [resetOpen, setResetOpen] = useState(false)
   const [skip2, setSkip2] = useState(skippedTab2)
   const [resetting, startReset] = useTransition()
 
@@ -60,6 +64,7 @@ export function LessonStudy({
         await resetLessonProgress(lessonId)
         setStage("tab1")
         setSkip2(false)
+        setResetOpen(false)
         toast.success("Đã mở lại bài học. Bạn có thể làm lại từ đầu!")
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Không thể làm lại")
@@ -88,7 +93,7 @@ export function LessonStudy({
             variant="outline"
             size="sm"
             className="shrink-0 bg-transparent"
-            onClick={handleReset}
+            onClick={() => setResetOpen(true)}
             disabled={resetting}
           >
             <RotateCcw className="h-4 w-4" />
@@ -124,10 +129,22 @@ export function LessonStudy({
       {(stage === "tab4" || stage === "done") && (
         <Tab4Quiz
           lessonId={lessonId}
+          userId={userId}
           quizQuestionCount={quizQuestionCount}
           onFinished={() => setStage("done")}
+          onReviewWrong={() => setResetOpen(true)}
         />
       )}
+
+      <ConfirmDialog
+        open={resetOpen}
+        onOpenChange={setResetOpen}
+        title="Làm lại từ đầu?"
+        description="Bạn sẽ làm lại từ bước Tự đánh giá. Tiến độ kiểm tra lần này được giữ trong thống kê."
+        confirmLabel="Làm lại từ đầu"
+        onConfirm={handleReset}
+        pending={resetting}
+      />
 
       <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
         <DialogContent className="flex max-h-[90dvh] flex-col overflow-hidden sm:max-w-md">

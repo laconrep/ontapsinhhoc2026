@@ -28,6 +28,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
   const [answeredId, setAnsweredId] = useState<string | null>(null)
   const [myCorrect, setMyCorrect] = useState<boolean | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [fsSupported, setFsSupported] = useState(false)
 
   const currentQid = view.question?.id ?? null
 
@@ -57,6 +58,9 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
 
   const fsHandlerRef = useRef<(() => void) | null>(null)
   useEffect(() => {
+    const supported = typeof document.documentElement.requestFullscreen === "function"
+    setFsSupported(supported)
+    if (!supported) return
     const handler = () => {
       const fs = !!document.fullscreenElement
       setIsFullscreen(fs)
@@ -70,19 +74,22 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
   async function handleJoin() {
     setJoinError(null)
     try {
-      await document.documentElement.requestFullscreen?.().catch(() => {})
+      const canFs = typeof document.documentElement.requestFullscreen === "function"
+      if (canFs) {
+        await document.documentElement.requestFullscreen().catch(() => {})
+      }
       await api.post(`/sessions/${sessionId}/live`, { action: "join" })
       setJoined(true)
-      report(!!document.fullscreenElement)
+      if (canFs) report(!!document.fullscreenElement)
       void view.refresh()
     } catch (err) {
-      // Không dùng toast đỏ gây kẹt — hiện màn thông báo thân thiện có nút thử lại/quay về.
       setJoinError(err instanceof Error ? err.message : "Không tham gia được phiên này")
     }
   }
 
   async function reenterFullscreen() {
-    await document.documentElement.requestFullscreen?.().catch(() => {})
+    if (typeof document.documentElement.requestFullscreen !== "function") return
+    await document.documentElement.requestFullscreen().catch(() => {})
   }
 
   async function submit(answer: string) {
@@ -127,12 +134,14 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
         <div>
           <h1 className="font-heading text-2xl font-bold text-balance">{className}</h1>
           <p className="mt-2 text-muted-foreground">
-            Nhấn để tham gia. Ứng dụng sẽ chuyển sang chế độ toàn màn hình để tập trung làm bài.
+            {fsSupported
+              ? "Nhấn để tham gia. Ứng dụng sẽ chuyển sang chế độ toàn màn hình để tập trung làm bài."
+              : "Nhấn để tham gia phiên. (Thiết bị này không hỗ trợ toàn màn hình — bạn vẫn làm bài bình thường.)"}
           </p>
         </div>
         <Button size="lg" onClick={handleJoin} disabled={view?.phase === "ended"}>
-          <Maximize className="h-5 w-5" />
-          Tham gia & vào toàn màn hình
+          {fsSupported ? <Maximize className="h-5 w-5" /> : null}
+          {fsSupported ? "Tham gia & vào toàn màn hình" : "Tham gia phiên"}
         </Button>
       </div>
     )
@@ -142,7 +151,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
     return (
       <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-3 bg-background p-6 text-center">
         <h1 className="font-heading text-2xl font-bold">Phiên đã kết thúc</h1>
-        <p className="text-muted-foreground">Cảm ơn em đã tham gia!</p>
+        <p className="text-muted-foreground">Cảm ơn bạn đã tham gia!</p>
       </div>
     )
   }
@@ -165,7 +174,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
   return (
     <>
       {/* Nút fullscreen (chỉ hiện khi thoát fullscreen) */}
-          {joined && !isFullscreen && (
+          {joined && fsSupported && !isFullscreen && (
         <button
           onClick={reenterFullscreen}
           className="fixed right-4 top-4 z-[90] rounded-lg bg-primary p-2 text-primary-foreground hover:bg-primary/90 shadow-lg"
@@ -229,7 +238,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
                             setMcChoice(o.id)
                           }}
                           className={cn(
-                            "relative z-20 flex min-h-14 w-full cursor-pointer touch-manipulation items-center gap-3 rounded-xl border-2 px-4 py-3 text-left text-lg transition-colors disabled:cursor-not-allowed",
+                            "relative z-20 flex min-h-11 w-full cursor-pointer touch-manipulation items-center gap-3 rounded-xl border-2 px-4 py-3 text-left text-base transition-colors disabled:cursor-not-allowed",
                             view.revealed && isCorrect
                               ? "border-primary bg-primary/10"
                               : view.revealed && isMine
@@ -287,7 +296,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
                               disabled={locked}
                               onClick={() => setTfChoices((s) => ({ ...s, [o.id]: true }))}
                               className={cn(
-                                "min-h-10 touch-manipulation rounded-lg px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed",
+                                "min-h-11 min-w-11 touch-manipulation rounded-lg px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed",
                                 picked === true ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground",
                               )}
                             >
@@ -298,7 +307,7 @@ export function StudentQuizView({ sessionId }: { sessionId: string }) {
                               disabled={locked}
                               onClick={() => setTfChoices((s) => ({ ...s, [o.id]: false }))}
                               className={cn(
-                                "min-h-10 touch-manipulation rounded-lg px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed",
+                                "min-h-11 min-w-11 touch-manipulation rounded-lg px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed",
                                 picked === false ? "bg-destructive text-primary-foreground" : "bg-secondary text-secondary-foreground",
                               )}
                             >

@@ -2,7 +2,7 @@
 
 Muc tieu: app trong chuyen nghiep, dong nhat, de dung tren dien thoai 360px truoc, roi moi toi may tinh. Hoc sinh nhin la biet minh dang o buoc nao, bam trung nut, doc duoc chu, lam bai khong mat du lieu. Giao vien thao tac xoa/sua co xac nhan dep, bang khong tran, header khong tu bien mat. Dark mode dung mau thuong hieu. Popup mo phien trinh chieu khong de chu/khung nhay ra ngoai.
 
-Trang thai: **phien 3 xong**. Day la nguon su that cho 6 phien. Phien sau CHI doc file nay + dung cac file duoc liet ke trong phien do. KHONG doc lai toan repo.
+Trang thai: **phien 4 xong**. Day la nguon su that cho 6 phien. Phien sau CHI doc file nay + dung cac file duoc liet ke trong phien do. KHONG doc lai toan repo.
 
 Nguon: ra soat code that (repo `ontapsinhhoc2026`). Moi diem moc ben duoi da doi chieu code **sau** cac commit live (`5097e11` va truoc do). Moi phien phai tu kiem tra bang mat tren man 360px va man desktop.
 
@@ -322,10 +322,10 @@ Het loi hanh vi o keo tha/kiem tra, khong mat bai, phien live khong bao sai tren
 
 ### Bao cao phien 4 (dien sau khi code)
 
-- Da lam:
-- File da sua/tao:
-- Viec chua lam / de phien sau:
-- Commit:
+- Da lam: Tab 3 — tinh placement ngoai updater, bo tu cham 300ms, nut Kiem tra khi dien du, chip id `chip-${i}-${chip}`, tap-to-place (cham the → cham o), DropZone thanh button + KeyboardSensor, nut Dat lai, icon ✓/✗. Tab 4 — localStorage `edusync:tab4:{userId}:{lessonId}` (khoi phuc khi mo, xoa khi nop/co ket qua), thanh so cau, cho bo qua (khong khoa Cau tiep theo), ConfirmDialog nop khi con cau trong, man ket qua nut "On lai cac diem kien thuc lam sai" → ConfirmDialog lam lai tu dau. Live iPhone: khong bao fullscreen neu `!requestFullscreen`; man cho doi thanh goi y. student-quiz-view TF/MC min-h-11.
+- File da sua/tao: `components/shared/confirm-dialog.tsx` (moi, dung truoc phien 5), `components/student/{tab3-drag-drop,tab4-quiz,lesson-study}.tsx`, `app/student/learn/[id]/page.tsx`, `components/live/student-quiz-view.tsx`.
+- Viec chua lam / de phien sau: ConfirmDialog thay 7 `confirm()` GV (phien 5); header/tab/bang GV + popup phien (phien 5). student-question-layout khong doi logic 65/35. `pnpm lint` khong chay duoc (thieu eslint.config).
+- Commit: `2dff359` `wip(ui): phien 4 - keo tha, quiz localStorage, live iPhone`
 
 ---
 
