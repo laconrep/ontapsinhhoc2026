@@ -62,6 +62,14 @@ export function LessonStudy({
     startReset(async () => {
       try {
         await resetLessonProgress(lessonId)
+        try {
+          localStorage.removeItem(`edusync:tab1:${lessonId}`)
+          localStorage.removeItem(`edusync:tab2:${userId}:${lessonId}`)
+          localStorage.removeItem(`edusync:tab3:${userId}:${lessonId}`)
+          localStorage.removeItem(`edusync:tab4:${userId}:${lessonId}`)
+        } catch {
+          /* ignore */
+        }
         setStage("tab1")
         setSkip2(false)
         setResetOpen(false)
@@ -121,10 +129,10 @@ export function LessonStudy({
         />
       )}
       {stage === "tab2" && (
-        <Tab2FillIn lessonId={lessonId} onComplete={() => setStage("tab3")} />
+        <Tab2FillIn lessonId={lessonId} userId={userId} onComplete={() => setStage("tab3")} />
       )}
       {stage === "tab3" && (
-        <Tab3DragDrop lessonId={lessonId} onComplete={() => setStage("tab4")} />
+        <Tab3DragDrop lessonId={lessonId} userId={userId} onComplete={() => setStage("tab4")} />
       )}
       {(stage === "tab4" || stage === "done") && (
         <Tab4Quiz

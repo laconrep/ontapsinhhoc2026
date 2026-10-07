@@ -30,20 +30,48 @@ type DragQuestion = {
 
 type SlotResult = { slotIndex: number; isCorrect: boolean; correctAnswer: string }
 
+type DragDraft = {
+  kpId: string
+  placement: Record<number, string | null>
+  results: Record<number, SlotResult>
+  graded: boolean
+}
+
 export function Tab3DragDrop({
   lessonId,
+  userId,
   onComplete,
 }: {
   lessonId: string
+  userId: string
   onComplete: () => void
 }) {
+  const storageKey = `edusync:tab3:${userId}:${lessonId}`
   const [loading, setLoading] = useState(true)
   const [questions, setQuestions] = useState<DragQuestion[]>([])
   const [index, setIndex] = useState(0)
   const [empty, setEmpty] = useState(false)
+  const [skipped, setSkipped] = useState(false)
   const [countdown, setCountdown] = useState(3)
   const [error, setError] = useState(false)
   const [finished, setFinished] = useState(false)
+  const [restoredDraft, setRestoredDraft] = useState<DragDraft | null>(null)
+
+  const clearDraft = () => {
+    try {
+      localStorage.removeItem(storageKey)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const persistDraft = (draft: DragDraft) => {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(draft))
+    } catch {
+      /* ignore */
+    }
+  }
 
   const load = () => {
     setLoading(true)
@@ -52,6 +80,34 @@ export function Tab3DragDrop({
       .then((res) => {
         setQuestions(res.questions)
         setEmpty(res.empty)
+        setSkipped(res.skipped)
+        if (res.empty || res.questions.length === 0) {
+          clearDraft()
+          setRestoredDraft(null)
+          setIndex(0)
+        } else {
+          try {
+            const raw = localStorage.getItem(storageKey)
+            if (raw) {
+              const draft = JSON.parse(raw) as DragDraft
+              const i = res.questions.findIndex((q) => q.knowledgePointId === draft.kpId)
+              if (i >= 0) {
+                setIndex(i)
+                setRestoredDraft(draft)
+                toast.info(`Tiếp tục kéo thả từ câu ${i + 1}/${res.questions.length}`)
+              } else {
+                setIndex(0)
+                setRestoredDraft(null)
+              }
+            } else {
+              setIndex(0)
+              setRestoredDraft(null)
+            }
+          } catch {
+            setIndex(0)
+            setRestoredDraft(null)
+          }
+        }
         setLoading(false)
       })
       .catch(() => {
@@ -95,7 +151,9 @@ export function Tab3DragDrop({
     return (
       <div className="rounded-xl border border-border bg-card p-6 text-center">
         <p className="font-heading font-semibold text-foreground text-balance">
-          Xuất sắc! Bạn đã nắm vững tất cả kiến thức. Tiến thẳng đến bài kiểm tra.
+          {skipped
+            ? "Xuất sắc! Bạn đã nắm vững tất cả kiến thức. Tiến thẳng đến bài kiểm tra."
+            : "Bạn đã hoàn thành kéo thả. Tiếp tục sang bước Kiểm tra."}
         </p>
         <p className="mt-2 text-sm text-muted-foreground">Chuyển sang bước Kiểm tra trong {countdown} giây...</p>
         <Button className="mt-4 min-h-11 w-full" onClick={onComplete}>
@@ -118,6 +176,9 @@ export function Tab3DragDrop({
   }
 
   const question = questions[index]
+  if (!question) {
+    return <p className="py-10 text-center text-sm text-muted-foreground">Đang tải câu hỏi...</p>
+  }
   const isLast = index === questions.length - 1
 
   return (
@@ -128,11 +189,16 @@ export function Tab3DragDrop({
       <DragDropCard
         key={question.id}
         question={question}
+        restored={restoredDraft?.kpId === question.knowledgePointId ? restoredDraft : null}
+        onDraftChange={(draft) => persistDraft({ ...draft, kpId: question.knowledgePointId })}
         onCorrect={() => {
           if (isLast) {
+            clearDraft()
             toast.success("Hoàn thành ôn tập kéo thả!")
             setFinished(true)
           } else {
+            clearDraft()
+            setRestoredDraft(null)
             setIndex((i) => i + 1)
           }
         }}
@@ -143,19 +209,22 @@ export function Tab3DragDrop({
 
 function DragDropCard({
   question,
+  restored,
+  onDraftChange,
   onCorrect,
 }: {
   question: DragQuestion
+  restored: DragDraft | null
+  onDraftChange: (draft: Omit<DragDraft, "kpId">) => void
   onCorrect: () => void
 }) {
   const terms = useMemo(
     () => [...question.terms].sort((a, b) => a.slotIndex - b.slotIndex),
     [question.terms],
   )
-  // placement: slotIndex -> chip text
-  const [placement, setPlacement] = useState<Record<number, string | null>>({})
-  const [results, setResults] = useState<Record<number, SlotResult>>({})
-  const [graded, setGraded] = useState(false)
+  const [placement, setPlacement] = useState<Record<number, string | null>>(restored?.placement ?? {})
+  const [results, setResults] = useState<Record<number, SlotResult>>(restored?.results ?? {})
+  const [graded, setGraded] = useState(restored?.graded ?? false)
   const [pending, startTransition] = useTransition()
 
   const [selectedChip, setSelectedChip] = useState<string | null>(null)
@@ -188,6 +257,7 @@ function DragDropCard({
         for (const r of res.results) map[r.slotIndex] = r
         setResults(map)
         setGraded(true)
+        onDraftChange({ placement: finalPlacement, results: map, graded: true })
         if (res.allCorrect) {
           toast.success("Chính xác!")
         } else {
@@ -208,6 +278,7 @@ function DragDropCard({
     next[slotIndex] = chip
     setPlacement(next)
     setSelectedChip(null)
+    onDraftChange({ placement: next, results, graded })
   }
 
   const handleDragEnd = (e: DragEndEvent) => {
@@ -224,7 +295,11 @@ function DragDropCard({
       return
     }
     if (placement[slotIndex]) {
-      setPlacement((prev) => ({ ...prev, [slotIndex]: null }))
+      setPlacement((prev) => {
+        const next = { ...prev, [slotIndex]: null }
+        onDraftChange({ placement: next, results, graded })
+        return next
+      })
     }
   }
 
@@ -235,9 +310,13 @@ function DragDropCard({
     }
     setPlacement(next)
     setSelectedChip(null)
-    if (!Object.values(results).some((r) => r?.isCorrect)) {
+    const keepResults = Object.values(results).some((r) => r?.isCorrect)
+    if (!keepResults) {
       setGraded(false)
       setResults({})
+      onDraftChange({ placement: next, results: {}, graded: false })
+    } else {
+      onDraftChange({ placement: next, results, graded })
     }
   }
 
@@ -247,6 +326,7 @@ function DragDropCard({
       for (const t of terms) {
         if (!results[t.slotIndex]?.isCorrect) next[t.slotIndex] = null
       }
+      onDraftChange({ placement: next, results: {}, graded: false })
       return next
     })
     setGraded(false)

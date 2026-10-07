@@ -90,7 +90,47 @@ async function resolveStudyStage(
   if (completed) return "done"
   const inProgress = after.find((a) => a.completedAt == null)
   if (inProgress) return "tab4"
-  return skippedTab2 ? "tab3" : "tab2"
+
+  const kpIds = await getKpIdsOfLesson(lessonId)
+  if (kpIds.length === 0) return skippedTab2 ? "tab3" : "tab2"
+
+  const [progressRows, kps] = await Promise.all([
+    db
+      .select({
+        kpId: studentProgress.knowledgePointId,
+        sa: studentProgress.selfAssessment,
+        fill: studentProgress.fillStatus,
+        drag: studentProgress.dragStatus,
+      })
+      .from(studentProgress)
+      .where(
+        and(eq(studentProgress.studentId, studentId), inArray(studentProgress.knowledgePointId, kpIds)),
+      ),
+    db
+      .select({ id: knowledgePoints.id, underlinedTerms: knowledgePoints.underlinedTerms })
+      .from(knowledgePoints)
+      .where(inArray(knowledgePoints.id, kpIds)),
+  ])
+
+  const hasTerms = new Set(
+    kps
+      .filter((k) => ((k.underlinedTerms as UnderlinedTerm[]) ?? []).length > 0)
+      .map((k) => k.id),
+  )
+
+  if (!skippedTab2) {
+    const fillLeft = progressRows.some(
+      (r) => r.sa === "known" && r.fill !== "correct" && hasTerms.has(r.kpId),
+    )
+    if (fillLeft) return "tab2"
+  }
+
+  const dragLeft = progressRows.some(
+    (r) =>
+      (r.sa === "unknown" || r.fill === "incorrect") && r.drag !== "correct" && hasTerms.has(r.kpId),
+  )
+  if (dragLeft) return "tab3"
+  return "tab4"
 }
 
 export async function getLessonForStudy(lessonId: string): Promise<{
@@ -345,6 +385,22 @@ export async function resetLessonProgress(lessonId: string): Promise<{ success: 
       ),
     )
 
+  if (kpIds.length > 0) {
+    await db
+      .update(studentProgress)
+      .set({
+        fillStatus: null,
+        dragStatus: null,
+        fillAttempts: 0,
+        dragAttempts: 0,
+        overallStatus: "not_started",
+        updatedAt: new Date(),
+      })
+      .where(
+        and(eq(studentProgress.studentId, student.id), inArray(studentProgress.knowledgePointId, kpIds)),
+      )
+  }
+
   revalidatePath(`/student/learn/${lessonId}`)
   return { success: true }
 }
@@ -355,14 +411,18 @@ export async function resetLessonProgress(lessonId: string): Promise<{ success: 
 export async function getTab2Questions(lessonId: string): Promise<{
   questions: (QuestionDto & { knowledgePointId: string; terms: UnderlinedTerm[] })[]
   empty: boolean
+  skipped: boolean
 }> {
   const student = await requireRole("student")
   await assertLessonAccess(student.id, lessonId)
   const kpIds = await getKpIdsOfLesson(lessonId)
-  if (kpIds.length === 0) return { questions: [], empty: true }
+  if (kpIds.length === 0) return { questions: [], empty: true, skipped: true }
 
   const knownRows = await db
-    .select({ kpId: studentProgress.knowledgePointId })
+    .select({
+      kpId: studentProgress.knowledgePointId,
+      fill: studentProgress.fillStatus,
+    })
     .from(studentProgress)
     .where(
       and(
@@ -371,8 +431,9 @@ export async function getTab2Questions(lessonId: string): Promise<{
         eq(studentProgress.selfAssessment, "known"),
       ),
     )
-  const knownKpIds = knownRows.map((r) => r.kpId)
-  if (knownKpIds.length === 0) return { questions: [], empty: true }
+  const skipped = knownRows.length === 0
+  const knownKpIds = knownRows.filter((r) => r.fill !== "correct").map((r) => r.kpId)
+  if (knownKpIds.length === 0) return { questions: [], empty: true, skipped }
 
   const kps = await db
     .select()
@@ -394,7 +455,7 @@ export async function getTab2Questions(lessonId: string): Promise<{
     })
     .filter((q) => q.terms.length > 0)
 
-  return { questions: built, empty: built.length === 0 }
+  return { questions: built, empty: built.length === 0, skipped: false }
 }
 
 /** Chấm 1 câu điền khuyết + persist fillStatus. */
@@ -474,17 +535,19 @@ export async function getTab3Questions(lessonId: string): Promise<{
     chips: string[]
   }[]
   empty: boolean
+  skipped: boolean
 }> {
   const student = await requireRole("student")
   await assertLessonAccess(student.id, lessonId)
   const kpIds = await getKpIdsOfLesson(lessonId)
-  if (kpIds.length === 0) return { questions: [], empty: true }
+  if (kpIds.length === 0) return { questions: [], empty: true, skipped: true }
 
   const rows = await db
     .select({
       kpId: studentProgress.knowledgePointId,
       sa: studentProgress.selfAssessment,
       fill: studentProgress.fillStatus,
+      drag: studentProgress.dragStatus,
     })
     .from(studentProgress)
     .where(
@@ -493,10 +556,9 @@ export async function getTab3Questions(lessonId: string): Promise<{
         inArray(studentProgress.knowledgePointId, kpIds),
       ),
     )
-  const targetKpIds = rows
-    .filter((r) => r.sa === "unknown" || r.fill === "incorrect")
-    .map((r) => r.kpId)
-  if (targetKpIds.length === 0) return { questions: [], empty: true }
+  const eligible = rows.filter((r) => r.sa === "unknown" || r.fill === "incorrect")
+  const targetKpIds = eligible.filter((r) => r.drag !== "correct").map((r) => r.kpId)
+  if (targetKpIds.length === 0) return { questions: [], empty: true, skipped: eligible.length === 0 }
 
   const kps = await db
     .select()
@@ -526,7 +588,7 @@ export async function getTab3Questions(lessonId: string): Promise<{
     })
     .filter((q) => q.terms.length > 0)
 
-  return { questions: built, empty: built.length === 0 }
+  return { questions: built, empty: built.length === 0, skipped: false }
 }
 
 /** Chấm 1 câu kéo thả + persist dragStatus. */
