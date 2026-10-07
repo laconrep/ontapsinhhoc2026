@@ -23,6 +23,12 @@ export function StudentShell({
 
   return (
     <div className="min-h-svh bg-background">
+      <a
+        href="#noi-dung"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-2 focus:z-50 focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:text-primary-foreground"
+      >
+        Bỏ qua tới nội dung
+      </a>
       <header className="sticky top-0 z-30 border-b border-border bg-card">
         <div className="mx-auto flex max-w-md items-center justify-between px-4 py-3 md:max-w-3xl lg:max-w-5xl">
           <div className="flex items-center gap-2">
@@ -42,7 +48,7 @@ export function StudentShell({
             <StudentNav variant="sidebar" />
           </div>
         </aside>
-        <main className="min-w-0 flex-1">{children}</main>
+        <main id="noi-dung" className="min-w-0 flex-1">{children}</main>
       </div>
 
       <div className="lg:hidden">

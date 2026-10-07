@@ -1,4 +1,5 @@
 import type { StudentAssignmentStatus } from "@/lib/assignment-status"
+import { formatDateTime } from "@/lib/format-date"
 
 export const STATUS_LABEL: Record<StudentAssignmentStatus, string> = {
   not_started: "Chưa làm",
@@ -17,8 +18,5 @@ export function atRiskRowClass(atRisk?: boolean): string {
 }
 
 export function formatActivityAt(iso?: string | null): string {
-  if (!iso) return "—"
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return "—"
-  return d.toLocaleString("vi-VN")
+  return formatDateTime(iso)
 }

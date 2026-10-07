@@ -31,6 +31,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { EmptyState } from "@/components/shared/empty-state"
+import { formatDateTime } from "@/lib/format-date"
 import { BookOpen, MoreHorizontal, Plus } from "lucide-react"
 
 type AssignableLesson = { id: string; title: string; chapterTitle: string }
@@ -49,7 +50,7 @@ function dueBadge(dueAt: string | null): { label: string; className: string } | 
   if (Number.isNaN(due.getTime())) return null
   const now = Date.now()
   const ms = due.getTime() - now
-  const label = due.toLocaleString("vi-VN")
+  const label = formatDateTime(due)
   if (ms < 0) return { label, className: "bg-destructive/15 text-destructive" }
   if (ms < 3 * 24 * 60 * 60 * 1000) return { label, className: "bg-amber-500/15 text-amber-700 dark:text-amber-400" }
   return { label, className: "" }

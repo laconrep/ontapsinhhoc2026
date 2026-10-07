@@ -14,6 +14,11 @@ export const auth = betterAuth({
     enabled: true,
     autoSignIn: true,
     minPasswordLength: 6,
+    sendResetPassword: async () => {
+      throw new Error(
+        "Chưa cấu hình gửi email. Liên hệ quản trị viên để đặt lại mật khẩu.",
+      )
+    },
   },
   user: {
     additionalFields: {

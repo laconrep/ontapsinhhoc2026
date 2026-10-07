@@ -2,7 +2,7 @@
 
 Muc tieu: app trong chuyen nghiep, dong nhat, de dung tren dien thoai 360px truoc, roi moi toi may tinh. Hoc sinh nhin la biet minh dang o buoc nao, bam trung nut, doc duoc chu, lam bai khong mat du lieu. Giao vien thao tac xoa/sua co xac nhan dep, bang khong tran, header khong tu bien mat. Dark mode dung mau thuong hieu. Popup mo phien trinh chieu khong de chu/khung nhay ra ngoai.
 
-Trang thai: **phien 4 xong**. Day la nguon su that cho 6 phien. Phien sau CHI doc file nay + dung cac file duoc liet ke trong phien do. KHONG doc lai toan repo.
+Trang thai: **phien 6 xong**. Day la nguon su that cho 6 phien. Phien sau CHI doc file nay + dung cac file duoc liet ke trong phien do. KHONG doc lai toan repo.
 
 Nguon: ra soat code that (repo `ontapsinhhoc2026`). Moi diem moc ben duoi da doi chieu code **sau** cac commit live (`5097e11` va truoc do). Moi phien phai tu kiem tra bang mat tren man 360px va man desktop.
 
@@ -404,9 +404,25 @@ Luong tai khoan day du; khong con man hinh trang; app cai duoc len dien thoai; b
 ### Bao cao phien 6 (dien sau khi code)
 
 - Da lam:
-- Loi tsc da sua / con lai:
+  - Auth: hien/an mat khau, "Quen mat khau?", loi ngay duoi o (`aria-invalid`/`aria-describedby`), nut dang gui; dang ky min 8 ky tu + goi y do manh.
+  - Reset: `/forgot-password` + `/reset-password` qua better-auth `requestPasswordReset`/`resetPassword`. Bang `verification` da co, khong doi schema. `sendResetPassword` chua SMTP — bao loi can cau hinh email (dung lai, khong them env).
+  - Onboarding: khong hoi lai vai tro da chon luc dang ky; khong co co che duyet GV nen khong them chu.
+  - Trang he thong: `loading` (root/HS/GV + PageSkeleton), `not-found`, `error` (tieng Viet, Ve trang chu / Thu lai).
+  - StudentShell: "Bo qua toi noi dung". Nut icon da co `aria-label` (theme-toggle, class-detail, session-control).
+  - Footer: lien he + Dieu khoan + Chinh sach (`/terms`, `/privacy` ban nhap can duyet).
+  - PWA: `app/manifest.ts` + `public/icon-192.png` / `icon-512.png`.
+  - `lib/format-date.ts` `Asia/Ho_Chi_Minh`; thay `toLocaleString("vi-VN")`; nhan "Quá hạn" da thong nhat.
+  - Bo `typescript.ignoreBuildErrors`; gop `serverActions` vao `experimental` (Next 16). Giu `allowedDevOrigins` / monkeycode-ai.live.
+  - Chuyen `*.md` ghi chu + `Ke-hoach-sua-loi-hien-thi-cau-hoi.docx` vao `docs/`. Giu `suaui.md` va `BAI 1 - GENE…docx` o goc.
+  - `question-stem.tsx`: HTML **chua** lam sach luc luu; chi sanitize luc render. Khong doi pipeline import.
+- Loi tsc da sua / con lai: `npx tsc --noEmit` sach. Khong sua logic. `pnpm lint` khong chay (thieu eslint, khong them thu vien). `pnpm` corepack loi — dung `npx tsc`.
 - File da sua/tao:
+  - Tao: `components/shared/page-skeleton.tsx`, `lib/format-date.ts`, `app/{loading,not-found,error,manifest}.ts(x)`, `app/{student,teacher}/loading.tsx`, `app/{forgot-password,reset-password,terms,privacy}/page.tsx`, `components/auth/{forgot-password-form,reset-password-form}.tsx`, `public/icon-192.png`, `public/icon-512.png`, `docs/`
+  - Sua: `components/auth/{auth-form,onboarding-form}.tsx`, `lib/auth.ts`, `components/landing/site-footer.tsx`, `components/student/{student-shell,assigned-work}.tsx`, `components/teacher/class-assignments.tsx`, `lib/class-stats-ui.ts`, `next.config.mjs`, `suaui.md`
 - Viec chua lam:
+  - SMTP/env gui mail reset (can nguoi dung cau hinh).
+  - Sanitize HTML luc luu import (chi sanitize luc render).
+  - `pnpm lint` (thieu eslint).
 - Commit:
 
 ---
@@ -466,13 +482,13 @@ Mau cap nhat trang thai (copy vao bao cao):
 
 ## Trang thai
 
-- Phien hien tai: 3
+- Phien hien tai: 6
 - Phien 1: xong
 - Phien 2: xong
-- Phien 3: chua
-- Phien 4: chua
-- Phien 5: chua (gom popup mo phien)
-- Phien 6: chua
+- Phien 3: xong
+- Phien 4: xong
+- Phien 5: xong
+- Phien 6: xong
 
 Diem moc sau phien 1 (dien sau):
 

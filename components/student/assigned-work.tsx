@@ -3,6 +3,7 @@ import { ClipboardList } from "lucide-react"
 import type { AssignedLessonDto } from "@/types"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { formatDueAt as formatDueAtTz } from "@/lib/format-date"
 
 const STATUS_LABEL: Record<AssignedLessonDto["studentStatus"], string> = {
   not_started: "Chưa làm",
@@ -36,10 +37,7 @@ export function assignmentStatusMeta(status: AssignedLessonDto["studentStatus"])
 }
 
 export function formatDueAt(dueAt: string | null): string | null {
-  if (!dueAt) return null
-  const d = new Date(dueAt)
-  if (Number.isNaN(d.getTime())) return null
-  return d.toLocaleString("vi-VN")
+  return formatDueAtTz(dueAt)
 }
 
 function sortNeedWork(a: AssignedLessonDto, b: AssignedLessonDto) {
