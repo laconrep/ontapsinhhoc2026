@@ -70,6 +70,12 @@ interface RawMarker {
   synonyms?: string[]
 }
 
+function peelBlankText(raw: string): { core: string; prefix: string; suffix: string } {
+  const m = raw.match(/^([\s.,;:!?…]*)(.*?)([\s.,;:!?…]*)$/s)
+  if (!m) return { core: raw, prefix: "", suffix: "" }
+  return { core: m[2], prefix: m[1], suffix: m[3] }
+}
+
 /**
  * Word/mammoth hay ra `"__từ"__` thay vì `__"từ"__`.
  * Cú pháp đúng: __từ__ | "từ" | __"từ"__.
@@ -148,9 +154,17 @@ export function extractBlanks(raw: string): {
   const placed: { text: string; allowSwap: boolean; cleanStart: number; synonyms?: string[] }[] = []
   for (const mk of markers) {
     content += raw.slice(cursor, mk.start)
+    const peeled = peelBlankText(mk.text)
+    if (!peeled.core) {
+      content += mk.text
+      cursor = mk.end
+      continue
+    }
+    content += peeled.prefix
     const cleanStart = content.length
-    content += mk.text
-    placed.push({ text: mk.text, allowSwap: mk.allowSwap, cleanStart, synonyms: mk.synonyms })
+    content += peeled.core
+    content += peeled.suffix
+    placed.push({ text: peeled.core, allowSwap: mk.allowSwap, cleanStart, synonyms: mk.synonyms })
     cursor = mk.end
   }
   content += raw.slice(cursor)
@@ -592,9 +606,33 @@ export function parseTextContent(text: string): ParseResult {
 
 // ============ Parser HTML (từ mammoth .docx) ============
 
-/** Gộp các thẻ <u> liền kề (FIX B-01) */
+/** Gộp các thẻ <u> liền kề (FIX B-01). Không gộp khi một phía chỉ là dấu câu. */
 export function normalizeHtml(html: string): string {
-  return html.replace(/<\/u>(\s*)<u>/gi, "$1")
+  const punctOnly = /^[\s.,;:!?…]+$/
+  return html.replace(/(?:<u>[\s\S]*?<\/u>\s*)+/gi, (seq) => {
+    const parts: { inner: string; gap: string }[] = []
+    const re = /<u>([\s\S]*?)<\/u>(\s*)/gi
+    let m: RegExpExecArray | null
+    while ((m = re.exec(seq)) !== null) parts.push({ inner: m[1], gap: m[2] })
+    const out: string[] = []
+    let acc: string | null = null
+    let pendingGap = ""
+    for (const p of parts) {
+      if (punctOnly.test(p.inner)) {
+        if (acc != null) {
+          out.push(`<u>${acc}</u>${pendingGap}`)
+          acc = null
+        }
+        out.push(`<u>${p.inner}</u>${p.gap}`)
+        pendingGap = ""
+      } else {
+        acc = acc == null ? p.inner : acc + pendingGap + p.inner
+        pendingGap = p.gap
+      }
+    }
+    if (acc != null) out.push(`<u>${acc}</u>${pendingGap}`)
+    return out.join("")
+  })
 }
 
 function decodeEntities(s: string): string {

@@ -18,20 +18,49 @@ type FillQuestion = {
 
 type SlotResult = { slotIndex: number; isCorrect: boolean; correctAnswer: string }
 
+type FillDraft = {
+  kpId: string
+  answers: Record<number, string>
+  results: Record<number, SlotResult>
+  graded: boolean
+  wrongTries: number
+}
+
 export function Tab2FillIn({
   lessonId,
+  userId,
   onComplete,
 }: {
   lessonId: string
+  userId: string
   onComplete: () => void
 }) {
+  const storageKey = `edusync:tab2:${userId}:${lessonId}`
   const [loading, setLoading] = useState(true)
   const [questions, setQuestions] = useState<FillQuestion[]>([])
   const [index, setIndex] = useState(0)
   const [countdown, setCountdown] = useState(3)
   const [empty, setEmpty] = useState(false)
+  const [skipped, setSkipped] = useState(false)
   const [error, setError] = useState(false)
   const [finished, setFinished] = useState(false)
+  const [restoredDraft, setRestoredDraft] = useState<FillDraft | null>(null)
+
+  const clearDraft = () => {
+    try {
+      localStorage.removeItem(storageKey)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const persistDraft = (draft: FillDraft) => {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(draft))
+    } catch {
+      /* ignore */
+    }
+  }
 
   const load = () => {
     setLoading(true)
@@ -40,6 +69,34 @@ export function Tab2FillIn({
       .then((res) => {
         setQuestions(res.questions)
         setEmpty(res.empty)
+        setSkipped(res.skipped)
+        if (res.empty || res.questions.length === 0) {
+          clearDraft()
+          setRestoredDraft(null)
+          setIndex(0)
+        } else {
+          try {
+            const raw = localStorage.getItem(storageKey)
+            if (raw) {
+              const draft = JSON.parse(raw) as FillDraft
+              const i = res.questions.findIndex((q) => q.knowledgePointId === draft.kpId)
+              if (i >= 0) {
+                setIndex(i)
+                setRestoredDraft(draft)
+                toast.info(`Tiếp tục điền khuyết từ câu ${i + 1}/${res.questions.length}`)
+              } else {
+                setIndex(0)
+                setRestoredDraft(null)
+              }
+            } else {
+              setIndex(0)
+              setRestoredDraft(null)
+            }
+          } catch {
+            setIndex(0)
+            setRestoredDraft(null)
+          }
+        }
         setLoading(false)
       })
       .catch(() => {
@@ -83,7 +140,9 @@ export function Tab2FillIn({
     return (
       <div className="rounded-xl border border-border bg-card p-6 text-center">
         <p className="font-heading font-semibold text-foreground text-balance">
-          Bạn chưa tự tin với kiến thức nào. Bước Kéo thả sẽ giúp bạn ôn tập toàn bộ.
+          {skipped
+            ? "Bạn chưa tự tin với kiến thức nào. Bước Kéo thả sẽ giúp bạn ôn tập toàn bộ."
+            : "Bạn đã hoàn thành điền khuyết. Tiếp tục sang bước Kéo thả."}
         </p>
         <p className="mt-2 text-sm text-muted-foreground">Chuyển sang bước Kéo thả trong {countdown} giây...</p>
         <Button className="mt-4 min-h-11 w-full" onClick={onComplete}>
@@ -106,6 +165,9 @@ export function Tab2FillIn({
   }
 
   const question = questions[index]
+  if (!question) {
+    return <p className="py-10 text-center text-sm text-muted-foreground">Đang tải câu hỏi...</p>
+  }
   const isLast = index === questions.length - 1
 
   return (
@@ -116,11 +178,16 @@ export function Tab2FillIn({
       <FillInCard
         key={question.id}
         question={question}
+        restored={restoredDraft?.kpId === question.knowledgePointId ? restoredDraft : null}
+        onDraftChange={(draft) => persistDraft({ ...draft, kpId: question.knowledgePointId })}
         onCorrect={() => {
           if (isLast) {
+            clearDraft()
             toast.success("Hoàn thành điền khuyết!")
             setFinished(true)
           } else {
+            clearDraft()
+            setRestoredDraft(null)
             setIndex((i) => i + 1)
           }
         }}
@@ -131,15 +198,19 @@ export function Tab2FillIn({
 
 function FillInCard({
   question,
+  restored,
+  onDraftChange,
   onCorrect,
 }: {
   question: FillQuestion
+  restored: FillDraft | null
+  onDraftChange: (draft: Omit<FillDraft, "kpId">) => void
   onCorrect: () => void
 }) {
-  const [answers, setAnswers] = useState<Record<number, string>>({})
-  const [results, setResults] = useState<Record<number, SlotResult>>({})
-  const [graded, setGraded] = useState(false)
-  const [wrongTries, setWrongTries] = useState(0)
+  const [answers, setAnswers] = useState<Record<number, string>>(restored?.answers ?? {})
+  const [results, setResults] = useState<Record<number, SlotResult>>(restored?.results ?? {})
+  const [graded, setGraded] = useState(restored?.graded ?? false)
+  const [wrongTries, setWrongTries] = useState(restored?.wrongTries ?? 0)
   const [pending, startTransition] = useTransition()
   const inputsRef = useRef<Record<number, HTMLInputElement | null>>({})
 
@@ -151,7 +222,11 @@ function FillInCard({
   const lockedCorrect = (slotIndex: number) => graded && results[slotIndex]?.isCorrect
 
   const setAnswer = (slotIndex: number, value: string) => {
-    setAnswers((prev) => ({ ...prev, [slotIndex]: value }))
+    setAnswers((prev) => {
+      const next = { ...prev, [slotIndex]: value }
+      onDraftChange({ answers: next, results, graded, wrongTries })
+      return next
+    })
   }
 
   const allFilled = terms.every((t) => (answers[t.slotIndex] ?? "").trim().length > 0)
@@ -164,11 +239,12 @@ function FillInCard({
         for (const r of res.results) map[r.slotIndex] = r
         setResults(map)
         setGraded(true)
+        const nextTries = res.allCorrect ? 0 : wrongTries + 1
+        setWrongTries(nextTries)
+        onDraftChange({ answers, results: map, graded: true, wrongTries: nextTries })
         if (res.allCorrect) {
-          setWrongTries(0)
           toast.success("Chính xác!")
         } else {
-          setWrongTries((n) => n + 1)
           toast.error("Có ô chưa đúng, thử lại nhé")
         }
       } catch (err) {
@@ -178,12 +254,12 @@ function FillInCard({
   }
 
   const handleRetry = () => {
-    // reset chỉ ô sai; ô đúng giữ nguyên (locked)
     setAnswers((prev) => {
       const next = { ...prev }
       for (const t of terms) {
         if (!results[t.slotIndex]?.isCorrect) next[t.slotIndex] = ""
       }
+      onDraftChange({ answers: next, results: {}, graded: false, wrongTries })
       return next
     })
     setGraded(false)

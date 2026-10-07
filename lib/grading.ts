@@ -11,9 +11,12 @@ export type SelfAssessment = "known" | "unknown" | null
 export type FillDragStatus = "correct" | "incorrect" | null
 export type OverallStatus = "not_started" | "known" | "unknown" | "mastered"
 
-/** Chuẩn hoá đáp án: NFC + trim + lowercase (dùng cho FILL/DRAG/SA). */
+/** Chuẩn hoá đáp án: NFC + trim + lowercase, bỏ dấu câu đầu/cuối (không đụng dấu nháy 5'/3'). */
 export function normalizeAnswer(input: string): string {
-  return (input ?? "").normalize("NFC").trim().toLowerCase()
+  return (input ?? "")
+    .normalize("NFC")
+    .replace(/^[\s.,;:!?…]+|[\s.,;:!?…]+$/g, "")
+    .toLowerCase()
 }
 
 /**
