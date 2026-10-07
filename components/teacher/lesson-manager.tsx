@@ -38,6 +38,8 @@ import {
   updateLesson,
   deleteLesson,
 } from "@/app/actions/content"
+import { ConfirmDialog } from "@/components/shared/confirm-dialog"
+import { EmptyState } from "@/components/shared/empty-state"
 import type { ChapterDto } from "@/types"
 
 const STATUS_LABEL: Record<string, string> = {
@@ -71,6 +73,9 @@ export function LessonManager({ initialChapters }: { initialChapters: ChapterDto
     id?: string
   } | null>(null)
   const [lessonTitle, setLessonTitle] = useState("")
+  const [confirmState, setConfirmState] = useState<
+    { kind: "chapter" | "lesson"; id: string } | null
+  >(null)
 
   async function refresh() {
     const { getChaptersWithLessons } = await import("@/app/actions/content")
@@ -119,24 +124,26 @@ export function LessonManager({ initialChapters }: { initialChapters: ChapterDto
   }
 
   function removeChapter(id: string) {
-    if (!confirm("Xoá chương này và toàn bộ bài giảng bên trong?")) return
-    startTransition(async () => {
-      try {
-        await deleteChapter(id)
-        toast.success("Đã xoá chương")
-        await refresh()
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Có lỗi xảy ra")
-      }
-    })
+    setConfirmState({ kind: "chapter", id })
   }
 
   function removeLesson(id: string) {
-    if (!confirm("Xoá bài giảng này?")) return
+    setConfirmState({ kind: "lesson", id })
+  }
+
+  function runConfirmedAction() {
+    if (!confirmState) return
+    const { kind, id } = confirmState
+    setConfirmState(null)
     startTransition(async () => {
       try {
-        await deleteLesson(id)
-        toast.success("Đã xoá bài giảng")
+        if (kind === "chapter") {
+          await deleteChapter(id)
+          toast.success("Đã xoá chương")
+        } else {
+          await deleteLesson(id)
+          toast.success("Đã xoá bài giảng")
+        }
         await refresh()
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Có lỗi xảy ra")
@@ -169,15 +176,12 @@ export function LessonManager({ initialChapters }: { initialChapters: ChapterDto
       </div>
 
       {chapters.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-16 text-center">
-          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-secondary">
-            <BookOpen className="h-6 w-6 text-primary" />
-          </span>
-          <p className="font-medium text-foreground">Chưa có chương nào</p>
-          <p className="max-w-sm text-sm text-muted-foreground">
-            Tạo chương đầu tiên để bắt đầu thêm bài giảng và điểm kiến thức.
-          </p>
-        </div>
+        <EmptyState
+          className="rounded-lg border border-dashed"
+          icon={<BookOpen className="h-6 w-6" aria-hidden="true" />}
+          title="Chưa có chương nào"
+          description="Tạo chương đầu tiên để bắt đầu thêm bài giảng và điểm kiến thức."
+        />
       ) : (
         <div className="space-y-3">
           {chapters.map((chapter) => (
@@ -236,9 +240,11 @@ export function LessonManager({ initialChapters }: { initialChapters: ChapterDto
               {open[chapter.id] && (
                 <div className="border-t">
                   {chapter.lessons.length === 0 ? (
-                    <p className="px-6 py-4 text-sm text-muted-foreground">
-                      Chưa có bài giảng. Nhấn &quot;Bài giảng&quot; để thêm.
-                    </p>
+                    <EmptyState
+                      className="px-6 py-6"
+                      title="Chưa có bài giảng"
+                      description='Nhấn "Bài giảng" để thêm.'
+                    />
                   ) : (
                     <ul className="divide-y">
                       {chapter.lessons.map((lesson) => (
@@ -365,6 +371,23 @@ export function LessonManager({ initialChapters }: { initialChapters: ChapterDto
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={confirmState !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmState(null)
+        }}
+        title={confirmState?.kind === "chapter" ? "Xoá chương?" : "Xoá bài giảng?"}
+        description={
+          confirmState?.kind === "chapter"
+            ? "Toàn bộ bài giảng bên trong chương này cũng sẽ bị xoá."
+            : "Bài giảng này sẽ bị xoá khỏi chương."
+        }
+        confirmLabel={confirmState?.kind === "chapter" ? "Xoá chương" : "Xoá bài giảng"}
+        destructive
+        pending={isPending}
+        onConfirm={runConfirmedAction}
+      />
     </div>
   )
 }

@@ -30,6 +30,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { EmptyState } from "@/components/shared/empty-state"
 import { BookOpen, MoreHorizontal, Plus } from "lucide-react"
 
 type AssignableLesson = { id: string; title: string; chapterTitle: string }
@@ -171,9 +172,12 @@ export function ClassAssignments({
       </div>
 
       {initial.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-          Chưa giao bài nào. Nhấn Giao bài giảng để chọn nhiều bài cùng lúc.
-        </p>
+        <EmptyState
+          className="rounded-xl border border-dashed border-border"
+          icon={<BookOpen className="h-6 w-6" aria-hidden="true" />}
+          title="Chưa giao bài nào"
+          description="Nhấn Giao bài giảng để chọn nhiều bài cùng lúc."
+        />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {initial.map((item) => {

@@ -359,9 +359,23 @@ Header khong bien mat, tab co aria va luu URL, bang khong buoc cuon ngang kho ch
 ### Bao cao phien 5 (dien sau khi code)
 
 - Da lam:
+  - Tao ConfirmDialog; thay 7 `confirm()` (lesson-detail x3, lesson-manager x2, question-editor x1, teacher-console x1). Nut xac nhan ghi ro hanh dong, variant destructive.
+  - teacher-shell: header sticky, logo EduSync, DropdownMenu (doi giao dien + dang xuat truc tiep, khong long SignOutButton). An header o live console / present TV.
+  - class-tabs: role tablist/tab, aria-selected, focus ring; luu `?tab=` tren URL; Suspense o page lop.
+  - class-stats-panel: cot ten HS sticky + bg theo at-risk; bo min-w 860px cung; EmptyState khi chua co HS.
+  - Dashboard: the so lieu la link, icon khong trung, nut "Tao lop moi", loi chao "Xin chao, {ten}".
+  - lesson-detail mobile: bo h svh + grid-rows-2; cuon binh thuong tren man nho.
+  - teacher-console cot phai ~200px, chu >= 12px, khong cat ten HS bang font 9–11px.
+  - EmptyState: lop chua HS, chua giao bai, chua cau hoi, chua chuong/bai giang, chua diem KT.
+  - Popup cau hinh phien: max-h/overflow, than cuon, footer wrap, nut "Bat dau chieu", 2 o mode min-w-0 + text-pretty; DialogHeader pr-10 dung chung.
 - File da sua/tao:
+  - Tao: `components/shared/confirm-dialog.tsx`, `components/shared/empty-state.tsx`
+  - Sua: `components/ui/dialog.tsx`, `components/teacher/{teacher-shell,class-tabs,class-stats-panel,lesson-detail,lesson-manager,question-editor,class-detail,class-assignments,session-control}.tsx`, `app/teacher/page.tsx`, `app/teacher/classes/[id]/page.tsx`, `components/live/teacher-console.tsx`
 - Viec chua lam / de phien sau:
-- Commit:
+  - `useTheme()` can ThemeProvider (phien 1); hien chi doi theme local neu provider chua boc.
+  - Man cho tren TV (ten lop + QR) nam o quiz-stage/present-view — khong sua (phien 5 chi cot phai teacher-console).
+  - `pnpm lint` that bai vi chua cai `eslint` (khong them thu vien).
+- Commit: `b00bbd9`
 
 ---
 

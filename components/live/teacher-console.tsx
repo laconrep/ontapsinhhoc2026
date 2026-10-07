@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { SignOutButton } from "@/components/auth/sign-out-button"
+import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { TeacherNav } from "@/components/teacher/teacher-nav"
 import { QuizStage } from "./quiz-stage"
 import { StageFrame } from "./stage-frame"
@@ -124,6 +125,7 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
   const [leftOpen, setLeftOpen] = useState(false)
   const [tvTourOpen, setTvTourOpen] = useState(false)
   const [tvOpen, setTvOpen] = useState(false)
+  const [endOpen, setEndOpen] = useState(false)
   const tvPopupRef = useRef<Window | null>(null)
   const leftOpenRef = useRef(false)
   const leftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -401,9 +403,7 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
           <Button
             size="sm"
             variant="destructive"
-            onClick={() => {
-              if (confirm("Kết thúc phiên trình chiếu?")) run(() => api.post(`/sessions/${sessionId}/live`, { action: "end" }))
-            }}
+            onClick={() => setEndOpen(true)}
             disabled={pending}
           >
             <Square className="h-4 w-4" />
@@ -412,10 +412,12 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
         </div>
       </div>
 
-      <aside className="flex w-36 shrink-0 flex-col border-l bg-card">
+      <aside className="flex w-[12.5rem] shrink-0 flex-col border-l bg-card">
         <div className="flex min-h-0 flex-[2] flex-col overflow-hidden">
           <div className="border-b px-2 py-1.5">
-            <p className="truncate text-xs font-medium text-muted-foreground">{view.className}</p>
+            <p className="truncate text-xs font-medium text-muted-foreground" title={view.className}>
+              {view.className}
+            </p>
             <p className="text-xs text-muted-foreground">
               {view.connected ? "Đã kết nối" : "Đang kết nối…"} · {view.joinedCount} HS
             </p>
@@ -499,6 +501,19 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
       </aside>
 
     </div>
+    <ConfirmDialog
+      open={endOpen}
+      onOpenChange={setEndOpen}
+      title="Kết thúc phiên trình chiếu?"
+      description="Học sinh sẽ không tiếp tục trả lời được sau khi kết thúc."
+      confirmLabel="Kết thúc phiên"
+      destructive
+      pending={pending}
+      onConfirm={() => {
+        setEndOpen(false)
+        run(() => api.post(`/sessions/${sessionId}/live`, { action: "end" }))
+      }}
+    />
     <TvStageTour
       open={tvTourOpen}
       onOpenChange={setTvTourOpen}

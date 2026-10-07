@@ -220,13 +220,14 @@ export function SessionControl({
       ) : null}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+        <DialogContent className="flex max-h-[min(90dvh,640px)] flex-col overflow-hidden sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Cấu hình phiên trình chiếu</DialogTitle>
             <DialogDescription>Chọn bài học và thời gian mặc định cho mỗi câu hỏi.</DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-col gap-4 py-2">
+          <div className="min-h-0 flex-1 overflow-y-auto py-2">
+          <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
               <Label>Bài học</Label>
               {lessons === null ? (
@@ -292,35 +293,40 @@ export function SessionControl({
                   type="button"
                   onClick={() => setMode("now")}
                   className={cn(
-                    "rounded-lg border p-3 text-left text-sm transition-colors",
+                    "min-w-0 rounded-lg border p-3 text-left text-sm transition-colors",
                     mode === "now" ? "border-primary bg-primary/5" : "border-border hover:bg-muted",
                   )}
                 >
                   <span className="block font-medium text-foreground">Bắt đầu ngay</span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">Mở màn hình điều khiển liền</span>
+                  <span className="mt-0.5 block text-pretty text-xs text-muted-foreground">Mở điều khiển liền</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setMode("draft")}
                   className={cn(
-                    "rounded-lg border p-3 text-left text-sm transition-colors",
+                    "min-w-0 rounded-lg border p-3 text-left text-sm transition-colors",
                     mode === "draft" ? "border-primary bg-primary/5" : "border-border hover:bg-muted",
                   )}
                 >
                   <span className="block font-medium text-foreground">Lưu nháp</span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">Để dạy vào hôm sau</span>
+                  <span className="mt-0.5 block text-pretty text-xs text-muted-foreground">Dạy hôm sau</span>
                 </button>
               </div>
             </div>
           </div>
+          </div>
 
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
             <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>
-              Hủy
+              Huỷ
             </Button>
-            <Button onClick={handleStart} disabled={pending || !lessonId || (lessons?.length ?? 0) === 0}>
+            <Button
+              onClick={handleStart}
+              disabled={pending || !lessonId || (lessons?.length ?? 0) === 0}
+              className="max-w-full whitespace-normal"
+            >
               <Presentation className="h-4 w-4" />
-              {pending ? "Đang xử lý…" : mode === "draft" ? "Lưu nháp" : "Bắt đầu trình chiếu"}
+              {pending ? "Đang xử lý…" : mode === "draft" ? "Lưu nháp" : "Bắt đầu chiếu"}
             </Button>
           </div>
         </DialogContent>

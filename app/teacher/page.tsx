@@ -5,7 +5,7 @@ import { getQuestionBank } from "@/app/actions/questions"
 import { getCurrentUser } from "@/lib/auth-helpers"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Users, BookOpen, Library, ArrowRight, Plus } from "lucide-react"
+import { Users, BookOpen, Library, GraduationCap, ArrowRight } from "lucide-react"
 import { StatCard } from "@/components/shared/stat-card"
 
 export const dynamic = "force-dynamic"
@@ -21,7 +21,7 @@ export default async function TeacherHomePage() {
   const totalLessons = chapters.reduce((sum, c) => sum + (c.lessons?.length ?? 0), 0)
 
   const stats = [
-    { label: "Lớp học", value: classes.length, icon: Users, href: "/teacher/classes" },
+    { label: "Lớp học", value: classes.length, icon: GraduationCap, href: "/teacher/classes" },
     { label: "Tổng học sinh", value: totalStudents, icon: Users, href: "/teacher/classes" },
     { label: "Bài giảng", value: totalLessons, icon: BookOpen, href: "/teacher/lessons" },
     { label: "Câu hỏi", value: questions.length, icon: Library, href: "/teacher/questions" },
@@ -32,15 +32,14 @@ export default async function TeacherHomePage() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="font-heading text-2xl font-bold text-foreground text-balance">
-            Chào mừng, thầy/cô {user?.name}
+            Xin chào, {user?.name}
           </h1>
           <p className="mt-1 text-muted-foreground text-pretty">
             Tổng quan hoạt động giảng dạy của bạn.
           </p>
         </div>
         <Button nativeButton={false} render={<Link href="/teacher/classes" />}>
-          <Plus className="h-4 w-4" />
-          Quản lý lớp học
+          Tạo lớp mới
         </Button>
       </div>
 
@@ -48,7 +47,11 @@ export default async function TeacherHomePage() {
         {stats.map((s) => {
           const Icon = s.icon
           return (
-            <Link key={s.label} href={s.href} className="block">
+            <Link
+              key={s.label}
+              href={s.href}
+              className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
               <StatCard
                 label={s.label}
                 value={s.value}

@@ -22,30 +22,31 @@ export function ConfirmDialog({
 }: {
   open: boolean
   title: string
-  description: string
+  description?: string
   confirmLabel: string
   destructive?: boolean
-  onConfirm: () => void
+  onConfirm: () => void | Promise<void>
   pending?: boolean
   onOpenChange: (open: boolean) => void
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader className="pr-10">
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
+          {description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
-            Quay lại
+            Huỷ
           </Button>
           <Button
             variant={destructive ? "destructive" : "default"}
-            onClick={onConfirm}
+            onClick={() => void onConfirm()}
             disabled={pending}
+            className="whitespace-normal"
           >
-            {pending ? "Đang xử lý..." : confirmLabel}
+            {pending ? "Đang xử lý…" : confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -56,6 +56,8 @@ import {
 import { deleteQuestion, moveQuestion, type LessonQuestionItem } from "@/app/actions/questions"
 import { QuestionFormDialog } from "@/components/teacher/question-form-dialog"
 import { KpContentEditor } from "@/components/teacher/kp-content-editor"
+import { ConfirmDialog } from "@/components/shared/confirm-dialog"
+import { EmptyState } from "@/components/shared/empty-state"
 import { QuestionStem } from "@/components/question/question-stem"
 import { extractBlanks } from "@/lib/worksheet-parser"
 import { renderMarkedContent } from "@/lib/kp-render"
@@ -368,6 +370,9 @@ export function LessonDetail({
     q?: QuestionDto
     kpId: string | null
   } | null>(null)
+  const [confirmState, setConfirmState] = useState<
+    { kind: "kp" | "unassign" | "question"; id: string } | null
+  >(null)
 
   const [overlayMounted, setOverlayMounted] = useState(false)
   useEffect(() => {
@@ -439,23 +444,32 @@ export function LessonDetail({
   }
 
   function removeKp(id: string) {
-    if (!confirm("Xoá điểm kiến thức này? Các câu hỏi trong đó sẽ trở về khung câu hỏi (không bị xoá).")) return
-    startTransition(async () => {
-      try {
-        await deleteKnowledgePoint(id)
-        toast.success("Đã xoá điểm kiến thức")
-        await refresh()
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Có lỗi xảy ra")
-      }
-    })
+    setConfirmState({ kind: "kp", id })
   }
 
   function removeQuestion(id: string) {
     const q = questions.find((item) => item.id === id)
     const assigned = Boolean(q?.knowledgePointId && kpIds.has(q.knowledgePointId))
-    if (assigned) {
-      if (!confirm("Bỏ gán câu hỏi này? Câu hỏi sẽ trở về khung Chưa gán.")) return
+    setConfirmState({ kind: assigned ? "unassign" : "question", id })
+  }
+
+  function runConfirmedAction() {
+    if (!confirmState) return
+    const { kind, id } = confirmState
+    setConfirmState(null)
+    if (kind === "kp") {
+      startTransition(async () => {
+        try {
+          await deleteKnowledgePoint(id)
+          toast.success("Đã xoá điểm kiến thức")
+          await refresh()
+        } catch (e) {
+          toast.error(e instanceof Error ? e.message : "Có lỗi xảy ra")
+        }
+      })
+      return
+    }
+    if (kind === "unassign") {
       const prev = questions
       setQuestions((qs) => qs.map((item) => (item.id === id ? { ...item, knowledgePointId: null } : item)))
       startTransition(async () => {
@@ -470,7 +484,6 @@ export function LessonDetail({
       })
       return
     }
-    if (!confirm("Xoá câu hỏi này?")) return
     startTransition(async () => {
       try {
         await deleteQuestion(id)
@@ -526,7 +539,7 @@ export function LessonDetail({
   const poolList = poolTab === "unassigned" ? unassigned : questions
 
   return (
-    <div className="flex h-[calc(100svh-5.5rem)] flex-col gap-4 overflow-hidden md:h-[calc(100svh-2.5rem)]">
+    <div className="flex flex-col gap-4 md:h-[calc(100svh-6.5rem)] md:overflow-hidden">
       <div className="shrink-0">
         <Button
           variant="ghost"
@@ -578,7 +591,7 @@ export function LessonDetail({
           setHoverKpId(null)
         }}
       >
-        <div className="grid min-h-0 flex-1 grid-rows-2 gap-4 md:grid-cols-2 md:grid-rows-1">
+        <div className="grid min-h-0 flex-1 gap-4 md:grid-cols-2 md:grid-rows-1">
           <section className="flex min-h-0 flex-col rounded-lg border bg-card">
             <div className="shrink-0 space-y-3 border-b p-4">
               <div className="flex items-center justify-between gap-2">
@@ -618,9 +631,15 @@ export function LessonDetail({
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
               <PoolDropzone isUnassignedTab={poolTab === "unassigned"}>
                 {poolList.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-muted-foreground">
-                    {poolTab === "unassigned" ? "Không còn câu chưa gán." : "Chưa có câu hỏi."}
-                  </p>
+                  <EmptyState
+                    icon={<FileText className="h-6 w-6" aria-hidden="true" />}
+                    title={poolTab === "unassigned" ? "Không còn câu chưa gán" : "Chưa có câu hỏi"}
+                    description={
+                      poolTab === "unassigned"
+                        ? "Mọi câu hỏi đã được gán vào điểm kiến thức."
+                        : "Thêm câu hỏi hoặc nạp từ file để bắt đầu."
+                    }
+                  />
                 ) : (
                   <ul className="space-y-2">
                     {poolList.map((q) => (
@@ -661,15 +680,12 @@ export function LessonDetail({
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
               {kps.length === 0 ? (
-                <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-16 text-center">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-secondary">
-                    <FileText className="h-6 w-6 text-primary" />
-                  </span>
-                  <p className="font-medium text-foreground">Chưa có điểm kiến thức</p>
-                  <p className="max-w-md text-sm text-muted-foreground">
-                    Thêm điểm kiến thức rồi kéo câu hỏi từ khung trái thả vào đây.
-                  </p>
-                </div>
+                <EmptyState
+                  className="rounded-lg border border-dashed"
+                  icon={<FileText className="h-6 w-6" aria-hidden="true" />}
+                  title="Chưa có điểm kiến thức"
+                  description="Thêm điểm kiến thức rồi kéo câu hỏi từ khung trái thả vào đây."
+                />
               ) : (
                 <KpPanelDroppable>
                   {kps.map((kp, idx) => {
@@ -758,6 +774,37 @@ export function LessonDetail({
         defaultKnowledgePointId={qDialog?.kpId ?? null}
         onClose={() => setQDialog(null)}
         onSaved={refresh}
+      />
+
+      <ConfirmDialog
+        open={confirmState !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmState(null)
+        }}
+        title={
+          confirmState?.kind === "kp"
+            ? "Xoá điểm kiến thức?"
+            : confirmState?.kind === "unassign"
+              ? "Bỏ gán câu hỏi?"
+              : "Xoá câu hỏi?"
+        }
+        description={
+          confirmState?.kind === "kp"
+            ? "Các câu hỏi trong đó sẽ trở về khung câu hỏi (không bị xoá)."
+            : confirmState?.kind === "unassign"
+              ? "Câu hỏi sẽ trở về khung Chưa gán."
+              : "Câu hỏi này sẽ bị xoá khỏi bài giảng."
+        }
+        confirmLabel={
+          confirmState?.kind === "kp"
+            ? "Xoá điểm kiến thức"
+            : confirmState?.kind === "unassign"
+              ? "Bỏ gán"
+              : "Xoá câu hỏi"
+        }
+        destructive
+        pending={isPending}
+        onConfirm={runConfirmedAction}
       />
     </div>
   )

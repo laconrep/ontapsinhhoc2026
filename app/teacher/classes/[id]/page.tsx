@@ -3,6 +3,7 @@ import { getClassStats } from "@/app/actions/class-stats"
 import { getActiveSessionForClass } from "@/app/actions/sessions"
 import { getDraftSessions } from "@/app/actions/live-quiz"
 import { getClassAssignments } from "@/app/actions/assignments"
+import { Suspense } from "react"
 import { ClassTabs } from "@/components/teacher/class-tabs"
 import { SessionControl } from "@/components/teacher/session-control"
 import { emptyClassStats } from "@/lib/class-stats-calc"
@@ -49,13 +50,15 @@ export default async function ClassDetailPage({
   }
 
   return (
-    <ClassTabs
-      cls={cls}
-      assignments={assignments}
-      stats={stats}
-      overviewExtra={
-        <SessionControl classId={cls.id} activeSession={activeSession} drafts={drafts} />
-      }
-    />
+    <Suspense fallback={<p className="text-sm text-muted-foreground">Đang tải lớp…</p>}>
+      <ClassTabs
+        cls={cls}
+        assignments={assignments}
+        stats={stats}
+        overviewExtra={
+          <SessionControl classId={cls.id} activeSession={activeSession} drafts={drafts} />
+        }
+      />
+    </Suspense>
   )
 }

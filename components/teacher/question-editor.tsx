@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge"
 import { getQuestionsByKp, deleteQuestion } from "@/app/actions/questions"
 import { QuestionStem } from "@/components/question/question-stem"
 import { QuestionFormDialog } from "@/components/teacher/question-form-dialog"
+import { ConfirmDialog } from "@/components/shared/confirm-dialog"
+import { EmptyState } from "@/components/shared/empty-state"
 import type { QuestionDto } from "@/types"
 
 type QType = "MC" | "TF" | "SA"
@@ -31,6 +33,7 @@ export function QuestionEditor({
   const [loading, setLoading] = useState(true)
   const [isPending, startTransition] = useTransition()
   const [dialog, setDialog] = useState<{ mode: "create" | "edit"; q?: QuestionDto } | null>(null)
+  const [removeId, setRemoveId] = useState<string | null>(null)
 
   async function load() {
     setLoading(true)
@@ -49,7 +52,13 @@ export function QuestionEditor({
   }, [knowledgePointId])
 
   function remove(id: string) {
-    if (!confirm("Xoá câu hỏi này?")) return
+    setRemoveId(id)
+  }
+
+  function runRemove() {
+    if (!removeId) return
+    const id = removeId
+    setRemoveId(null)
     startTransition(async () => {
       try {
         await deleteQuestion(id)
@@ -78,7 +87,10 @@ export function QuestionEditor({
           Đang tải...
         </div>
       ) : questions.length === 0 ? (
-        <p className="py-2 text-sm text-muted-foreground">Chưa có câu hỏi nào cho điểm kiến thức này.</p>
+        <EmptyState
+          title="Chưa có câu hỏi"
+          description="Thêm câu hỏi cho điểm kiến thức này."
+        />
       ) : (
         <ul className="space-y-2">
           {questions.map((q) => (
@@ -157,6 +169,19 @@ export function QuestionEditor({
           load()
           onChanged?.()
         }}
+      />
+
+      <ConfirmDialog
+        open={removeId !== null}
+        onOpenChange={(open) => {
+          if (!open) setRemoveId(null)
+        }}
+        title="Xoá câu hỏi?"
+        description="Câu hỏi này sẽ bị xoá khỏi điểm kiến thức."
+        confirmLabel="Xoá câu hỏi"
+        destructive
+        pending={isPending}
+        onConfirm={runRemove}
       />
     </div>
   )

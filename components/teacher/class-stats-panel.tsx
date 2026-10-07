@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import type { AssignmentStatRow, ClassOverviewStats, ClassStatsDto, StudentStatRow } from "@/types"
 import { cn } from "@/lib/utils"
 import { atRiskRowClass, formatActivityAt, studentStatusLabel } from "@/lib/class-stats-ui"
+import { EmptyState } from "@/components/shared/empty-state"
 import {
   AlertTriangle,
   ArrowDown,
@@ -141,7 +142,13 @@ function StudentTable({ students }: { students: StudentStatRow[] }) {
   }, [students, sortKey])
 
   if (students.length === 0) {
-    return <p className="py-6 text-center text-sm text-muted-foreground">Chưa có học sinh nào tham gia lớp này.</p>
+    return (
+      <EmptyState
+        icon={<Users className="h-6 w-6" aria-hidden="true" />}
+        title="Chưa có học sinh"
+        description="Chưa có học sinh nào tham gia lớp này."
+      />
+    )
   }
 
   return (
@@ -166,10 +173,10 @@ function StudentTable({ students }: { students: StudentStatRow[] }) {
           </button>
         ))}
       </div>
-      <table className="w-full min-w-[860px] border-collapse text-sm">
+      <table className="w-full min-w-[720px] border-collapse text-sm">
         <thead>
           <tr className="border-b border-border text-left text-xs text-muted-foreground">
-            <th className="pb-2 pr-3 font-medium">Học sinh</th>
+            <th className="sticky left-0 z-10 bg-card pb-2 pr-3 font-medium">Học sinh</th>
             <th className="pb-2 px-3 font-medium">Trạng thái</th>
             <th className="pb-2 px-3 font-medium">Tiến độ</th>
             <th className="pb-2 px-3 text-center font-medium">Quiz TB</th>
@@ -188,7 +195,12 @@ function StudentTable({ students }: { students: StudentStatRow[] }) {
               key={s.studentId}
               className={cn("border-b border-border/60 last:border-0", atRiskRowClass(s.atRisk))}
             >
-              <td className="py-3 pr-3 font-medium text-foreground">
+              <td
+                className={cn(
+                  "sticky left-0 z-10 py-3 pr-3 font-medium text-foreground",
+                  s.atRisk ? "bg-destructive/10" : "bg-card",
+                )}
+              >
                 <button type="button" onClick={() => setOpenId((id) => (id === s.studentId ? null : s.studentId))}>
                   {s.name}
                   {s.atRisk ? (
