@@ -423,7 +423,7 @@ Luong tai khoan day du; khong con man hinh trang; app cai duoc len dien thoai; b
   - SMTP/env gui mail reset (can nguoi dung cau hinh).
   - Sanitize HTML luc luu import (chi sanitize luc render).
   - `pnpm lint` (thieu eslint).
-- Commit:
+- Commit: `c9e5e63` `wip(ui): phien 6 - auth, trang he thong, PWA, chat luong`
 
 ---
 
