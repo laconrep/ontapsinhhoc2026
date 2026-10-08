@@ -71,7 +71,7 @@ interface RawMarker {
 }
 
 function peelBlankText(raw: string): { core: string; prefix: string; suffix: string } {
-  const m = raw.match(/^([\s.,;:!?…]*)(.*?)([\s.,;:!?…]*)$/s)
+  const m = raw.match(/^([\s.,;:!?…]*)([\s\S]*?)([\s.,;:!?…]*)$/)
   if (!m) return { core: raw, prefix: "", suffix: "" }
   return { core: m[2], prefix: m[1], suffix: m[3] }
 }
