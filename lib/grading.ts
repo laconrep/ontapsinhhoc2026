@@ -15,8 +15,45 @@ export type OverallStatus = "not_started" | "known" | "unknown" | "mastered"
 export function normalizeAnswer(input: string): string {
   return (input ?? "")
     .normalize("NFC")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/[\u00A0\u202F\u2007]/g, " ")
+    .replace(/[\u201C\u201D\u00AB\u00BB]/g, '"')
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^"(.+)"$/, "$1")
     .replace(/^[\s.,;:!?…]+|[\s.,;:!?…]+$/g, "")
+    .trim()
     .toLowerCase()
+}
+
+export type SlotAnswer = { slotIndex: number; value: string }
+
+export function toAnswerMap(answers: unknown): Record<number, string> {
+  const out: Record<number, string> = {}
+  if (answers == null) return out
+  if (Array.isArray(answers)) {
+    for (let i = 0; i < answers.length; i++) {
+      const item = answers[i]
+      if (typeof item === "string") {
+        out[i] = item
+        continue
+      }
+      if (item && typeof item === "object" && "slotIndex" in item) {
+        const rec = item as { slotIndex: unknown; value?: unknown }
+        const idx = Number(rec.slotIndex)
+        if (Number.isFinite(idx)) out[idx] = String(rec.value ?? "")
+      }
+    }
+    return out
+  }
+  if (typeof answers === "object") {
+    for (const [k, v] of Object.entries(answers as Record<string, unknown>)) {
+      const idx = Number(k)
+      if (!Number.isFinite(idx) || v == null) continue
+      out[idx] = String(v)
+    }
+  }
+  return out
 }
 
 /**
@@ -56,46 +93,41 @@ export function computeOverallStatus(args: {
  */
 export function gradeSlots(
   terms: UnderlinedTerm[],
-  answers: Record<number, string>,
+  answers: unknown,
 ): { results: { slotIndex: number; isCorrect: boolean; correctAnswer: string }[]; allCorrect: boolean } {
-  // gom slot theo group (slot không có swapGroupId → group riêng theo slotIndex)
+  const answerMap = toAnswerMap(answers)
   const groups = new Map<string, UnderlinedTerm[]>()
   for (const t of terms) {
-    const key = t.swapGroupId ? `g:${t.swapGroupId}` : `s:${t.slotIndex}`
+    const slotIndex = Number(t.slotIndex)
+    const key = t.swapGroupId ? `g:${t.swapGroupId}` : `s:${slotIndex}`
     const arr = groups.get(key) ?? []
-    arr.push(t)
+    arr.push({ ...t, slotIndex })
     groups.set(key, arr)
   }
 
   const resultMap = new Map<number, { slotIndex: number; isCorrect: boolean; correctAnswer: string }>()
 
-  /**
-   * Kiểm tra xem giá trị có được chấp nhận bởi term không.
-   * Xét text + extraAccepted + synonyms, không phân biệt hoa/thường/khoảng cách.
-   */
   const accepts = (term: UnderlinedTerm, value: string): boolean => {
     const norm = normalizeAnswer(value)
-    // Đáp án chính
     if (norm === normalizeAnswer(term.text)) return true
-    // Đáp án thay thế (extraAccepted)
     if ((term.extraAccepted ?? []).some((e) => normalizeAnswer(e) === norm)) return true
-    // Từ đồng nghĩa (synonyms)
     if ((term.synonyms ?? []).some((s) => normalizeAnswer(s) === norm)) return true
     return false
   }
 
+  const readAnswer = (slotIndex: number): string =>
+    answerMap[slotIndex] ?? answerMap[Number(slotIndex)] ?? ""
+
   for (const [, groupTerms] of groups) {
     const isMultiSlot = groupTerms.length > 1
     const allowSwap = groupTerms.some((t) => t.allowSwap)
-    const hasSwapGroup = groupTerms.some(t => t.swapGroupId)
+    const hasSwapGroup = groupTerms.some((t) => t.swapGroupId)
 
     if (isMultiSlot && (allowSwap || hasSwapGroup)) {
-      // Set-equality: đáp án HS phải khớp tập đáp án đúng (thứ tự tùy ý)
-      // Greedy matching: gán từng student answer đến 1 term đúng, không được dùng 2 lần
       const remaining = [...groupTerms]
-      let ok = groupTerms.length > 0 // ít nhất có 1 term
+      let ok = groupTerms.length > 0
       for (const t of groupTerms) {
-        const val = answers[t.slotIndex] ?? ""
+        const val = readAnswer(t.slotIndex)
         const idx = remaining.findIndex((rt) => accepts(rt, val))
         if (idx === -1) {
           ok = false
@@ -108,9 +140,8 @@ export function gradeSlots(
         resultMap.set(t.slotIndex, { slotIndex: t.slotIndex, isCorrect: ok, correctAnswer: t.text })
       }
     } else {
-      // Slot đơn: so từng slot riêng (không cần set-equality)
       for (const t of groupTerms) {
-        const ok = accepts(t, answers[t.slotIndex] ?? "")
+        const ok = accepts(t, readAnswer(t.slotIndex))
         resultMap.set(t.slotIndex, { slotIndex: t.slotIndex, isCorrect: ok, correctAnswer: t.text })
       }
     }
