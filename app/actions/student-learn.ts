@@ -25,6 +25,7 @@ import {
   seededRng,
   seededShuffle,
   type FillDragStatus,
+  type SlotAnswer,
 } from "@/lib/grading"
 import { selectQuizQuestions } from "@/lib/quiz-selection"
 import type { KnowledgePointDto, QuestionDto, UnderlinedTerm, QuizResultDto } from "@/types"
@@ -461,7 +462,7 @@ export async function getTab2Questions(lessonId: string): Promise<{
 /** Chấm 1 câu điền khuyết + persist fillStatus. */
 export async function submitTab2Question(
   kpId: string,
-  answers: Record<number, string>,
+  answers: SlotAnswer[] | Record<string, string>,
 ) {
   const student = await requireRole("student")
 
@@ -592,7 +593,10 @@ export async function getTab3Questions(lessonId: string): Promise<{
 }
 
 /** Chấm 1 câu kéo thả + persist dragStatus. */
-export async function submitTab3Question(kpId: string, answers: Record<number, string>) {
+export async function submitTab3Question(
+  kpId: string,
+  answers: SlotAnswer[] | Record<string, string>,
+) {
   const student = await requireRole("student")
 
   const [kp] = await db

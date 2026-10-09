@@ -234,9 +234,22 @@ function FillInCard({
   const handleSubmit = () => {
     startTransition(async () => {
       try {
-        const res = await submitTab2Question(question.knowledgePointId, answers)
+        const payload = terms.map((t) => ({
+          slotIndex: Number(t.slotIndex),
+          value: answers[t.slotIndex] ?? answers[Number(t.slotIndex)] ?? "",
+        }))
+        const res = await submitTab2Question(question.knowledgePointId, payload)
         const map: Record<number, SlotResult> = {}
-        for (const r of res.results) map[r.slotIndex] = r
+        for (const r of res.results) {
+          const slotIndex = Number(r.slotIndex)
+          map[slotIndex] = { ...r, slotIndex }
+        }
+        if (res.allCorrect) {
+          for (const t of terms) {
+            const slotIndex = Number(t.slotIndex)
+            map[slotIndex] = { slotIndex, isCorrect: true, correctAnswer: t.text }
+          }
+        }
         setResults(map)
         setGraded(true)
         const nextTries = res.allCorrect ? 0 : wrongTries + 1

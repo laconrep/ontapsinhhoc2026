@@ -248,13 +248,24 @@ function DragDropCard({
   const allFilled = terms.every((t) => placement[t.slotIndex])
 
   const grade = (finalPlacement: Record<number, string | null>) => {
-    const answers: Record<number, string> = {}
-    for (const t of terms) answers[t.slotIndex] = finalPlacement[t.slotIndex] ?? ""
+    const payload = terms.map((t) => ({
+      slotIndex: Number(t.slotIndex),
+      value: finalPlacement[t.slotIndex] ?? finalPlacement[Number(t.slotIndex)] ?? "",
+    }))
     startTransition(async () => {
       try {
-        const res = await submitTab3Question(question.knowledgePointId, answers)
+        const res = await submitTab3Question(question.knowledgePointId, payload)
         const map: Record<number, SlotResult> = {}
-        for (const r of res.results) map[r.slotIndex] = r
+        for (const r of res.results) {
+          const slotIndex = Number(r.slotIndex)
+          map[slotIndex] = { ...r, slotIndex }
+        }
+        if (res.allCorrect) {
+          for (const t of terms) {
+            const slotIndex = Number(t.slotIndex)
+            map[slotIndex] = { slotIndex, isCorrect: true, correctAnswer: t.text }
+          }
+        }
         setResults(map)
         setGraded(true)
         onDraftChange({ placement: finalPlacement, results: map, graded: true })
@@ -272,9 +283,6 @@ function DragDropCard({
   const placeChip = (slotIndex: number, chip: string) => {
     if (graded && results[slotIndex]?.isCorrect) return
     const next = { ...placement }
-    for (const k of Object.keys(next)) {
-      if (next[Number(k)] === chip) next[Number(k)] = null
-    }
     next[slotIndex] = chip
     setPlacement(next)
     setSelectedChip(null)
