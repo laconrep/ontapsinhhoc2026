@@ -17,18 +17,18 @@ import { Check, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { getTab3Questions, submitTab3Question } from "@/app/actions/student-learn"
-import { renderSlots } from "@/lib/slot-render"
-import type { UnderlinedTerm } from "@/types"
+import type { ClientSlotPart } from "@/lib/slot-render"
+
+type DragChip = { id: string; text: string }
 
 type DragQuestion = {
   id: string
   knowledgePointId: string
-  content: string
-  terms: UnderlinedTerm[]
-  chips: string[]
+  parts: ClientSlotPart[]
+  chips: DragChip[]
 }
 
-type SlotResult = { slotIndex: number; isCorrect: boolean; correctAnswer: string }
+type SlotResult = { slotIndex: number; isCorrect: boolean; hint?: string; correctAnswer?: string }
 
 type DragDraft = {
   kpId: string
@@ -92,8 +92,14 @@ export function Tab3DragDrop({
               const draft = JSON.parse(raw) as DragDraft
               const i = res.questions.findIndex((q) => q.knowledgePointId === draft.kpId)
               if (i >= 0) {
+                const q = res.questions[i]
+                const validIds = new Set(q.chips.map((c) => c.id))
+                const cleaned: Record<number, string | null> = {}
+                for (const [k, v] of Object.entries(draft.placement ?? {})) {
+                  cleaned[Number(k)] = typeof v === "string" && validIds.has(v) ? v : null
+                }
                 setIndex(i)
-                setRestoredDraft(draft)
+                setRestoredDraft({ ...draft, placement: cleaned })
                 toast.info(`Tiếp tục kéo thả từ câu ${i + 1}/${res.questions.length}`)
               } else {
                 setIndex(0)
@@ -207,6 +213,10 @@ export function Tab3DragDrop({
   )
 }
 
+function slotIndexes(parts: ClientSlotPart[]): number[] {
+  return parts.filter((p): p is Extract<ClientSlotPart, { type: "slot" }> => p.type === "slot").map((p) => p.slotIndex)
+}
+
 function DragDropCard({
   question,
   restored,
@@ -218,16 +228,13 @@ function DragDropCard({
   onDraftChange: (draft: Omit<DragDraft, "kpId">) => void
   onCorrect: () => void
 }) {
-  const terms = useMemo(
-    () => [...question.terms].sort((a, b) => a.slotIndex - b.slotIndex),
-    [question.terms],
-  )
+  const slots = useMemo(() => slotIndexes(question.parts), [question.parts])
+  const chipById = useMemo(() => new Map(question.chips.map((c) => [c.id, c])), [question.chips])
   const [placement, setPlacement] = useState<Record<number, string | null>>(restored?.placement ?? {})
   const [results, setResults] = useState<Record<number, SlotResult>>(restored?.results ?? {})
   const [graded, setGraded] = useState(restored?.graded ?? false)
   const [pending, startTransition] = useTransition()
-
-  const [selectedChip, setSelectedChip] = useState<string | null>(null)
+  const [selectedChipId, setSelectedChipId] = useState<string | null>(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -235,35 +242,26 @@ function DragDropCard({
     useSensor(KeyboardSensor),
   )
 
-  const usedChips = Object.values(placement).filter(Boolean) as string[]
-  const availableChips = useMemo(() => {
-    const remaining = [...question.chips]
-    for (const used of usedChips) {
-      const i = remaining.indexOf(used)
-      if (i !== -1) remaining.splice(i, 1)
-    }
-    return remaining
-  }, [question.chips, usedChips])
-
-  const allFilled = terms.every((t) => placement[t.slotIndex])
+  const usedChipIds = new Set(Object.values(placement).filter((id): id is string => Boolean(id)))
+  const availableChips = question.chips.filter((c) => !usedChipIds.has(c.id))
+  const allFilled = slots.every((s) => placement[s])
 
   const grade = (finalPlacement: Record<number, string | null>) => {
-    const payload = terms.map((t) => ({
-      slotIndex: Number(t.slotIndex),
-      value: finalPlacement[t.slotIndex] ?? finalPlacement[Number(t.slotIndex)] ?? "",
-    }))
+    const payload = slots.map((slotIndex) => {
+      const chipId = finalPlacement[slotIndex] ?? finalPlacement[Number(slotIndex)] ?? null
+      return { slotIndex, value: chipId ? (chipById.get(chipId)?.text ?? "") : "" }
+    })
     startTransition(async () => {
       try {
         const res = await submitTab3Question(question.knowledgePointId, payload)
         const map: Record<number, SlotResult> = {}
         for (const r of res.results) {
           const slotIndex = Number(r.slotIndex)
-          map[slotIndex] = { ...r, slotIndex }
-        }
-        if (res.allCorrect) {
-          for (const t of terms) {
-            const slotIndex = Number(t.slotIndex)
-            map[slotIndex] = { slotIndex, isCorrect: true, correctAnswer: t.text }
+          map[slotIndex] = {
+            slotIndex,
+            isCorrect: r.isCorrect,
+            hint: r.hint,
+            correctAnswer: r.correctAnswer,
           }
         }
         setResults(map)
@@ -280,26 +278,29 @@ function DragDropCard({
     })
   }
 
-  const placeChip = (slotIndex: number, chip: string) => {
+  const placeChip = (slotIndex: number, chipId: string) => {
     if (graded && results[slotIndex]?.isCorrect) return
     const next = { ...placement }
-    next[slotIndex] = chip
+    for (const s of slots) {
+      if (next[s] === chipId) next[s] = null
+    }
+    next[slotIndex] = chipId
     setPlacement(next)
-    setSelectedChip(null)
+    setSelectedChipId(null)
     onDraftChange({ placement: next, results, graded })
   }
 
   const handleDragEnd = (e: DragEndEvent) => {
-    const chip = e.active.data.current?.chip as string | undefined
+    const chipId = e.active.data.current?.chipId as string | undefined
     const overSlot = e.over?.data.current?.slotIndex as number | undefined
-    if (chip == null || overSlot == null) return
-    placeChip(overSlot, chip)
+    if (chipId == null || overSlot == null) return
+    placeChip(overSlot, chipId)
   }
 
   const handleSlotActivate = (slotIndex: number) => {
     if (graded && results[slotIndex]?.isCorrect) return
-    if (selectedChip) {
-      placeChip(slotIndex, selectedChip)
+    if (selectedChipId) {
+      placeChip(slotIndex, selectedChipId)
       return
     }
     if (placement[slotIndex]) {
@@ -313,11 +314,11 @@ function DragDropCard({
 
   const handleReset = () => {
     const next: Record<number, string | null> = {}
-    for (const t of terms) {
-      next[t.slotIndex] = graded && results[t.slotIndex]?.isCorrect ? placement[t.slotIndex] ?? null : null
+    for (const s of slots) {
+      next[s] = graded && results[s]?.isCorrect ? placement[s] ?? null : null
     }
     setPlacement(next)
-    setSelectedChip(null)
+    setSelectedChipId(null)
     const keepResults = Object.values(results).some((r) => r?.isCorrect)
     if (!keepResults) {
       setGraded(false)
@@ -331,8 +332,8 @@ function DragDropCard({
   const handleRetry = () => {
     setPlacement((prev) => {
       const next = { ...prev }
-      for (const t of terms) {
-        if (!results[t.slotIndex]?.isCorrect) next[t.slotIndex] = null
+      for (const s of slots) {
+        if (!results[s]?.isCorrect) next[s] = null
       }
       onDraftChange({ placement: next, results: {}, graded: false })
       return next
@@ -341,25 +342,26 @@ function DragDropCard({
     setResults({})
   }
 
-  const allCorrect = graded && terms.every((t) => results[t.slotIndex]?.isCorrect)
-  const parts = renderSlots(question.content, terms)
+  const allCorrect = graded && slots.every((s) => results[s]?.isCorrect)
+  const wrongSlots = slots.filter((s) => graded && results[s] && !results[s].isCorrect)
 
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
       <div className="rounded-xl border border-border bg-card p-4">
         <p className="max-w-prose text-base leading-relaxed text-foreground">
-          {parts.map((part, i) => {
+          {question.parts.map((part, i) => {
             if (part.type === "text") return <span key={i}>{part.value}</span>
-            const t = part.term
+            const chipId = placement[part.slotIndex] ?? null
+            const chip = chipId ? chipById.get(chipId) : undefined
             return (
               <DropZone
                 key={i}
-                slotIndex={t.slotIndex}
-                chip={placement[t.slotIndex] ?? null}
-                result={results[t.slotIndex]}
+                slotIndex={part.slotIndex}
+                chipText={chip?.text ?? null}
+                result={results[part.slotIndex]}
                 graded={graded}
-                awaiting={Boolean(selectedChip) && !(graded && results[t.slotIndex]?.isCorrect)}
-                onActivate={() => handleSlotActivate(t.slotIndex)}
+                awaiting={Boolean(selectedChipId) && !(graded && results[part.slotIndex]?.isCorrect)}
+                onActivate={() => handleSlotActivate(part.slotIndex)}
               />
             )
           })}
@@ -371,27 +373,31 @@ function DragDropCard({
           </p>
         )}
 
-        {graded && !allCorrect && (
+        {graded && !allCorrect && wrongSlots.length > 0 && (
           <div className="mt-3 rounded-lg bg-destructive/5 p-2 text-xs text-destructive">
-            {terms
-              .filter((t) => !results[t.slotIndex]?.isCorrect)
-              .map((t) => (
-                <div key={t.slotIndex}>
-                  ✗ Ô {t.slotIndex + 1}: đáp án đúng là <strong>{results[t.slotIndex]?.correctAnswer}</strong>
-                </div>
-              ))}
+            {wrongSlots.map((s) => {
+              const ans = results[s]?.correctAnswer
+              if (ans) {
+                return (
+                  <div key={s}>
+                    ✗ Ô {s + 1}: đáp án đúng là <strong>{ans}</strong>
+                  </div>
+                )
+              }
+              return <div key={s}>✗ Ô {s + 1} chưa đúng</div>
+            })}
           </div>
         )}
 
         {!allCorrect && (
           <div className="mt-4 flex flex-wrap gap-2">
-            {availableChips.map((chip, i) => (
+            {availableChips.map((chip) => (
               <Chip
-                key={`chip-${i}-${chip}`}
-                id={`chip-${i}-${chip}`}
-                chip={chip}
-                selected={selectedChip === chip}
-                onSelect={() => setSelectedChip((cur) => (cur === chip ? null : chip))}
+                key={chip.id}
+                id={chip.id}
+                chip={chip.text}
+                selected={selectedChipId === chip.id}
+                onSelect={() => setSelectedChipId((cur) => (cur === chip.id ? null : chip.id))}
               />
             ))}
           </div>
@@ -411,7 +417,7 @@ function DragDropCard({
                 variant="outline"
                 className="min-h-11"
                 onClick={handleReset}
-                disabled={pending || usedChips.length === 0}
+                disabled={pending || usedChipIds.size === 0}
               >
                 Đặt lại
               </Button>
@@ -435,14 +441,14 @@ function DragDropCard({
 
 function DropZone({
   slotIndex,
-  chip,
+  chipText,
   result,
   graded,
   awaiting,
   onActivate,
 }: {
   slotIndex: number
-  chip: string | null
+  chipText: string | null
   result?: SlotResult
   graded: boolean
   awaiting: boolean
@@ -459,19 +465,19 @@ function DropZone({
     <button
       ref={setNodeRef}
       type="button"
-      aria-label={chip ? `Ô ${slotIndex + 1}: ${chip}` : `Ô trống ${slotIndex + 1}`}
+      aria-label={chipText ? `Ô ${slotIndex + 1}: ${chipText}` : `Ô trống ${slotIndex + 1}`}
       onClick={onActivate}
       className={cn(
         "mx-1 inline-flex min-h-11 min-w-[80px] items-center justify-center rounded-md border-2 px-2 py-0.5 align-middle text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary",
-        chip ? "border-solid" : "border-dashed",
+        chipText ? "border-solid" : "border-dashed",
         isOver && "border-primary bg-primary/10",
-        awaiting && !chip && "border-primary",
+        awaiting && !chipText && "border-primary",
         correct && "border-solid border-[color:var(--color-primary)] bg-primary/10 text-primary",
         wrong && "border-solid border-destructive bg-destructive/10 text-destructive",
         !graded && !isOver && !awaiting && "border-border",
       )}
     >
-      {chip ?? "\u00A0\u00A0\u00A0"}
+      {chipText ?? "\u00A0\u00A0\u00A0"}
       {correct ? <Check className="ml-1 inline size-3.5 text-primary" aria-hidden="true" /> : null}
       {wrong ? <X className="ml-1 inline size-3.5 text-destructive" aria-hidden="true" /> : null}
     </button>
@@ -491,7 +497,7 @@ function Chip({
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id,
-    data: { chip },
+    data: { chipId: id },
   })
   return (
     <button

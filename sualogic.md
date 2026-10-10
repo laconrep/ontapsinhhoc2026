@@ -1,6 +1,6 @@
 # Ke hoach sua logic cham diem (8 phien)
 
-Trang thai: **phien 4 xong**. Day la nguon su that cho 8 phien. Phien sau CHI doc file nay + dung cac file liet ke trong phien do. KHONG doc lai toan repo. KHONG lam phan hoan (muc 3).
+Trang thai: **phien 5 xong**. Day la nguon su that cho 8 phien. Phien sau CHI doc file nay + dung cac file liet ke trong phien do. KHONG doc lai toan repo. KHONG lam phan hoan (muc 3).
 
 Nguon: doi chieu spec `Spec sua logic cham diem — EduSync (ontapsinhhoc2026).md` voi code that. Cac ID (FD-01, QZ-01, ...) giu nguyen de truy vet.
 
@@ -203,7 +203,7 @@ scoreLinear(correctSlots: number, totalSlots: number): { score: number; percenta
 | 2 | Parser nhom hoan doi, bo ngoac kep thuong, backfill, UI GV | xong — `node --experimental-strip-types scripts/check-scoring-phien2.mjs` in `phien 2 OK`; khong co DATABASE_URL nen backfill bo qua |
 | 3 | lib/scoring.ts, matching, normalize quotes, gradeSA so | xong — `node --experimental-strip-types scripts/check-scoring-phien3.mjs` in `phien 3 OK` |
 | 4 | Snapshot de Tab 4, TF trong = sai, diem <= 10 | xong — `node --experimental-strip-types scripts/check-scoring-phien4.mjs` in `phien 4 OK` |
-| 5 | Chip id Tab 3, an dap an Tab 2/3, 10 cham/phut | chua |
+| 5 | Chip id Tab 3, an dap an Tab 2/3, 10 cham/phut | xong — `node --experimental-strip-types scripts/check-scoring-phien5.mjs` in `phien 5 OK` |
 | 6 | Quyen server Tab 1/2/3, ST-01 hoan thanh, LV-01/02 | chua |
 | 7 | Transaction quiz, unique Tab 1, reset overallStatus, reuse attempt | chua |
 | 8 | Live answers DB, scoring chung live, giu option id, firstTry | chua |
@@ -420,8 +420,24 @@ Khong thi nhom moi. Toi da 8 o/nhom: neu vuot, van cat nhom (khong throw trong e
 **Bao cao phien 5**
 
 - Da lam:
+  - `getTab2/3` gui `parts` (`text` | `slotIndex`+`groupId`), khong `content` tho, khong `terms[].text`/synonyms. Tab 3 `chips: {id, text}[]` id=`${kpId}:${index}` sau shuffle.
+  - Distractor loai neu `normalizeAnswer` trung text/synonyms/extraAccepted hoac trung nhau.
+  - Tab 3 client: `placement` luu chipId; `placeChip` go o dang giu cung chipId; dnd-kit id = chip.id; draft bo chipId khong con.
+  - Submit 2/3 chi tra `isCorrect`; hint/dap an theo attempts sau khi tang (`REVEAL_FILL_AT=3`, `REVEAL_DRAG_AT=2`). Set `fillRevealed`/`dragRevealed`. Da `correct` khong tang attempts.
+  - Rate-limit Map in-memory 10/60s/HS/KP, throw "Thử chấm chậm lại". Tab 2 hint chi tu server.
+  - Test: parts khong lo text term; distractor; chip id; fill hint lan 1 / dap an lan 3; drag an lan 1 / lo lan 2.
 - Con lai / lech ke hoach:
+  - `pnpm exec tsc --noEmit` van khong chay duoc (thieu node_modules / corepack) — giong phien 1-4.
+  - Tab 3 eligible van `unknown || fill incorrect` (phien 6).
 - File da doi:
+  - `lib/slot-render.ts`
+  - `lib/db/schema.ts`
+  - `lib/db/index.ts`
+  - `app/actions/student-learn.ts`
+  - `components/student/tab2-fill-in.tsx`
+  - `components/student/tab3-drag-drop.tsx`
+  - `scripts/check-scoring-phien5.mjs`
+  - `sualogic.md`
 
 ---
 

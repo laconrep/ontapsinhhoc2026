@@ -6,24 +6,21 @@ import { Check, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { getTab2Questions, submitTab2Question } from "@/app/actions/student-learn"
-import { renderSlots } from "@/lib/slot-render"
-import type { UnderlinedTerm } from "@/types"
+import type { ClientSlotPart } from "@/lib/slot-render"
 
 type FillQuestion = {
   id: string
   knowledgePointId: string
-  content: string
-  terms: UnderlinedTerm[]
+  parts: ClientSlotPart[]
 }
 
-type SlotResult = { slotIndex: number; isCorrect: boolean; correctAnswer: string }
+type SlotResult = { slotIndex: number; isCorrect: boolean; hint?: string; correctAnswer?: string }
 
 type FillDraft = {
   kpId: string
   answers: Record<number, string>
   results: Record<number, SlotResult>
   graded: boolean
-  wrongTries: number
 }
 
 export function Tab2FillIn({
@@ -196,6 +193,10 @@ export function Tab2FillIn({
   )
 }
 
+function slotIndexes(parts: ClientSlotPart[]): number[] {
+  return parts.filter((p): p is Extract<ClientSlotPart, { type: "slot" }> => p.type === "slot").map((p) => p.slotIndex)
+}
+
 function FillInCard({
   question,
   restored,
@@ -210,51 +211,44 @@ function FillInCard({
   const [answers, setAnswers] = useState<Record<number, string>>(restored?.answers ?? {})
   const [results, setResults] = useState<Record<number, SlotResult>>(restored?.results ?? {})
   const [graded, setGraded] = useState(restored?.graded ?? false)
-  const [wrongTries, setWrongTries] = useState(restored?.wrongTries ?? 0)
   const [pending, startTransition] = useTransition()
   const inputsRef = useRef<Record<number, HTMLInputElement | null>>({})
 
-  const terms = useMemo(
-    () => [...question.terms].sort((a, b) => a.slotIndex - b.slotIndex),
-    [question.terms],
-  )
+  const slots = useMemo(() => slotIndexes(question.parts), [question.parts])
 
   const lockedCorrect = (slotIndex: number) => graded && results[slotIndex]?.isCorrect
 
   const setAnswer = (slotIndex: number, value: string) => {
     setAnswers((prev) => {
       const next = { ...prev, [slotIndex]: value }
-      onDraftChange({ answers: next, results, graded, wrongTries })
+      onDraftChange({ answers: next, results, graded })
       return next
     })
   }
 
-  const allFilled = terms.every((t) => (answers[t.slotIndex] ?? "").trim().length > 0)
+  const allFilled = slots.every((s) => (answers[s] ?? "").trim().length > 0)
 
   const handleSubmit = () => {
     startTransition(async () => {
       try {
-        const payload = terms.map((t) => ({
-          slotIndex: Number(t.slotIndex),
-          value: answers[t.slotIndex] ?? answers[Number(t.slotIndex)] ?? "",
+        const payload = slots.map((slotIndex) => ({
+          slotIndex,
+          value: answers[slotIndex] ?? answers[Number(slotIndex)] ?? "",
         }))
         const res = await submitTab2Question(question.knowledgePointId, payload)
         const map: Record<number, SlotResult> = {}
         for (const r of res.results) {
           const slotIndex = Number(r.slotIndex)
-          map[slotIndex] = { ...r, slotIndex }
-        }
-        if (res.allCorrect) {
-          for (const t of terms) {
-            const slotIndex = Number(t.slotIndex)
-            map[slotIndex] = { slotIndex, isCorrect: true, correctAnswer: t.text }
+          map[slotIndex] = {
+            slotIndex,
+            isCorrect: r.isCorrect,
+            hint: r.hint,
+            correctAnswer: r.correctAnswer,
           }
         }
         setResults(map)
         setGraded(true)
-        const nextTries = res.allCorrect ? 0 : wrongTries + 1
-        setWrongTries(nextTries)
-        onDraftChange({ answers, results: map, graded: true, wrongTries: nextTries })
+        onDraftChange({ answers, results: map, graded: true })
         if (res.allCorrect) {
           toast.success("Chính xác!")
         } else {
@@ -269,10 +263,10 @@ function FillInCard({
   const handleRetry = () => {
     setAnswers((prev) => {
       const next = { ...prev }
-      for (const t of terms) {
-        if (!results[t.slotIndex]?.isCorrect) next[t.slotIndex] = ""
+      for (const s of slots) {
+        if (!results[s]?.isCorrect) next[s] = ""
       }
-      onDraftChange({ answers: next, results: {}, graded: false, wrongTries })
+      onDraftChange({ answers: next, results: {}, graded: false })
       return next
     })
     setGraded(false)
@@ -280,42 +274,41 @@ function FillInCard({
   }
 
   const focusNext = (slotIndex: number) => {
-    const ordered = terms.map((t) => t.slotIndex)
-    const i = ordered.indexOf(slotIndex)
-    const next = ordered[i + 1]
+    const i = slots.indexOf(slotIndex)
+    const next = slots[i + 1]
     if (next != null) inputsRef.current[next]?.focus()
     else if (allFilled) handleSubmit()
   }
 
-  const allCorrect = graded && terms.every((t) => results[t.slotIndex]?.isCorrect)
-  const parts = renderSlots(question.content, terms)
+  const allCorrect = graded && slots.every((s) => results[s]?.isCorrect)
+  const wrongSlots = slots.filter((s) => graded && results[s] && !results[s].isCorrect)
 
   return (
     <div className="rounded-xl border border-border bg-card p-4">
       <p className="max-w-prose text-base leading-relaxed text-foreground">
-        {parts.map((part, i) => {
+        {question.parts.map((part, i) => {
           if (part.type === "text") return <span key={i}>{part.value}</span>
-          const t = part.term
-          const res = results[t.slotIndex]
-          const locked = lockedCorrect(t.slotIndex)
+          const slotIndex = part.slotIndex
+          const res = results[slotIndex]
+          const locked = lockedCorrect(slotIndex)
           const wrong = graded && res && !res.isCorrect
           return (
             <span key={i} className="mx-1 inline-flex items-center align-middle">
               <input
                 ref={(el) => {
-                  inputsRef.current[t.slotIndex] = el
+                  inputsRef.current[slotIndex] = el
                 }}
-                value={answers[t.slotIndex] ?? ""}
-                onChange={(e) => setAnswer(t.slotIndex, e.target.value)}
+                value={answers[slotIndex] ?? ""}
+                onChange={(e) => setAnswer(slotIndex, e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault()
-                    focusNext(t.slotIndex)
+                    focusNext(slotIndex)
                   }
                 }}
                 disabled={locked || pending}
-                aria-label={`Ô trống ${t.slotIndex + 1}`}
-                size={Math.max((answers[t.slotIndex] ?? "").length + 1, 10)}
+                aria-label={`Ô trống ${slotIndex + 1}`}
+                size={Math.max((answers[slotIndex] ?? "").length + 1, 10)}
                 className={cn(
                   "inline-block rounded-md border-2 border-dashed px-2 py-0.5 text-center text-base outline-none",
                   "focus:border-primary focus:border-solid",
@@ -332,21 +325,26 @@ function FillInCard({
         })}
       </p>
 
-      {/* hiển thị đáp án đúng cho ô sai */}
-      {graded && !allCorrect && (
+      {graded && !allCorrect && wrongSlots.length > 0 && (
         <div className="mt-3 rounded-lg bg-destructive/5 p-2 text-xs text-destructive">
-          {terms
-            .filter((t) => !results[t.slotIndex]?.isCorrect)
-            .map((t) => {
-              const ans = results[t.slotIndex]?.correctAnswer ?? ""
+          {wrongSlots.map((s) => {
+            const res = results[s]
+            if (res?.correctAnswer) {
               return (
-                <div key={t.slotIndex}>
-                  {wrongTries < 2
-                    ? `✗ Ô ${t.slotIndex + 1} chưa đúng. Gợi ý: bắt đầu bằng "${ans.charAt(0)}"`
-                    : `✗ Ô ${t.slotIndex + 1}: đáp án đúng là ${ans}`}
+                <div key={s}>
+                  ✗ Ô {s + 1}: đáp án đúng là {res.correctAnswer}
                 </div>
               )
-            })}
+            }
+            if (res?.hint) {
+              return (
+                <div key={s}>
+                  ✗ Ô {s + 1} chưa đúng. Gợi ý: bắt đầu bằng &quot;{res.hint}&quot;
+                </div>
+              )
+            }
+            return <div key={s}>✗ Ô {s + 1} chưa đúng</div>
+          })}
         </div>
       )}
 

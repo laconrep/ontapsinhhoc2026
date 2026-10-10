@@ -23,17 +23,62 @@ import {
   computeOverallStatus,
   gradeSlots,
   seededRng,
-  seededShuffle,
   type FillDragStatus,
   type SlotAnswer,
 } from "@/lib/grading"
 import { gradeMC, gradeSA, gradeTF, scoreLinear } from "@/lib/scoring"
+import {
+  buildDragChips,
+  pickDistractors,
+  renderClientSlots,
+  stripDragResults,
+  stripFillResults,
+  type ClientSlotPart,
+} from "@/lib/slot-render"
 import { selectQuizQuestions } from "@/lib/quiz-selection"
-import type { KnowledgePointDto, QuestionDto, UnderlinedTerm, QuizResultDto } from "@/types"
+import type { KnowledgePointDto, UnderlinedTerm, QuizResultDto } from "@/types"
 
 export type StudyStage = "tab1" | "tab2" | "tab3" | "tab4" | "done"
 
 const TAB1_LOCKED_MSG = "Bạn đã nộp bước Tự đánh giá"
+const GRADE_BURST_LIMIT = 10
+const GRADE_BURST_WINDOW_MS = 60_000
+const gradeBurst = new Map<string, number[]>()
+
+export type Tab2Question = {
+  id: string
+  knowledgePointId: string
+  parts: ClientSlotPart[]
+}
+
+export type Tab3Chip = { id: string; text: string }
+
+export type Tab3Question = {
+  id: string
+  knowledgePointId: string
+  parts: ClientSlotPart[]
+  chips: Tab3Chip[]
+}
+
+export type SlotGradeResult = {
+  slotIndex: number
+  isCorrect: boolean
+  hint?: string
+  correctAnswer?: string
+}
+
+function assertGradeBurst(studentId: string, kpId: string) {
+  const key = `${studentId}:${kpId}`
+  const now = Date.now()
+  const prev = (gradeBurst.get(key) ?? []).filter((t) => now - t < GRADE_BURST_WINDOW_MS)
+  if (prev.length >= GRADE_BURST_LIMIT) throw new Error("Thử chấm chậm lại")
+  prev.push(now)
+  gradeBurst.set(key, prev)
+}
+
+function alreadyCorrectResults(terms: UnderlinedTerm[]): SlotGradeResult[] {
+  return terms.map((t) => ({ slotIndex: t.slotIndex, isCorrect: true }))
+}
 
 // ============ Helpers ============
 
@@ -411,7 +456,7 @@ export async function resetLessonProgress(lessonId: string): Promise<{ success: 
 
 /** Câu FILL cho các KP mà HS đã đánh giá "Biết". */
 export async function getTab2Questions(lessonId: string): Promise<{
-  questions: (QuestionDto & { knowledgePointId: string; terms: UnderlinedTerm[] })[]
+  questions: Tab2Question[]
   empty: boolean
   skipped: boolean
 }> {
@@ -448,14 +493,13 @@ export async function getTab2Questions(lessonId: string): Promise<{
       const terms = (kp.underlinedTerms as UnderlinedTerm[]) ?? []
       return {
         id: `fill-${kp.id}`,
-        lessonId,
         knowledgePointId: kp.id,
-        type: "FILL" as const,
-        content: kp.content,
-        terms,
+        parts: renderClientSlots(kp.content, terms),
+        slotCount: terms.length,
       }
     })
-    .filter((q) => q.terms.length > 0)
+    .filter((q) => q.slotCount > 0)
+    .map(({ slotCount: _slotCount, ...q }) => q)
 
   return { questions: built, empty: built.length === 0, skipped: false }
 }
@@ -466,6 +510,7 @@ export async function submitTab2Question(
   answers: SlotAnswer[] | Record<string, string>,
 ) {
   const student = await requireRole("student")
+  await ensureSchema()
 
   const [kp] = await db
     .select()
@@ -474,8 +519,6 @@ export async function submitTab2Question(
     .limit(1)
   if (!kp) throw new Error("Không tìm thấy điểm kiến thức")
   const terms = (kp.underlinedTerms as UnderlinedTerm[]) ?? []
-
-  const { results, allCorrect } = gradeSlots(terms, answers)
 
   const [existing] = await db
     .select()
@@ -488,17 +531,26 @@ export async function submitTab2Question(
   const currentDragStatus = existing?.dragStatus ?? null
   const currentSelfAssessment = existing?.selfAssessment ?? null
 
-  const newFillStatus: FillDragStatus = allCorrect
-    ? "correct"
-    : currentFillStatus === "correct"
-      ? "correct"
-      : "incorrect"
+  if (currentFillStatus === "correct") {
+    return {
+      results: alreadyCorrectResults(terms),
+      allCorrect: true,
+      kpStatus: existing?.overallStatus ?? "mastered",
+    }
+  }
 
+  assertGradeBurst(student.id, kpId)
+  const { results, allCorrect } = gradeSlots(terms, answers)
+
+  const newFillStatus: FillDragStatus = allCorrect ? "correct" : "incorrect"
   const overallStatus = computeOverallStatus({
     selfAssessment: currentSelfAssessment,
     fillStatus: newFillStatus,
     dragStatus: currentDragStatus,
   })
+  const attemptsAfter = (existing?.fillAttempts ?? 0) + 1
+  const { stripped, revealed } = stripFillResults(results, attemptsAfter, allCorrect)
+  const fillRevealed = Boolean(existing?.fillRevealed) || revealed
 
   if (existing) {
     await db
@@ -506,6 +558,7 @@ export async function submitTab2Question(
       .set({
         fillStatus: newFillStatus,
         fillAttempts: sql`${studentProgress.fillAttempts} + 1`,
+        fillRevealed,
         overallStatus,
         updatedAt: new Date(),
       })
@@ -518,24 +571,19 @@ export async function submitTab2Question(
       knowledgePointId: kpId,
       fillStatus: newFillStatus,
       fillAttempts: 1,
+      fillRevealed,
       overallStatus,
     })
   }
 
-  return { results, allCorrect, kpStatus: overallStatus }
+  return { results: stripped, allCorrect, kpStatus: overallStatus }
 }
 
 // ============ Tab 3 — Kéo thả ============
 
 /** Câu DRAG cho KP: "Chưa biết" HOẶC "Biết nhưng fill sai". Kèm chip nhiễu. */
 export async function getTab3Questions(lessonId: string): Promise<{
-  questions: {
-    id: string
-    knowledgePointId: string
-    content: string
-    terms: UnderlinedTerm[]
-    chips: string[]
-  }[]
+  questions: Tab3Question[]
   empty: boolean
   skipped: boolean
 }> {
@@ -568,27 +616,31 @@ export async function getTab3Questions(lessonId: string): Promise<{
     .where(inArray(knowledgePoints.id, targetKpIds))
     .orderBy(asc(knowledgePoints.order))
 
-  // pool từ nhiễu: các term của KP khác trong cùng bài
   const allKps = await db
     .select()
     .from(knowledgePoints)
     .where(eq(knowledgePoints.lessonId, lessonId))
-  const distractorPool = new Set<string>()
+  const distractorPool: string[] = []
   for (const k of allKps) {
-    for (const t of (k.underlinedTerms as UnderlinedTerm[]) ?? []) distractorPool.add(t.text)
+    for (const t of (k.underlinedTerms as UnderlinedTerm[]) ?? []) distractorPool.push(t.text)
   }
 
   const built = kps
     .map((kp) => {
       const terms = (kp.underlinedTerms as UnderlinedTerm[]) ?? []
-      const correctTexts = new Set(terms.map((t) => t.text))
-      const distractors = [...distractorPool].filter((d) => !correctTexts.has(d))
       const rng = seededRng(`${student.id}:${kp.id}:drag`)
-      const picked = seededShuffle(distractors, rng).slice(0, 3)
-      const chips = seededShuffle([...terms.map((t) => t.text), ...picked], rng)
-      return { id: `drag-${kp.id}`, knowledgePointId: kp.id, content: kp.content, terms, chips }
+      const picked = pickDistractors(distractorPool, terms, rng, 3)
+      const chips = buildDragChips(kp.id, terms, picked, rng)
+      return {
+        id: `drag-${kp.id}`,
+        knowledgePointId: kp.id,
+        parts: renderClientSlots(kp.content, terms),
+        chips,
+        slotCount: terms.length,
+      }
     })
-    .filter((q) => q.terms.length > 0)
+    .filter((q) => q.slotCount > 0)
+    .map(({ slotCount: _slotCount, ...q }) => q)
 
   return { questions: built, empty: built.length === 0, skipped: false }
 }
@@ -599,6 +651,7 @@ export async function submitTab3Question(
   answers: SlotAnswer[] | Record<string, string>,
 ) {
   const student = await requireRole("student")
+  await ensureSchema()
 
   const [kp] = await db
     .select()
@@ -607,8 +660,6 @@ export async function submitTab3Question(
     .limit(1)
   if (!kp) throw new Error("Không tìm thấy điểm kiến thức")
   const terms = (kp.underlinedTerms as UnderlinedTerm[]) ?? []
-
-  const { results, allCorrect } = gradeSlots(terms, answers)
 
   const [existing] = await db
     .select()
@@ -621,17 +672,26 @@ export async function submitTab3Question(
   const currentDragStatus = existing?.dragStatus ?? null
   const currentSelfAssessment = existing?.selfAssessment ?? null
 
-  const newDragStatus: FillDragStatus = allCorrect
-    ? "correct"
-    : currentDragStatus === "correct"
-      ? "correct"
-      : "incorrect"
+  if (currentDragStatus === "correct") {
+    return {
+      results: alreadyCorrectResults(terms),
+      allCorrect: true,
+      kpStatus: existing?.overallStatus ?? "mastered",
+    }
+  }
 
+  assertGradeBurst(student.id, kpId)
+  const { results, allCorrect } = gradeSlots(terms, answers)
+
+  const newDragStatus: FillDragStatus = allCorrect ? "correct" : "incorrect"
   const overallStatus = computeOverallStatus({
     selfAssessment: currentSelfAssessment,
     fillStatus: currentFillStatus,
     dragStatus: newDragStatus,
   })
+  const attemptsAfter = (existing?.dragAttempts ?? 0) + 1
+  const { stripped, revealed } = stripDragResults(results, attemptsAfter, allCorrect)
+  const dragRevealed = Boolean(existing?.dragRevealed) || revealed
 
   if (existing) {
     await db
@@ -639,6 +699,7 @@ export async function submitTab3Question(
       .set({
         dragStatus: newDragStatus,
         dragAttempts: sql`${studentProgress.dragAttempts} + 1`,
+        dragRevealed,
         overallStatus,
         updatedAt: new Date(),
       })
@@ -651,11 +712,12 @@ export async function submitTab3Question(
       knowledgePointId: kpId,
       dragStatus: newDragStatus,
       dragAttempts: 1,
+      dragRevealed,
       overallStatus,
     })
   }
 
-  return { results, allCorrect, kpStatus: overallStatus }
+  return { results: stripped, allCorrect, kpStatus: overallStatus }
 }
 
 // ============ Tab 4 — Kiểm tra tổng hợp ============

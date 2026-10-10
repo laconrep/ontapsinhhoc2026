@@ -185,6 +185,8 @@ export const studentProgress = pgTable(
       .default("not_started"),
     fillAttempts: integer("fillAttempts").notNull().default(0),
     dragAttempts: integer("dragAttempts").notNull().default(0),
+    fillRevealed: boolean("fillRevealed").notNull().default(false),
+    dragRevealed: boolean("dragRevealed").notNull().default(false),
     updatedAt: timestamp("updatedAt").notNull().defaultNow(),
   },
   (t) => ({

@@ -1,9 +1,27 @@
 import type { UnderlinedTerm } from "@/types"
+import { seededShuffle } from "@/lib/grading"
+import { normalizeAnswer } from "@/lib/scoring"
 import { cleanContentDisplay } from "./content-display"
 
 export type SlotPart =
   | { type: "text"; value: string }
   | { type: "slot"; term: UnderlinedTerm }
+
+export type ClientSlotPart =
+  | { type: "text"; value: string }
+  | { type: "slot"; slotIndex: number; groupId: string | null }
+
+export type DragChip = { id: string; text: string }
+
+export const REVEAL_FILL_AT = 3
+export const REVEAL_DRAG_AT = 2
+
+export type SlotGradeClient = {
+  slotIndex: number
+  isCorrect: boolean
+  hint?: string
+  correctAnswer?: string
+}
 
 function offsetsValid(content: string, terms: UnderlinedTerm[]): boolean {
   return terms.every(
@@ -94,4 +112,96 @@ export function renderSlots(content: string, terms: UnderlinedTerm[]): SlotPart[
   }
   console.warn("renderSlots legacy", { texts: terms.map((t) => t.text) })
   return renderSlotsLegacy(content, terms)
+}
+
+export function toClientSlotParts(parts: SlotPart[]): ClientSlotPart[] {
+  return parts.map((p) =>
+    p.type === "text"
+      ? p
+      : { type: "slot", slotIndex: p.term.slotIndex, groupId: p.term.swapGroupId ?? null },
+  )
+}
+
+export function renderClientSlots(content: string, terms: UnderlinedTerm[]): ClientSlotPart[] {
+  return toClientSlotParts(renderSlots(content, terms))
+}
+
+export function acceptedNormsOf(terms: UnderlinedTerm[]): Set<string> {
+  const out = new Set<string>()
+  for (const t of terms) {
+    out.add(normalizeAnswer(t.text))
+    for (const s of t.synonyms ?? []) out.add(normalizeAnswer(s))
+    for (const e of t.extraAccepted ?? []) out.add(normalizeAnswer(e))
+  }
+  return out
+}
+
+export function pickDistractors(
+  pool: string[],
+  terms: UnderlinedTerm[],
+  rng: () => number,
+  limit = 3,
+): string[] {
+  const blocked = acceptedNormsOf(terms)
+  const seen = new Set<string>()
+  const unique: string[] = []
+  for (const d of pool) {
+    const n = normalizeAnswer(d)
+    if (!n || blocked.has(n) || seen.has(n)) continue
+    seen.add(n)
+    unique.push(d)
+  }
+  return seededShuffle(unique, rng).slice(0, limit)
+}
+
+export function buildDragChips(
+  kpId: string,
+  terms: UnderlinedTerm[],
+  distractors: string[],
+  rng: () => number,
+): DragChip[] {
+  const texts = [...terms.map((t) => t.text), ...distractors]
+  return seededShuffle(texts, rng).map((text, index) => ({
+    id: `${kpId}:${index}`,
+    text,
+  }))
+}
+
+export function stripFillResults(
+  results: { slotIndex: number; isCorrect: boolean; correctAnswer: string }[],
+  attemptsAfter: number,
+  allCorrect: boolean,
+): { stripped: SlotGradeClient[]; revealed: boolean } {
+  let revealed = false
+  const stripped = results.map((r) => {
+    const out: SlotGradeClient = { slotIndex: r.slotIndex, isCorrect: r.isCorrect }
+    if (allCorrect || r.isCorrect) return out
+    if (attemptsAfter >= REVEAL_FILL_AT) {
+      out.correctAnswer = r.correctAnswer
+      revealed = true
+    } else if (attemptsAfter >= 1) {
+      const ch = (r.correctAnswer ?? "").charAt(0)
+      if (ch) out.hint = ch
+    }
+    return out
+  })
+  return { stripped, revealed }
+}
+
+export function stripDragResults(
+  results: { slotIndex: number; isCorrect: boolean; correctAnswer: string }[],
+  attemptsAfter: number,
+  allCorrect: boolean,
+): { stripped: SlotGradeClient[]; revealed: boolean } {
+  let revealed = false
+  const stripped = results.map((r) => {
+    const out: SlotGradeClient = { slotIndex: r.slotIndex, isCorrect: r.isCorrect }
+    if (allCorrect || r.isCorrect) return out
+    if (attemptsAfter >= REVEAL_DRAG_AT) {
+      out.correctAnswer = r.correctAnswer
+      revealed = true
+    }
+    return out
+  })
+  return { stripped, revealed }
 }

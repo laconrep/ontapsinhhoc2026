@@ -110,6 +110,13 @@ export function ensureSchema(): Promise<void> {
         `),
       )
       .then(() => pool.query(`ALTER TABLE quiz_answers ADD COLUMN IF NOT EXISTS "optionId" uuid`))
+      .then(() =>
+        pool.query(`
+          ALTER TABLE student_progress
+            ADD COLUMN IF NOT EXISTS "fillRevealed" boolean NOT NULL DEFAULT false,
+            ADD COLUMN IF NOT EXISTS "dragRevealed" boolean NOT NULL DEFAULT false
+        `),
+      )
       .then(() => undefined)
       .catch((e) => {
         schemaReady = null
