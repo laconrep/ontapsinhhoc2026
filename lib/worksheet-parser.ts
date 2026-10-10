@@ -76,9 +76,12 @@ function peelBlankText(raw: string): { core: string; prefix: string; suffix: str
   return { core: m[2], prefix: m[1], suffix: m[3] }
 }
 
+const SWAP_GROUP_JOIN_RE = /^\s*([,\/\-–→]|va|hoac)?\s*$/i
+const MAX_SWAP_GROUP_SIZE = 8
+
 /**
  * Word/mammoth hay ra `"__từ"__` thay vì `__"từ"__`.
- * Cú pháp đúng: __từ__ | "từ" | __"từ"__.
+ * Cú pháp đúng: __từ__ | __"từ"__.
  */
 export function malformedQuoteUnderlineMarks(raw: string): string[] {
   const s = raw.replace(/[\u201c\u201d]/g, '"')
@@ -94,13 +97,52 @@ export function malformedQuoteUnderlineMarks(raw: string): string[] {
   return out
 }
 
+export function unusedPlainQuotes(raw: string): string[] {
+  const s = raw.replace(/[\u201c\u201d]/g, '"')
+  const masked = s.replace(/__(.+?)__/g, (m) => " ".repeat(m.length))
+  const out: string[] = []
+  const re = /"(.+?)"/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(masked)) !== null) {
+    if (!m[1].trim()) continue
+    const snippet = m[0].replace(/\s+/g, " ").trim().slice(0, 48)
+    if (snippet) out.push(snippet)
+  }
+  return out
+}
+
+export function uncappedSwapRunLengths(content: string, terms: UnderlinedTerm[]): number[] {
+  const runs: number[] = []
+  let run = 0
+  let prevEnd = -1
+  for (const t of terms) {
+    if (!t.allowSwap) {
+      if (run > 0) runs.push(run)
+      run = 0
+      prevEnd = typeof t.end === "number" ? t.end : -1
+      continue
+    }
+    const start = typeof t.start === "number" ? t.start : -1
+    const canJoin =
+      run > 0 && start >= 0 && prevEnd >= 0 && SWAP_GROUP_JOIN_RE.test(content.slice(prevEnd, start))
+    if (canJoin) run += 1
+    else {
+      if (run > 0) runs.push(run)
+      run = 1
+    }
+    prevEnd = typeof t.end === "number" ? t.end : start >= 0 ? start + t.text.length : -1
+  }
+  if (run > 0) runs.push(run)
+  return runs
+}
+
 /**
  * Phân tích nội dung KP: tìm các ô trống đánh dấu bằng __từ__ (cố định) hoặc
- * "từ" (hoán đổi). __"từ"__ = vừa gạch chân vừa hoán đổi.
- * 
- * Hỗ trợ từ đồng nghĩa: __từ|đồng_nghĩa1|đồng_nghĩa2__ hoặc "từ|đồng_nghĩa1"
+ * __"từ"__ (hoán đổi).
+ *
+ * Hỗ trợ từ đồng nghĩa: __từ|đồng_nghĩa1|đồng_nghĩa2__ hoặc __"từ|đồng_nghĩa1"__
  * Phần trước | là text (bắt buộc), phần sau | là synonyms (tuỳ chọn).
- * 
+ *
  * Trả về content đã bỏ ký hiệu delimiter và mảng underlinedTerms.
  */
 export function extractBlanks(raw: string): {
@@ -128,23 +170,6 @@ export function extractBlanks(raw: string): {
     }
     markers.push({ start: m.index, end: m.index + m[0].length, text: inner, allowSwap, synonyms })
   }
-  // 2) tìm "..." không nằm trong vùng đã match ở bước 1
-  const quoteRe = /"(.+?)"/g
-  while ((m = quoteRe.exec(raw)) !== null) {
-    const s = m.index
-    const e = m.index + m[0].length
-    const overlap = markers.some((mk) => s < mk.end && e > mk.start)
-    if (!overlap) {
-      let text = m[1]
-      let synonyms: string[] = []
-      const parts = text.split("|")
-      text = parts[0]
-      if (parts.length > 1) {
-        synonyms = parts.slice(1).filter(p => p.trim().length > 0)
-      }
-      markers.push({ start: s, end: e, text, allowSwap: true, synonyms })
-    }
-  }
 
   markers.sort((a, b) => a.start - b.start)
 
@@ -171,26 +196,30 @@ export function extractBlanks(raw: string): {
 
   const lead = content.length - content.trimStart().length
 
-  // gán swapGroupId: các ô hoán đổi liên tiếp, không có dấu chấm câu xen giữa → cùng group
+  // gán swapGroupId: hai ô swap cùng nhóm khi between khớp SWAP_GROUP_JOIN_RE; tối đa 8 ô/nhóm
   const terms: UnderlinedTerm[] = []
   let groupCounter = 0
   let currentGroup: string | null = null
+  let currentGroupSize = 0
   let prevEnd = -1
   let prevWasSwap = false
   placed.forEach((p, i) => {
     let swapGroupId: string | null = null
     if (p.allowSwap) {
       const between = prevEnd >= 0 ? content.slice(prevEnd, p.cleanStart) : "."
-      const sentenceBreak = /[.!?;\n]/.test(between)
-      if (prevWasSwap && !sentenceBreak && currentGroup) {
+      const canJoin = prevWasSwap && currentGroup != null && SWAP_GROUP_JOIN_RE.test(between)
+      if (canJoin && currentGroupSize < MAX_SWAP_GROUP_SIZE) {
         swapGroupId = currentGroup
+        currentGroupSize += 1
       } else {
         groupCounter += 1
         currentGroup = `g${groupCounter}`
         swapGroupId = currentGroup
+        currentGroupSize = 1
       }
     } else {
       currentGroup = null
+      currentGroupSize = 0
     }
     const start = p.cleanStart - lead
     terms.push({
@@ -502,6 +531,13 @@ export function parseTextContent(text: string): ParseResult {
         errors.push({
           line: lineNo,
           message: `Gạch chân kèm ngoặc kép phải viết __"từ"__ (không phải "__từ"__): ${badMarks.slice(0, 3).join(", ")}`,
+        })
+      }
+      const unusedQuotes = unusedPlainQuotes(body)
+      if (unusedQuotes.length > 0) {
+        errors.push({
+          line: lineNo,
+          message: `Ngoặc kép thường không tạo ô trống (cần __"từ"__): ${unusedQuotes.slice(0, 3).join(", ")}`,
         })
       }
       const { content, underlinedTerms } = extractBlanks(body)
@@ -875,8 +911,16 @@ export function validateDocument(result: ParseResult): ValidationResult {
       if (kp.underlinedTerms.length === 0) {
         errors.push({
           line: kp.line,
-          message: `Điểm kiến thức phải có ít nhất 1 từ gạch chân (__từ__ hoặc "từ"): "${kp.content.slice(0, 30)}"`,
+          message: `Điểm kiến thức phải có ít nhất 1 từ gạch chân (__từ__ hoặc __"từ"__): "${kp.content.slice(0, 30)}"`,
         })
+      }
+      for (const n of uncappedSwapRunLengths(kp.content, kp.underlinedTerms)) {
+        if (n > 8) {
+          errors.push({
+            line: kp.line,
+            message: `Nhóm hoán đổi có ${n} ô (tối đa 8): "${kp.content.slice(0, 40)}"`,
+          })
+        }
       }
       for (const q of kp.questions) {
         if (q.type === "MC") {

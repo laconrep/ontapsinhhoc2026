@@ -62,7 +62,22 @@ import { QuestionStem } from "@/components/question/question-stem"
 import { extractBlanks } from "@/lib/worksheet-parser"
 import { renderMarkedContent } from "@/lib/kp-render"
 import { cn } from "@/lib/utils"
-import type { KnowledgePointDto, LessonDto, QuestionDto } from "@/types"
+import type { KnowledgePointDto, LessonDto, QuestionDto, UnderlinedTerm } from "@/types"
+
+function kpNeedsReview(content: string, terms: UnderlinedTerm[]): boolean {
+  if (terms.length === 0) return false
+  return terms.some(
+    (t) =>
+      typeof t.start !== "number" ||
+      typeof t.end !== "number" ||
+      !Number.isInteger(t.start) ||
+      !Number.isInteger(t.end) ||
+      t.start < 0 ||
+      t.end > content.length ||
+      t.end < t.start ||
+      content.slice(t.start, t.end) !== t.text,
+  )
+}
 
 type KP = KnowledgePointDto & { questionCount: number }
 
@@ -308,6 +323,11 @@ function KpDroppable({
                   {t.allowSwap ? " ⇄" : ""}
                 </Badge>
               ))}
+              {kpNeedsReview(kp.content, kp.underlinedTerms) ? (
+                <Badge variant="destructive" className="font-normal">
+                  Cần xác nhận ô trống
+                </Badge>
+              ) : null}
               <Badge variant="outline">{count} câu hỏi</Badge>
             </div>
           </div>
@@ -407,6 +427,16 @@ export function LessonDetail({
     return map
   }, [questions, kpIds])
   const activeQuestion = questions.find((q) => q.id === activeId) ?? null
+  const liveExtract = useMemo(() => extractBlanks(rawContent), [rawContent])
+  const liveHasOffsets =
+    liveExtract.underlinedTerms.length > 0 &&
+    liveExtract.underlinedTerms.every(
+      (t) => typeof t.start === "number" && typeof t.end === "number" && Number.isInteger(t.start) && Number.isInteger(t.end),
+    )
+  const editingNeedsReview =
+    kpDialog?.mode === "edit" &&
+    kpDialog.kp != null &&
+    kpNeedsReview(kpDialog.kp.content, kpDialog.kp.underlinedTerms)
 
   async function refresh() {
     const [{ getLessonDetail }, { getLessonQuestions }] = await Promise.all([
@@ -422,7 +452,7 @@ export function LessonDetail({
     if (!rawContent.trim()) return
     const { content, underlinedTerms } = extractBlanks(rawContent)
     if (underlinedTerms.length === 0) {
-      toast.error("Điểm kiến thức cần ít nhất 1 ô trống (gạch chân hoặc ngoặc kép).")
+      toast.error("Điểm kiến thức cần ít nhất 1 ô trống (__từ__ hoặc __\"từ\"__).")
       return
     }
     startTransition(async () => {
@@ -751,15 +781,20 @@ export function LessonDetail({
               {kpDialog?.mode === "create" ? "Thêm điểm kiến thức" : "Chỉnh sửa điểm kiến thức"}
             </DialogTitle>
             <DialogDescription>
-              Giữ Ctrl + click để gạch chân; thêm ngoặc kép để cho phép hoán đổi vị trí.
+              Giữ Ctrl + click để gạch chân; dùng __&quot;từ&quot;__ để cho phép hoán đổi vị trí.
             </DialogDescription>
           </DialogHeader>
           <KpContentEditor value={rawContent} onChange={setRawContent} autoFocus />
+          {editingNeedsReview ? (
+            <p className="text-sm text-amber-700 dark:text-amber-400">
+              Điểm kiến thức chưa có vị trí ô trống. Chỉnh nội dung rồi Lưu để xác nhận (lưu qua đánh dấu là đủ).
+            </p>
+          ) : null}
           <DialogFooter>
             <Button variant="outline" onClick={() => setKpDialog(null)}>
               Huỷ
             </Button>
-            <Button onClick={submitKp} disabled={isPending}>
+            <Button onClick={submitKp} disabled={isPending || !liveHasOffsets}>
               {kpDialog?.mode === "create" ? "Thêm" : "Lưu"}
             </Button>
           </DialogFooter>

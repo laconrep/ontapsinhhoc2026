@@ -7,26 +7,116 @@ import type { ParseResult, ValidationError } from "@/lib/worksheet-parser"
 
 const TYPE_LABEL: Record<string, string> = { MC: "Trắc nghiệm", TF: "Đúng/Sai", SA: "Trả lời ngắn" }
 
-export function highlightBlanks(content: string, terms: { text: string }[]) {
-  if (terms.length === 0) return content
-  const parts: (string | { blank: string })[] = [content]
+type HighlightTerm = {
+  text: string
+  slotIndex?: number
+  allowSwap?: boolean
+  swapGroupId?: string | null
+  start?: number
+  end?: number
+}
+
+function offsetsValid(content: string, terms: HighlightTerm[]): boolean {
+  return terms.every(
+    (t) =>
+      typeof t.start === "number" &&
+      typeof t.end === "number" &&
+      Number.isInteger(t.start) &&
+      Number.isInteger(t.end) &&
+      t.start >= 0 &&
+      t.end <= content.length &&
+      t.end >= t.start &&
+      content.slice(t.start, t.end) === t.text,
+  )
+}
+
+function groupBadgeMap(terms: HighlightTerm[]): Map<string, number> {
+  const ids: string[] = []
   for (const t of terms) {
-    for (let i = 0; i < parts.length; i++) {
-      const p = parts[i]
-      if (typeof p !== "string") continue
-      const idx = p.indexOf(t.text)
-      if (idx >= 0) {
-        parts.splice(i, 1, p.slice(0, idx), { blank: t.text }, p.slice(idx + t.text.length))
+    if (!t.swapGroupId) continue
+    if (!ids.includes(t.swapGroupId)) ids.push(t.swapGroupId)
+  }
+  const map = new Map<string, number>()
+  ids.forEach((id, i) => map.set(id, i + 1))
+  return map
+}
+
+export function highlightBlanks(content: string, terms: HighlightTerm[]) {
+  if (terms.length === 0) return content
+  const usable = terms.filter((t) => t.text)
+  const groupNo = groupBadgeMap(usable)
+  const blanks: { start: number; end: number; text: string; groupN?: number }[] = []
+
+  if (offsetsValid(content, usable)) {
+    const ordered = [...usable].sort(
+      (a, b) => (a.start as number) - (b.start as number) || (a.slotIndex ?? 0) - (b.slotIndex ?? 0),
+    )
+    let seen = 0
+    let overlap = false
+    for (const t of ordered) {
+      const start = t.start as number
+      const end = t.end as number
+      if (start < seen) {
+        overlap = true
         break
+      }
+      blanks.push({
+        start,
+        end,
+        text: t.text,
+        groupN: t.swapGroupId ? groupNo.get(t.swapGroupId) : undefined,
+      })
+      seen = end
+    }
+    if (overlap) blanks.length = 0
+  }
+
+  if (blanks.length === 0) {
+    const claimed: { start: number; end: number }[] = []
+    const ordered = [...usable].sort((a, b) => (a.slotIndex ?? 0) - (b.slotIndex ?? 0))
+    for (const t of ordered) {
+      let from = 0
+      let idx = content.indexOf(t.text, from)
+      while (idx !== -1) {
+        const end = idx + t.text.length
+        if (!claimed.some((c) => idx < c.end && end > c.start)) {
+          claimed.push({ start: idx, end })
+          blanks.push({
+            start: idx,
+            end,
+            text: t.text,
+            groupN: t.swapGroupId ? groupNo.get(t.swapGroupId) : undefined,
+          })
+          break
+        }
+        from = idx + 1
+        idx = content.indexOf(t.text, from)
       }
     }
   }
-  return parts.map((p, i) =>
+
+  blanks.sort((a, b) => a.start - b.start)
+  const nodes: (string | { blank: string; groupN?: number })[] = []
+  let cursor = 0
+  for (const b of blanks) {
+    if (b.start > cursor) nodes.push(content.slice(cursor, b.start))
+    nodes.push({ blank: b.text, groupN: b.groupN })
+    cursor = b.end
+  }
+  if (cursor < content.length) nodes.push(content.slice(cursor))
+
+  return nodes.map((p, i) =>
     typeof p === "string" ? (
       <span key={i}>{p}</span>
     ) : (
-      <span key={i} className="rounded bg-primary/15 px-1 font-semibold text-primary underline decoration-dotted">
+      <span
+        key={i}
+        className="rounded bg-primary/15 px-1 font-semibold text-primary underline decoration-dotted"
+      >
         {p.blank}
+        {p.groupN != null ? (
+          <span className="ml-1 align-middle text-[10px] font-medium text-primary/80">Nhóm {p.groupN}</span>
+        ) : null}
       </span>
     ),
   )

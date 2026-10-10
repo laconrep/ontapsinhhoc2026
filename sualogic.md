@@ -1,6 +1,6 @@
 # Ke hoach sua logic cham diem (8 phien)
 
-Trang thai: **phien 1 xong**. Day la nguon su that cho 8 phien. Phien sau CHI doc file nay + dung cac file liet ke trong phien do. KHONG doc lai toan repo. KHONG lam phan hoan (muc 3).
+Trang thai: **phien 2 xong**. Day la nguon su that cho 8 phien. Phien sau CHI doc file nay + dung cac file liet ke trong phien do. KHONG doc lai toan repo. KHONG lam phan hoan (muc 3).
 
 Nguon: doi chieu spec `Spec sua logic cham diem — EduSync (ontapsinhhoc2026).md` voi code that. Cac ID (FD-01, QZ-01, ...) giu nguyen de truy vet.
 
@@ -200,7 +200,7 @@ scoreLinear(correctSlots: number, totalSlots: number): { score: number; percenta
 | Phien | Muc tieu | Trang thai |
 | --- | --- | --- |
 | 1 | Offset o trong + extractBlanks + renderSlots/kp-render | xong — `node --experimental-strip-types scripts/check-scoring-phien1.mjs` in `phien 1 OK` |
-| 2 | Parser nhom hoan doi, bo ngoac kep thuong, backfill, UI GV | chua |
+| 2 | Parser nhom hoan doi, bo ngoac kep thuong, backfill, UI GV | xong — `node --experimental-strip-types scripts/check-scoring-phien2.mjs` in `phien 2 OK`; khong co DATABASE_URL nen backfill bo qua |
 | 3 | lib/scoring.ts, matching, normalize quotes, gradeSA so | chua |
 | 4 | Snapshot de Tab 4, TF trong = sai, diem <= 10 | chua |
 | 5 | Chip id Tab 3, an dap an Tab 2/3, 10 cham/phut | chua |
@@ -291,8 +291,26 @@ Khong thi nhom moi. Toi da 8 o/nhom: neu vuot, van cat nhom (khong throw trong e
 **Bao cao phien 2**
 
 - Da lam:
+  - `extractBlanks` chi nhan `__tu__` / `__"tu"__`; `"tu"` thuong khong tao term (`unusedPlainQuotes`).
+  - Swap group: join khi `between` khop `/^\s*([,\/\-–→]|va|hoac)?\s*$/i`; cat nhom moi 8 o; 1 thanh vien -> `swapGroupId=null`.
+  - `validateDocument` bao nhom > 8; parse KP canh bao quote thuong.
+  - `highlightBlanks` dung start/end; huy hieu Nhom N tren o swap.
+  - Editor: canh bao quote khong wrap `__`, canh bao chu lap.
+  - `lesson-detail`: badge "Can xac nhan o trong"; disable Luu khi extractBlanks chua du offset.
+  - `scripts/backfill-term-offsets.mjs` (word-boundary, CSV needsReview). Khong co DATABASE_URL — script in bo qua.
+  - Test: timin/xitozin 2 nhom (collapse null); `A, T, G va X` 1 nhom; `"nhan doi"` 0 term; roundtrip; backfill T khong an Trong.
 - Con lai / lech ke hoach:
+  - `pnpm exec tsc --noEmit` van khong chay duoc (thieu node_modules / corepack) — giong phien 1.
+  - Regex join dung dung spec ASCII `va`/`hoac` (khong gom `và`/`hoặc`).
+  - `uncappedSwapRunLengths` dung de validate truoc khi collapse 1-thanh-vien (van dem allowSwap).
 - File da doi:
+  - `lib/worksheet-parser.ts`
+  - `components/teacher/worksheet-preview-doc.tsx`
+  - `components/teacher/kp-content-editor.tsx`
+  - `components/teacher/lesson-detail.tsx`
+  - `scripts/backfill-term-offsets.mjs`
+  - `scripts/check-scoring-phien2.mjs`
+  - `sualogic.md`
 
 ---
 
