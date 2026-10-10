@@ -1,6 +1,6 @@
 # Ke hoach sua logic cham diem (8 phien)
 
-Trang thai: **phien 2 xong**. Day la nguon su that cho 8 phien. Phien sau CHI doc file nay + dung cac file liet ke trong phien do. KHONG doc lai toan repo. KHONG lam phan hoan (muc 3).
+Trang thai: **phien 3 xong**. Day la nguon su that cho 8 phien. Phien sau CHI doc file nay + dung cac file liet ke trong phien do. KHONG doc lai toan repo. KHONG lam phan hoan (muc 3).
 
 Nguon: doi chieu spec `Spec sua logic cham diem — EduSync (ontapsinhhoc2026).md` voi code that. Cac ID (FD-01, QZ-01, ...) giu nguyen de truy vet.
 
@@ -201,7 +201,7 @@ scoreLinear(correctSlots: number, totalSlots: number): { score: number; percenta
 | --- | --- | --- |
 | 1 | Offset o trong + extractBlanks + renderSlots/kp-render | xong — `node --experimental-strip-types scripts/check-scoring-phien1.mjs` in `phien 1 OK` |
 | 2 | Parser nhom hoan doi, bo ngoac kep thuong, backfill, UI GV | xong — `node --experimental-strip-types scripts/check-scoring-phien2.mjs` in `phien 2 OK`; khong co DATABASE_URL nen backfill bo qua |
-| 3 | lib/scoring.ts, matching, normalize quotes, gradeSA so | chua |
+| 3 | lib/scoring.ts, matching, normalize quotes, gradeSA so | xong — `node --experimental-strip-types scripts/check-scoring-phien3.mjs` in `phien 3 OK` |
 | 4 | Snapshot de Tab 4, TF trong = sai, diem <= 10 | chua |
 | 5 | Chip id Tab 3, an dap an Tab 2/3, 10 cham/phut | chua |
 | 6 | Quyen server Tab 1/2/3, ST-01 hoan thanh, LV-01/02 | chua |
@@ -337,8 +337,19 @@ Khong thi nhom moi. Toi da 8 o/nhom: neu vuot, van cat nhom (khong throw trong e
 **Bao cao phien 3**
 
 - Da lam:
+  - `lib/scoring.ts` thuan: `normalizeAnswer` (them ‘ ’ ʹ ′ ´ ` -> ' va ‐ ‑ ‒ – — − -> -), `gradeSlots` Kuhn DFS (`seen` reset moi root), `gradeMC`/`gradeTF`/`gradeSA`/`scoreLinear`.
+  - Swap-group: `isCorrect` theo max-matching; o sai `correctAnswer` = text term chua ghep; trung 1 dap an 2 lan chi 1 o dung.
+  - `gradeSA`: `0,5`=`0.5`=`0.50`; `1/2` khac `0.5`; khong tolerance, khong `1 500`=`1500`.
+  - `lib/grading.ts` re-export scoring; giu `computeOverallStatus`, `seededRng`, `seededShuffle`, `toAnswerMap`. Import cu `@/lib/grading` khong doi.
+  - Test: synonyms 2 thu tu, trung dap an, 3 dung 1 sai, 5’/5′=5', te  bao, 0,5, 1/2, TF thieu key khong `?? 'S'`.
 - Con lai / lech ke hoach:
+  - `pnpm exec tsc --noEmit` khong chay duoc (thieu node_modules / corepack) — giong phien 1-2.
+  - `gradeLiveAnswer` chua doi (phien 8). `submitQuiz` chua dung scoring (phien 4).
 - File da doi:
+  - `lib/scoring.ts`
+  - `lib/grading.ts`
+  - `scripts/check-scoring-phien3.mjs`
+  - `sualogic.md`
 
 ---
 
