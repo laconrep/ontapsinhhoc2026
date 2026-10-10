@@ -11,6 +11,7 @@ import {
   studentTab1Submissions,
   quizAttempts,
   quizAnswers,
+  quizAttemptQuestions,
   spacedRepetition,
   classStudents,
   classes,
@@ -21,12 +22,12 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm"
 import {
   computeOverallStatus,
   gradeSlots,
-  normalizeAnswer,
   seededRng,
   seededShuffle,
   type FillDragStatus,
   type SlotAnswer,
 } from "@/lib/grading"
+import { gradeMC, gradeSA, gradeTF, scoreLinear } from "@/lib/scoring"
 import { selectQuizQuestions } from "@/lib/quiz-selection"
 import type { KnowledgePointDto, QuestionDto, UnderlinedTerm, QuizResultDto } from "@/types"
 
@@ -769,6 +770,25 @@ export async function startQuiz(lessonId: string): Promise<{
     .values({ studentId: student.id, lessonId, totalSlots, maxScore: 10 })
     .returning({ id: quizAttempts.id })
 
+  if (chosen.length > 0) {
+    await db.insert(quizAttemptQuestions).values(
+      chosen.map((q, position) => {
+        const opts = optRows.filter((o) => o.questionId === q.id)
+        const clientOpts = clientQuestions[position]?.options ?? []
+        return {
+          attemptId: attempt.id,
+          questionId: q.id,
+          position,
+          optionOrder: clientOpts.map((o) => o.id),
+          snapshot: {
+            type: q.type,
+            options: opts.map((o) => ({ id: o.id, content: o.content, isCorrect: o.isCorrect })),
+          },
+        }
+      }),
+    )
+  }
+
   return { quizId: attempt.id, questions: clientQuestions, totalSlots, pointPerSlot }
 }
 
@@ -781,6 +801,7 @@ export async function submitQuiz(
   answers: Record<string, string | Record<string, "D" | "S">>,
 ): Promise<QuizResultDto> {
   const student = await requireRole("student")
+  await ensureSchema()
 
   const [attempt] = await db
     .select()
@@ -790,80 +811,119 @@ export async function submitQuiz(
   if (!attempt) throw new Error("Không tìm thấy bài kiểm tra")
   if (attempt.completedAt) throw new Error("Bài kiểm tra đã nộp")
 
-  const questionIds = Object.keys(answers)
-  const qRows = await db.select().from(questions).where(inArray(questions.id, questionIds))
-  const optRows = await db
+  const paper = await db
     .select()
-    .from(questionOptions)
-    .where(inArray(questionOptions.questionId, questionIds))
+    .from(quizAttemptQuestions)
+    .where(eq(quizAttemptQuestions.attemptId, quizId))
+    .orderBy(asc(quizAttemptQuestions.position))
 
   const totalSlots = attempt.totalSlots ?? 1
-  const pointPerSlot = 10 / totalSlots
-
   let correctSlots = 0
-  const answerRows: { attemptId: string; questionId: string; studentAnswer: string; isCorrect: boolean }[] = []
+  const answerRows: {
+    attemptId: string
+    questionId: string
+    optionId: string | null
+    studentAnswer: string | null
+    isCorrect: boolean
+  }[] = []
   const details: QuizResultDto["details"] = []
+  const qRowsForSr: { knowledgePointId: string | null }[] = []
 
-  for (const q of qRows) {
-    const opts = optRows.filter((o) => o.questionId === q.id)
-    if (q.type === "MC") {
-      const chosenId = answers[q.id] as string
+  const paperIds = paper.map((p) => p.questionId)
+  const liveQs =
+    paperIds.length > 0
+      ? await db
+          .select({ id: questions.id, knowledgePointId: questions.knowledgePointId })
+          .from(questions)
+          .where(inArray(questions.id, paperIds))
+      : []
+  const kpByQ = new Map(liveQs.map((q) => [q.id, q.knowledgePointId]))
+
+  for (const row of paper) {
+    const snap = row.snapshot
+    const type = snap?.type ?? "MC"
+    const opts = snap?.options ?? []
+    qRowsForSr.push({ knowledgePointId: kpByQ.get(row.questionId) ?? null })
+
+    if (type === "MC") {
+      const raw = answers[row.questionId]
+      const chosenId = typeof raw === "string" ? raw : null
+      const validChosen =
+        chosenId && opts.some((o) => o.id === chosenId) ? chosenId : null
       const correctOpt = opts.find((o) => o.isCorrect)
-      const isCorrect = Boolean(correctOpt && chosenId === correctOpt.id)
+      const isCorrect = gradeMC(validChosen, correctOpt?.id ?? "")
       if (isCorrect) correctSlots += 1
-      answerRows.push({ attemptId: quizId, questionId: q.id, studentAnswer: chosenId ?? "", isCorrect })
+      answerRows.push({
+        attemptId: quizId,
+        questionId: row.questionId,
+        optionId: null,
+        studentAnswer: validChosen,
+        isCorrect,
+      })
       details.push({
-        questionId: q.id,
+        questionId: row.questionId,
         questionType: "MC",
-        studentAnswer: opts.find((o) => o.id === chosenId)?.content ?? "",
+        studentAnswer: opts.find((o) => o.id === validChosen)?.content ?? "",
         isCorrect,
         correctAnswer: correctOpt?.content ?? "",
       })
-    } else if (q.type === "SA") {
-      const val = (answers[q.id] as string) ?? ""
-      const correctOpt = opts.find((o) => o.isCorrect)
-      const accepted = correctOpt ? normalizeAnswer(val) === normalizeAnswer(correctOpt.content) : false
-      if (accepted) correctSlots += 1
-      answerRows.push({ attemptId: quizId, questionId: q.id, studentAnswer: val, isCorrect: accepted })
-      details.push({
-        questionId: q.id,
-        questionType: "SA",
-        studentAnswer: val,
-        isCorrect: accepted,
-        correctAnswer: correctOpt?.content ?? "",
+    } else if (type === "SA") {
+      const raw = answers[row.questionId]
+      const val = typeof raw === "string" ? raw : ""
+      const truncated = val.length > 200 ? val.slice(0, 200) : val
+      const accepted = opts.filter((o) => o.isCorrect).map((o) => o.content)
+      const isCorrect = truncated.length > 0 ? gradeSA(truncated, accepted) : false
+      if (isCorrect) correctSlots += 1
+      answerRows.push({
+        attemptId: quizId,
+        questionId: row.questionId,
+        optionId: null,
+        studentAnswer: truncated.length > 0 ? truncated : null,
+        isCorrect,
       })
-    } else if (q.type === "TF") {
-      const map = (answers[q.id] as Record<string, "D" | "S">) ?? {}
-      const perYy: { optionId: string; value: string; isCorrect: boolean; content: string; correct: boolean }[] = []
-      for (const o of opts) {
-        const studentValue = map[o.id] ?? "S"
-        const isCorrectY = (studentValue === "D") === o.isCorrect
-        if (isCorrectY) correctSlots += 1
+      details.push({
+        questionId: row.questionId,
+        questionType: "SA",
+        studentAnswer: truncated,
+        isCorrect,
+        correctAnswer: accepted[0] ?? "",
+      })
+    } else if (type === "TF") {
+      const map = (typeof answers[row.questionId] === "object" && answers[row.questionId] != null
+        ? (answers[row.questionId] as Record<string, "D" | "S" | null | undefined>)
+        : {}) as Record<string, "D" | "S" | null | undefined>
+      const graded = gradeTF(map, opts)
+      const perYy: { content: string; value: string; isCorrect: boolean; correct: boolean }[] = []
+      for (const p of graded.perOption) {
+        const opt = opts.find((o) => o.id === p.optionId)
+        if (p.isCorrect) correctSlots += 1
+        const studentValue = p.answered ? (map[p.optionId] as string) : null
         answerRows.push({
           attemptId: quizId,
-          questionId: q.id,
-          studentAnswer: JSON.stringify({ optionId: o.id, value: studentValue }),
-          isCorrect: isCorrectY,
+          questionId: row.questionId,
+          optionId: p.optionId,
+          studentAnswer: studentValue,
+          isCorrect: p.isCorrect,
         })
         perYy.push({
-          optionId: o.id,
-          value: studentValue,
-          isCorrect: isCorrectY,
-          content: o.content,
-          correct: o.isCorrect,
+          content: opt?.content ?? "",
+          value: studentValue ?? "",
+          isCorrect: p.isCorrect,
+          correct: Boolean(opt?.isCorrect),
         })
       }
       details.push({
-        questionId: q.id,
+        questionId: row.questionId,
         questionType: "TF",
-        studentAnswer: JSON.stringify(perYy.map((p) => ({ content: p.content, value: p.value, isCorrect: p.isCorrect, correct: p.correct }))),
-        isCorrect: perYy.every((p) => p.isCorrect),
+        studentAnswer: JSON.stringify(perYy),
+        isCorrect: perYy.length > 0 && perYy.every((p) => p.isCorrect),
         correctAnswer: "",
       })
     }
   }
 
-  const score = Number((correctSlots * pointPerSlot).toFixed(2))
+  correctSlots = Math.min(correctSlots, totalSlots)
+  const { score, percentage } = scoreLinear(correctSlots, totalSlots)
 
   // 1) update attempt
   await db
@@ -877,7 +937,7 @@ export async function submitQuiz(
   }
 
   // 3) seed spaced_repetition cho các KP trong bài
-  const kpIds = [...new Set(qRows.map((q) => q.knowledgePointId).filter((id): id is string => Boolean(id)))]
+  const kpIds = [...new Set(qRowsForSr.map((q) => q.knowledgePointId).filter((id): id is string => Boolean(id)))]
   const tomorrow = new Date()
   tomorrow.setDate(tomorrow.getDate() + 1)
   for (const kpId of kpIds) {
@@ -908,7 +968,7 @@ export async function submitQuiz(
     score,
     maxScore: 10,
     totalSlots,
-    percentage: Math.round((correctSlots / totalSlots) * 100),
+    percentage,
     details,
   }
 }
@@ -948,15 +1008,19 @@ export async function getLatestQuizResult(lessonId: string): Promise<QuizResultD
     .from(quizAnswers)
     .where(eq(quizAnswers.attemptId, attempt.id))
 
-  const correctSlots = ansRows.filter((a) => a.isCorrect).length
+  const correctSlots = Math.min(
+    ansRows.filter((a) => a.isCorrect).length,
+    (attempt.totalSlots ?? ansRows.length) || 1,
+  )
   const totalSlots = (attempt.totalSlots ?? ansRows.length) || 1
+  const { percentage } = scoreLinear(correctSlots, totalSlots)
 
   return {
     attemptId: attempt.id,
     score: attempt.score ?? 0,
     maxScore: 10,
     totalSlots,
-    percentage: Math.round((correctSlots / totalSlots) * 100),
+    percentage,
     details: [],
   }
 }

@@ -356,39 +356,52 @@ function TFInput({
 }) {
   return (
     <div className="flex flex-col gap-2">
-      {question.options.map((o) => (
-        <div key={o.id} className="flex items-center gap-2 rounded-lg border border-border p-2">
-          {o.bodyHtml ? (
-            <QuestionStem
-              content={o.content}
-              bodyHtml={o.bodyHtml}
-              className="text-sm text-foreground"
-              maxHeightClass="max-h-24 flex-1"
-            />
-          ) : (
-            <span className="flex-1 text-sm text-foreground">{o.content}</span>
-          )}
-          <div className="flex gap-1">
-            {(["D", "S"] as const).map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => onChange({ ...value, [o.id]: v })}
-                className={cn(
-                  "min-h-9 min-w-11 rounded-md border px-2 text-sm font-medium transition-colors",
-                  value[o.id] === v
-                    ? v === "D"
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-destructive bg-destructive text-white"
-                    : "border-border text-foreground hover:bg-secondary",
-                )}
-              >
-                {v === "D" ? "Đúng" : "Sai"}
-              </button>
-            ))}
+      {question.options.map((o) => {
+        const chosen = value[o.id]
+        const unanswered = chosen !== "D" && chosen !== "S"
+        return (
+          <div
+            key={o.id}
+            className={cn(
+              "flex items-center gap-2 rounded-lg border p-2",
+              unanswered ? "border-dashed border-muted-foreground/50 bg-secondary/40" : "border-border",
+            )}
+          >
+            {o.bodyHtml ? (
+              <QuestionStem
+                content={o.content}
+                bodyHtml={o.bodyHtml}
+                className="text-sm text-foreground"
+                maxHeightClass="max-h-24 flex-1"
+              />
+            ) : (
+              <span className="flex-1 text-sm text-foreground">{o.content}</span>
+            )}
+            <div className="flex items-center gap-1">
+              {unanswered && (
+                <span className="hidden text-[11px] font-medium text-muted-foreground sm:inline">Chưa chọn</span>
+              )}
+              {(["D", "S"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => onChange({ ...value, [o.id]: v })}
+                  className={cn(
+                    "min-h-9 min-w-11 rounded-md border px-2 text-sm font-medium transition-colors",
+                    chosen === v
+                      ? v === "D"
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-destructive bg-destructive text-white"
+                      : "border-border text-foreground hover:bg-secondary",
+                  )}
+                >
+                  {v === "D" ? "Đúng" : "Sai"}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -486,7 +499,7 @@ function TFDetail({ raw }: { raw: string }) {
         <div key={i} className="flex items-center justify-between gap-2 text-xs">
           <span className="flex-1 text-muted-foreground">{it.content}</span>
           <span className={cn(it.isCorrect ? "text-primary" : "text-destructive")}>
-            {it.value === "D" ? "Đúng" : "Sai"} {it.isCorrect ? "✓" : "✗"}
+            {it.value === "D" ? "Đúng" : it.value === "S" ? "Sai" : "Chưa chọn"} {it.isCorrect ? "✓" : "✗"}
           </span>
         </div>
       ))}

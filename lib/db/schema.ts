@@ -236,9 +236,31 @@ export const quizAnswers = pgTable("quiz_answers", {
   questionId: uuid("questionId")
     .notNull()
     .references(() => questions.id, { onDelete: "cascade" }),
+  optionId: uuid("optionId"),
   studentAnswer: text("studentAnswer"),
   isCorrect: boolean("isCorrect"),
 })
+
+export const quizAttemptQuestions = pgTable(
+  "quiz_attempt_questions",
+  {
+    attemptId: uuid("attemptId")
+      .notNull()
+      .references(() => quizAttempts.id, { onDelete: "cascade" }),
+    questionId: uuid("questionId").notNull(),
+    position: integer("position").notNull(),
+    optionOrder: jsonb("optionOrder").$type<string[]>(),
+    snapshot: jsonb("snapshot")
+      .$type<{
+        type: string
+        options: { id: string; content: string; isCorrect: boolean }[]
+      }>()
+      .notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.attemptId, t.questionId] }),
+  }),
+)
 
 export const quizAutosave = pgTable(
   "quiz_autosave",
