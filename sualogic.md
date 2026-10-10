@@ -1,6 +1,6 @@
 # Ke hoach sua logic cham diem (8 phien)
 
-Trang thai: **chua bat dau phien 1**. Day la nguon su that cho 8 phien. Phien sau CHI doc file nay + dung cac file liet ke trong phien do. KHONG doc lai toan repo. KHONG lam phan hoan (muc 3).
+Trang thai: **phien 1 xong**. Day la nguon su that cho 8 phien. Phien sau CHI doc file nay + dung cac file liet ke trong phien do. KHONG doc lai toan repo. KHONG lam phan hoan (muc 3).
 
 Nguon: doi chieu spec `Spec sua logic cham diem — EduSync (ontapsinhhoc2026).md` voi code that. Cac ID (FD-01, QZ-01, ...) giu nguyen de truy vet.
 
@@ -199,7 +199,7 @@ scoreLinear(correctSlots: number, totalSlots: number): { score: number; percenta
 
 | Phien | Muc tieu | Trang thai |
 | --- | --- | --- |
-| 1 | Offset o trong + extractBlanks + renderSlots/kp-render | chua |
+| 1 | Offset o trong + extractBlanks + renderSlots/kp-render | xong — `node --experimental-strip-types scripts/check-scoring-phien1.mjs` in `phien 1 OK` |
 | 2 | Parser nhom hoan doi, bo ngoac kep thuong, backfill, UI GV | chua |
 | 3 | lib/scoring.ts, matching, normalize quotes, gradeSA so | chua |
 | 4 | Snapshot de Tab 4, TF trong = sai, diem <= 10 | chua |
@@ -240,8 +240,20 @@ Moi phien: pham vi, file DUOC mo, viec, nghiem thu, cam.
 **Bao cao phien 1** (dien truoc khi commit)
 
 - Da lam:
+  - `UnderlinedTerm` them `start?`/`end?`.
+  - `extractBlanks` gan `start = cleanStart - lead`, `end = start + text.length` (lead = space dau truoc `trim()`).
+  - `renderSlots` / `renderMarkedContent` cat theo offset khi moi term thoa bat bien `content.slice(start,end)===text`; overlap/thieu offset -> legacy `indexOf` + `console.warn`.
+  - Test: 3 vi du T/nucleotit/ADN, space dau, roundtrip syn+swap, legacy khong offset van cat `Trong`.
 - Con lai / lech ke hoach:
+  - Swap group va `"tu"` blank chua doi (phien 2).
+  - `pnpm exec tsc --noEmit` khong chay duoc (thieu node_modules / corepack). Loi tsc global toan la missing deps, khong lien quan file phien 1.
 - File da doi:
+  - `types/index.ts`
+  - `lib/worksheet-parser.ts` (`extractBlanks` thoi)
+  - `lib/slot-render.ts`
+  - `lib/kp-render.ts`
+  - `scripts/check-scoring-phien1.mjs`
+  - `sualogic.md`
 
 ---
 

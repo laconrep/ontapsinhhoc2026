@@ -169,6 +169,8 @@ export function extractBlanks(raw: string): {
   }
   content += raw.slice(cursor)
 
+  const lead = content.length - content.trimStart().length
+
   // gán swapGroupId: các ô hoán đổi liên tiếp, không có dấu chấm câu xen giữa → cùng group
   const terms: UnderlinedTerm[] = []
   let groupCounter = 0
@@ -190,6 +192,7 @@ export function extractBlanks(raw: string): {
     } else {
       currentGroup = null
     }
+    const start = p.cleanStart - lead
     terms.push({
       text: p.text,
       slotIndex: i,
@@ -197,6 +200,8 @@ export function extractBlanks(raw: string): {
       swapGroupId,
       extraAccepted: [],
       synonyms: p.synonyms && p.synonyms.length > 0 ? p.synonyms : undefined,
+      start,
+      end: start + p.text.length,
     })
     prevEnd = p.cleanStart + p.text.length
     prevWasSwap = p.allowSwap
