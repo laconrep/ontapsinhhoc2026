@@ -11,7 +11,9 @@ import {
   primaryKey,
   index,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/pg-core"
+import { sql } from "drizzle-orm"
 
 // --- Better Auth required tables -------------------------------------------
 // Column names are camelCase to match Better Auth's defaults. Do not rename.
@@ -195,18 +197,24 @@ export const studentProgress = pgTable(
   }),
 )
 
-export const studentTab1Submissions = pgTable("student_tab1_submissions", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  studentId: text("studentId")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  lessonId: uuid("lessonId")
-    .notNull()
-    .references(() => lessons.id, { onDelete: "cascade" }),
-  assessments: jsonb("assessments"),
-  submittedAt: timestamp("submittedAt").notNull().defaultNow(),
-  isLocked: boolean("isLocked").notNull().default(true),
-})
+export const studentTab1Submissions = pgTable(
+  "student_tab1_submissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    studentId: text("studentId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    lessonId: uuid("lessonId")
+      .notNull()
+      .references(() => lessons.id, { onDelete: "cascade" }),
+    assessments: jsonb("assessments"),
+    submittedAt: timestamp("submittedAt").notNull().defaultNow(),
+    isLocked: boolean("isLocked").notNull().default(true),
+  },
+  (t) => ({
+    uniqStudentLesson: unique("s1_student_lesson_unique").on(t.studentId, t.lessonId),
+  }),
+)
 
 export const quizAttempts = pgTable(
   "quiz_attempts",
@@ -230,18 +238,29 @@ export const quizAttempts = pgTable(
   }),
 )
 
-export const quizAnswers = pgTable("quiz_answers", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  attemptId: uuid("attemptId")
-    .notNull()
-    .references(() => quizAttempts.id, { onDelete: "cascade" }),
-  questionId: uuid("questionId")
-    .notNull()
-    .references(() => questions.id, { onDelete: "cascade" }),
-  optionId: uuid("optionId"),
-  studentAnswer: text("studentAnswer"),
-  isCorrect: boolean("isCorrect"),
-})
+export const quizAnswers = pgTable(
+  "quiz_answers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    attemptId: uuid("attemptId")
+      .notNull()
+      .references(() => quizAttempts.id, { onDelete: "cascade" }),
+    questionId: uuid("questionId")
+      .notNull()
+      .references(() => questions.id, { onDelete: "cascade" }),
+    optionId: uuid("optionId"),
+    studentAnswer: text("studentAnswer"),
+    isCorrect: boolean("isCorrect"),
+  },
+  (t) => ({
+    mcSaUnique: uniqueIndex("quiz_answers_mc_sa_uidx")
+      .on(t.attemptId, t.questionId)
+      .where(sql`${t.optionId} IS NULL`),
+    tfUnique: uniqueIndex("quiz_answers_tf_uidx")
+      .on(t.attemptId, t.questionId, t.optionId)
+      .where(sql`${t.optionId} IS NOT NULL`),
+  }),
+)
 
 export const quizAttemptQuestions = pgTable(
   "quiz_attempt_questions",

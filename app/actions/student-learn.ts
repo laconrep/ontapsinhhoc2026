@@ -23,6 +23,7 @@ import {
   computeOverallStatus,
   gradeSlots,
   seededRng,
+  seededShuffle,
   type FillDragStatus,
   type SlotAnswer,
 } from "@/lib/grading"
@@ -360,18 +361,6 @@ export async function submitTab1(lessonId: string, assessments: Record<string, "
   const student = await requireRole("student")
   await assertLessonAccess(student.id, lessonId)
 
-  const [existingSub] = await db
-    .select({ id: studentTab1Submissions.id })
-    .from(studentTab1Submissions)
-    .where(
-      and(
-        eq(studentTab1Submissions.studentId, student.id),
-        eq(studentTab1Submissions.lessonId, lessonId),
-      ),
-    )
-    .limit(1)
-  if (existingSub) throw new Error(TAB1_LOCKED_MSG)
-
   const lessonKpIds = await getKpIdsOfLesson(lessonId)
   const lessonKpSet = new Set(lessonKpIds)
   const extra = Object.keys(assessments).filter((id) => !lessonKpSet.has(id))
@@ -382,44 +371,57 @@ export async function submitTab1(lessonId: string, assessments: Record<string, "
   if (missing.length > 0) throw new Error(`Thiếu đánh giá: ${missing.join(", ")}`)
 
   const kpIds = lessonKpIds
-  for (const kpId of kpIds) {
-    const [existing] = await db
-      .select()
-      .from(studentProgress)
-      .where(
-        and(eq(studentProgress.studentId, student.id), eq(studentProgress.knowledgePointId, kpId)),
-      )
-      .limit(1)
-    const sa = assessments[kpId]
-    const overallStatus = computeOverallStatus({
-      selfAssessment: sa,
-      fillStatus: existing?.fillStatus ?? null,
-      dragStatus: existing?.dragStatus ?? null,
-    })
-    if (existing) {
-      await db
-        .update(studentProgress)
-        .set({ selfAssessment: sa, overallStatus, updatedAt: new Date() })
-        .where(
-          and(
-            eq(studentProgress.studentId, student.id),
-            eq(studentProgress.knowledgePointId, kpId),
-          ),
-        )
-    } else {
-      await db.insert(studentProgress).values({
+  await db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(studentTab1Submissions)
+      .values({ studentId: student.id, lessonId, assessments, isLocked: true })
+      .onConflictDoNothing({
+        target: [studentTab1Submissions.studentId, studentTab1Submissions.lessonId],
+      })
+      .returning({ id: studentTab1Submissions.id })
+    if (inserted.length === 0) throw new Error(TAB1_LOCKED_MSG)
+
+    const existingRows =
+      kpIds.length === 0
+        ? []
+        : await tx
+            .select()
+            .from(studentProgress)
+            .where(
+              and(
+                eq(studentProgress.studentId, student.id),
+                inArray(studentProgress.knowledgePointId, kpIds),
+              ),
+            )
+    const byKp = new Map(existingRows.map((r) => [r.knowledgePointId, r]))
+    const values = kpIds.map((kpId) => {
+      const existing = byKp.get(kpId)
+      const sa = assessments[kpId]
+      return {
         studentId: student.id,
         knowledgePointId: kpId,
         selfAssessment: sa,
-        overallStatus,
-      })
+        overallStatus: computeOverallStatus({
+          selfAssessment: sa,
+          fillStatus: existing?.fillStatus ?? null,
+          dragStatus: existing?.dragStatus ?? null,
+        }),
+      }
+    })
+    if (values.length > 0) {
+      await tx
+        .insert(studentProgress)
+        .values(values)
+        .onConflictDoUpdate({
+          target: [studentProgress.studentId, studentProgress.knowledgePointId],
+          set: {
+            selfAssessment: sql`excluded."selfAssessment"`,
+            overallStatus: sql`excluded."overallStatus"`,
+            updatedAt: new Date(),
+          },
+        })
     }
-  }
-
-  // lưu submission (lock)
-  await db
-    .insert(studentTab1Submissions)
-    .values({ studentId: student.id, lessonId, assessments, isLocked: true })
+  })
 
   const knownCount = Object.values(assessments).filter((v) => v === "known").length
   return { knownCount, total: kpIds.length }
@@ -428,7 +430,7 @@ export async function submitTab1(lessonId: string, assessments: Record<string, "
 /**
  * Mở khoá để HS làm lại toàn bộ bài học từ đầu.
  * Xoá dấu khoá Tab 1 (studentTab1Submissions) để mở lại tab Nội dung.
- * GIỮ LẠI lịch sử điểm (quizAttempts) để thống kê tiến bộ — mỗi lần làm vẫn được lưu.
+ * GIỮ LẠI lịch sử quiz_attempts — không xoá attempt đã nộp.
  */
 export async function resetLessonProgress(lessonId: string): Promise<{ success: true }> {
   const student = await requireRole("student")
@@ -483,7 +485,13 @@ export async function resetLessonProgress(lessonId: string): Promise<{ success: 
         dragStatus: null,
         fillAttempts: 0,
         dragAttempts: 0,
-        overallStatus: "not_started",
+        fillRevealed: false,
+        dragRevealed: false,
+        overallStatus: sql`CASE
+          WHEN ${studentProgress.selfAssessment} = 'known' THEN 'known'
+          WHEN ${studentProgress.selfAssessment} = 'unknown' THEN 'unknown'
+          ELSE 'not_started'
+        END`,
         updatedAt: new Date(),
       })
       .where(
@@ -566,44 +574,57 @@ export async function submitTab2Question(
   const terms = (kp.underlinedTerms as UnderlinedTerm[]) ?? []
   assertSlotAnswers(terms, answers)
 
-  const [existing] = await db
-    .select()
-    .from(studentProgress)
-    .where(
-      and(eq(studentProgress.studentId, student.id), eq(studentProgress.knowledgePointId, kpId)),
-    )
-    .limit(1)
-  const currentFillStatus = existing?.fillStatus ?? null
-  const currentDragStatus = existing?.dragStatus ?? null
-  const currentSelfAssessment = existing?.selfAssessment ?? null
+  return db.transaction(async (tx) => {
+    await tx
+      .insert(studentProgress)
+      .values({
+        studentId: student.id,
+        knowledgePointId: kpId,
+        overallStatus: "not_started",
+      })
+      .onConflictDoNothing({
+        target: [studentProgress.studentId, studentProgress.knowledgePointId],
+      })
 
-  if (currentSelfAssessment !== "known") {
-    throw new Error("Câu này không thuộc bước Điền khuyết")
-  }
+    const [existing] = await tx
+      .select()
+      .from(studentProgress)
+      .where(
+        and(eq(studentProgress.studentId, student.id), eq(studentProgress.knowledgePointId, kpId)),
+      )
+      .limit(1)
+      .for("update")
 
-  if (currentFillStatus === "correct") {
-    return {
-      results: alreadyCorrectResults(terms),
-      allCorrect: true,
-      kpStatus: existing?.overallStatus ?? "mastered",
+    const currentFillStatus = existing?.fillStatus ?? null
+    const currentDragStatus = existing?.dragStatus ?? null
+    const currentSelfAssessment = existing?.selfAssessment ?? null
+
+    if (currentSelfAssessment !== "known") {
+      throw new Error("Câu này không thuộc bước Điền khuyết")
     }
-  }
 
-  assertGradeBurst(student.id, kpId)
-  const { results, allCorrect } = gradeSlots(terms, answers)
+    if (currentFillStatus === "correct") {
+      return {
+        results: alreadyCorrectResults(terms),
+        allCorrect: true,
+        kpStatus: existing?.overallStatus ?? "mastered",
+      }
+    }
 
-  const newFillStatus: FillDragStatus = allCorrect ? "correct" : "incorrect"
-  const overallStatus = computeOverallStatus({
-    selfAssessment: currentSelfAssessment,
-    fillStatus: newFillStatus,
-    dragStatus: currentDragStatus,
-  })
-  const attemptsAfter = (existing?.fillAttempts ?? 0) + 1
-  const { stripped, revealed } = stripFillResults(results, attemptsAfter, allCorrect)
-  const fillRevealed = Boolean(existing?.fillRevealed) || revealed
+    assertGradeBurst(student.id, kpId)
+    const { results, allCorrect } = gradeSlots(terms, answers)
 
-  if (existing) {
-    await db
+    const newFillStatus: FillDragStatus = allCorrect ? "correct" : "incorrect"
+    const overallStatus = computeOverallStatus({
+      selfAssessment: currentSelfAssessment,
+      fillStatus: newFillStatus,
+      dragStatus: currentDragStatus,
+    })
+    const attemptsAfter = (existing?.fillAttempts ?? 0) + 1
+    const { stripped, revealed } = stripFillResults(results, attemptsAfter, allCorrect)
+    const fillRevealed = Boolean(existing?.fillRevealed) || revealed
+
+    await tx
       .update(studentProgress)
       .set({
         fillStatus: newFillStatus,
@@ -615,18 +636,9 @@ export async function submitTab2Question(
       .where(
         and(eq(studentProgress.studentId, student.id), eq(studentProgress.knowledgePointId, kpId)),
       )
-  } else {
-    await db.insert(studentProgress).values({
-      studentId: student.id,
-      knowledgePointId: kpId,
-      fillStatus: newFillStatus,
-      fillAttempts: 1,
-      fillRevealed,
-      overallStatus,
-    })
-  }
 
-  return { results: stripped, allCorrect, kpStatus: overallStatus }
+    return { results: stripped, allCorrect, kpStatus: overallStatus }
+  })
 }
 
 // ============ Tab 3 — Kéo thả ============
@@ -713,44 +725,57 @@ export async function submitTab3Question(
   const terms = (kp.underlinedTerms as UnderlinedTerm[]) ?? []
   assertSlotAnswers(terms, answers)
 
-  const [existing] = await db
-    .select()
-    .from(studentProgress)
-    .where(
-      and(eq(studentProgress.studentId, student.id), eq(studentProgress.knowledgePointId, kpId)),
-    )
-    .limit(1)
-  const currentFillStatus = existing?.fillStatus ?? null
-  const currentDragStatus = existing?.dragStatus ?? null
-  const currentSelfAssessment = existing?.selfAssessment ?? null
+  return db.transaction(async (tx) => {
+    await tx
+      .insert(studentProgress)
+      .values({
+        studentId: student.id,
+        knowledgePointId: kpId,
+        overallStatus: "not_started",
+      })
+      .onConflictDoNothing({
+        target: [studentProgress.studentId, studentProgress.knowledgePointId],
+      })
 
-  if (currentSelfAssessment !== "unknown") {
-    throw new Error("Câu này không thuộc bước Kéo thả")
-  }
+    const [existing] = await tx
+      .select()
+      .from(studentProgress)
+      .where(
+        and(eq(studentProgress.studentId, student.id), eq(studentProgress.knowledgePointId, kpId)),
+      )
+      .limit(1)
+      .for("update")
 
-  if (currentDragStatus === "correct") {
-    return {
-      results: alreadyCorrectResults(terms),
-      allCorrect: true,
-      kpStatus: existing?.overallStatus ?? "mastered",
+    const currentFillStatus = existing?.fillStatus ?? null
+    const currentDragStatus = existing?.dragStatus ?? null
+    const currentSelfAssessment = existing?.selfAssessment ?? null
+
+    if (currentSelfAssessment !== "unknown") {
+      throw new Error("Câu này không thuộc bước Kéo thả")
     }
-  }
 
-  assertGradeBurst(student.id, kpId)
-  const { results, allCorrect } = gradeSlots(terms, answers)
+    if (currentDragStatus === "correct") {
+      return {
+        results: alreadyCorrectResults(terms),
+        allCorrect: true,
+        kpStatus: existing?.overallStatus ?? "mastered",
+      }
+    }
 
-  const newDragStatus: FillDragStatus = allCorrect ? "correct" : "incorrect"
-  const overallStatus = computeOverallStatus({
-    selfAssessment: currentSelfAssessment,
-    fillStatus: currentFillStatus,
-    dragStatus: newDragStatus,
-  })
-  const attemptsAfter = (existing?.dragAttempts ?? 0) + 1
-  const { stripped, revealed } = stripDragResults(results, attemptsAfter, allCorrect)
-  const dragRevealed = Boolean(existing?.dragRevealed) || revealed
+    assertGradeBurst(student.id, kpId)
+    const { results, allCorrect } = gradeSlots(terms, answers)
 
-  if (existing) {
-    await db
+    const newDragStatus: FillDragStatus = allCorrect ? "correct" : "incorrect"
+    const overallStatus = computeOverallStatus({
+      selfAssessment: currentSelfAssessment,
+      fillStatus: currentFillStatus,
+      dragStatus: newDragStatus,
+    })
+    const attemptsAfter = (existing?.dragAttempts ?? 0) + 1
+    const { stripped, revealed } = stripDragResults(results, attemptsAfter, allCorrect)
+    const dragRevealed = Boolean(existing?.dragRevealed) || revealed
+
+    await tx
       .update(studentProgress)
       .set({
         dragStatus: newDragStatus,
@@ -762,18 +787,9 @@ export async function submitTab3Question(
       .where(
         and(eq(studentProgress.studentId, student.id), eq(studentProgress.knowledgePointId, kpId)),
       )
-  } else {
-    await db.insert(studentProgress).values({
-      studentId: student.id,
-      knowledgePointId: kpId,
-      dragStatus: newDragStatus,
-      dragAttempts: 1,
-      dragRevealed,
-      overallStatus,
-    })
-  }
 
-  return { results: stripped, allCorrect, kpStatus: overallStatus }
+    return { results: stripped, allCorrect, kpStatus: overallStatus }
+  })
 }
 
 // ============ Tab 4 — Kiểm tra tổng hợp ============
@@ -787,6 +803,12 @@ type QuizQuestionForClient = {
   options: { id: string; content: string; bodyHtml?: string | null }[] // MC/TF (không lộ isCorrect)
 }
 
+function hideQuizOptions(
+  opts: { id: string; content: string; bodyHtml?: string | null }[],
+): { id: string; content: string; bodyHtml?: string | null }[] {
+  return opts.map((o) => ({ id: o.id, content: o.content, bodyHtml: o.bodyHtml ?? null }))
+}
+
 export async function startQuiz(lessonId: string): Promise<{
   quizId: string
   questions: QuizQuestionForClient[]
@@ -796,6 +818,91 @@ export async function startQuiz(lessonId: string): Promise<{
   const student = await requireRole("student")
   await ensureSchema()
   await assertLessonAccess(student.id, lessonId)
+
+  const [submission] = await db
+    .select({ submittedAt: studentTab1Submissions.submittedAt })
+    .from(studentTab1Submissions)
+    .where(
+      and(eq(studentTab1Submissions.studentId, student.id), eq(studentTab1Submissions.lessonId, lessonId)),
+    )
+    .limit(1)
+
+  const openWhere = submission
+    ? and(
+        eq(quizAttempts.studentId, student.id),
+        eq(quizAttempts.lessonId, lessonId),
+        sql`${quizAttempts.completedAt} is null`,
+        sql`${quizAttempts.startedAt} > ${submission.submittedAt}`,
+      )
+    : and(
+        eq(quizAttempts.studentId, student.id),
+        eq(quizAttempts.lessonId, lessonId),
+        sql`${quizAttempts.completedAt} is null`,
+      )
+
+  const [openAttempt] = await db
+    .select()
+    .from(quizAttempts)
+    .where(openWhere)
+    .orderBy(sql`${quizAttempts.startedAt} desc`)
+    .limit(1)
+
+  if (openAttempt) {
+    const paper = await db
+      .select()
+      .from(quizAttemptQuestions)
+      .where(eq(quizAttemptQuestions.attemptId, openAttempt.id))
+      .orderBy(asc(quizAttemptQuestions.position))
+    const paperIds = paper.map((p) => p.questionId)
+    const liveQs =
+      paperIds.length > 0
+        ? await db
+            .select()
+            .from(questions)
+            .where(inArray(questions.id, paperIds))
+        : []
+    const liveById = new Map(liveQs.map((q) => [q.id, q]))
+    const liveOpts =
+      paperIds.length > 0
+        ? await db
+            .select()
+            .from(questionOptions)
+            .where(inArray(questionOptions.questionId, paperIds))
+        : []
+    const optsByQ = new Map<string, typeof liveOpts>()
+    for (const o of liveOpts) {
+      const list = optsByQ.get(o.questionId) ?? []
+      list.push(o)
+      optsByQ.set(o.questionId, list)
+    }
+
+    const clientQuestions: QuizQuestionForClient[] = paper.map((row) => {
+      const live = liveById.get(row.questionId)
+      const snap = row.snapshot
+      const type = (snap?.type ?? live?.type ?? "MC") as "MC" | "TF" | "SA"
+      const order = row.optionOrder ?? []
+      const snapOpts = snap?.options ?? []
+      const liveList = optsByQ.get(row.questionId) ?? []
+      const byId = new Map(
+        (snapOpts.length > 0 ? snapOpts : liveList).map((o) => [o.id, o]),
+      )
+      const ordered =
+        order.length > 0
+          ? order.map((id) => byId.get(id)).filter((o): o is NonNullable<typeof o> => Boolean(o))
+          : [...byId.values()]
+      return {
+        id: row.questionId,
+        type,
+        content: live?.content ?? "",
+        bodyHtml: live?.bodyHtml ?? null,
+        knowledgePointId: live?.knowledgePointId ?? null,
+        options: type === "SA" ? [] : hideQuizOptions(ordered),
+      }
+    })
+    const totalSlots = openAttempt.totalSlots ?? 1
+    const pointPerSlot = totalSlots > 0 ? 10 / totalSlots : 0
+    return { quizId: openAttempt.id, questions: clientQuestions, totalSlots, pointPerSlot }
+  }
 
   const qRows = await db
     .select()
@@ -820,7 +927,6 @@ export async function startQuiz(lessonId: string): Promise<{
     )
     .orderBy(asc(questionOptions.order))
 
-  // attemptNumber cho seed
   const [{ c: doneCount }] = await db
     .select({ c: sql<number>`count(*)::int` })
     .from(quizAttempts)
@@ -843,7 +949,6 @@ export async function startQuiz(lessonId: string): Promise<{
   const byId = new Map(qRows.map((q) => [q.id, q]))
   const chosen = selected.chosen.map((id) => byId.get(id)).filter((q): q is (typeof qRows)[number] => Boolean(q))
 
-  // tính totalSlots: MC=1, SA=1, TF=số ý
   let totalSlots = 0
   const clientQuestions: QuizQuestionForClient[] = chosen.map((q) => {
     const opts = optRows.filter((o) => o.questionId === q.id)
@@ -869,7 +974,6 @@ export async function startQuiz(lessonId: string): Promise<{
         options: opts.map((o) => ({ id: o.id, content: o.content, bodyHtml: o.bodyHtml ?? null })),
       }
     }
-    // SA
     totalSlots += 1
     return {
       id: q.id,
@@ -921,174 +1025,181 @@ export async function submitQuiz(
   const student = await requireRole("student")
   await ensureSchema()
 
-  const [attempt] = await db
-    .select()
-    .from(quizAttempts)
-    .where(and(eq(quizAttempts.id, quizId), eq(quizAttempts.studentId, student.id)))
-    .limit(1)
-  if (!attempt) throw new Error("Không tìm thấy bài kiểm tra")
-  if (attempt.completedAt) throw new Error("Bài kiểm tra đã nộp")
-
-  const paper = await db
-    .select()
-    .from(quizAttemptQuestions)
-    .where(eq(quizAttemptQuestions.attemptId, quizId))
-    .orderBy(asc(quizAttemptQuestions.position))
-
-  const totalSlots = attempt.totalSlots ?? 1
-  let correctSlots = 0
-  const answerRows: {
-    attemptId: string
-    questionId: string
-    optionId: string | null
-    studentAnswer: string | null
-    isCorrect: boolean
-  }[] = []
-  const details: QuizResultDto["details"] = []
-  const qRowsForSr: { knowledgePointId: string | null }[] = []
-
-  const paperIds = paper.map((p) => p.questionId)
-  const liveQs =
-    paperIds.length > 0
-      ? await db
-          .select({ id: questions.id, knowledgePointId: questions.knowledgePointId })
-          .from(questions)
-          .where(inArray(questions.id, paperIds))
-      : []
-  const kpByQ = new Map(liveQs.map((q) => [q.id, q.knowledgePointId]))
-
-  for (const row of paper) {
-    const snap = row.snapshot
-    const type = snap?.type ?? "MC"
-    const opts = snap?.options ?? []
-    qRowsForSr.push({ knowledgePointId: kpByQ.get(row.questionId) ?? null })
-
-    if (type === "MC") {
-      const raw = answers[row.questionId]
-      const chosenId = typeof raw === "string" ? raw : null
-      const validChosen =
-        chosenId && opts.some((o) => o.id === chosenId) ? chosenId : null
-      const correctOpt = opts.find((o) => o.isCorrect)
-      const isCorrect = gradeMC(validChosen, correctOpt?.id ?? "")
-      if (isCorrect) correctSlots += 1
-      answerRows.push({
-        attemptId: quizId,
-        questionId: row.questionId,
-        optionId: null,
-        studentAnswer: validChosen,
-        isCorrect,
+  return db.transaction(async (tx) => {
+    const [openAttempt] = await tx
+      .select({
+        id: quizAttempts.id,
+        totalSlots: quizAttempts.totalSlots,
+        completedAt: quizAttempts.completedAt,
       })
-      details.push({
-        questionId: row.questionId,
-        questionType: "MC",
-        studentAnswer: opts.find((o) => o.id === validChosen)?.content ?? "",
-        isCorrect,
-        correctAnswer: correctOpt?.content ?? "",
-      })
-    } else if (type === "SA") {
-      const raw = answers[row.questionId]
-      const val = typeof raw === "string" ? raw : ""
-      const truncated = val.length > 200 ? val.slice(0, 200) : val
-      const accepted = opts.filter((o) => o.isCorrect).map((o) => o.content)
-      const isCorrect = truncated.length > 0 ? gradeSA(truncated, accepted) : false
-      if (isCorrect) correctSlots += 1
-      answerRows.push({
-        attemptId: quizId,
-        questionId: row.questionId,
-        optionId: null,
-        studentAnswer: truncated.length > 0 ? truncated : null,
-        isCorrect,
-      })
-      details.push({
-        questionId: row.questionId,
-        questionType: "SA",
-        studentAnswer: truncated,
-        isCorrect,
-        correctAnswer: accepted[0] ?? "",
-      })
-    } else if (type === "TF") {
-      const map = (typeof answers[row.questionId] === "object" && answers[row.questionId] != null
-        ? (answers[row.questionId] as Record<string, "D" | "S" | null | undefined>)
-        : {}) as Record<string, "D" | "S" | null | undefined>
-      const graded = gradeTF(map, opts)
-      const perYy: { content: string; value: string; isCorrect: boolean; correct: boolean }[] = []
-      for (const p of graded.perOption) {
-        const opt = opts.find((o) => o.id === p.optionId)
-        if (p.isCorrect) correctSlots += 1
-        const studentValue = p.answered ? (map[p.optionId] as string) : null
+      .from(quizAttempts)
+      .where(and(eq(quizAttempts.id, quizId), eq(quizAttempts.studentId, student.id)))
+      .limit(1)
+      .for("update")
+    if (!openAttempt) throw new Error("Không tìm thấy bài kiểm tra")
+    if (openAttempt.completedAt) throw new Error("Bài kiểm tra đã nộp")
+
+    const paper = await tx
+      .select()
+      .from(quizAttemptQuestions)
+      .where(eq(quizAttemptQuestions.attemptId, quizId))
+      .orderBy(asc(quizAttemptQuestions.position))
+
+    const totalSlots = attempt.totalSlots ?? 1
+    let correctSlots = 0
+    const answerRows: {
+      attemptId: string
+      questionId: string
+      optionId: string | null
+      studentAnswer: string | null
+      isCorrect: boolean
+    }[] = []
+    const details: QuizResultDto["details"] = []
+    const qRowsForSr: { knowledgePointId: string | null }[] = []
+
+    const paperIds = paper.map((p) => p.questionId)
+    const liveQs =
+      paperIds.length > 0
+        ? await tx
+            .select({ id: questions.id, knowledgePointId: questions.knowledgePointId })
+            .from(questions)
+            .where(inArray(questions.id, paperIds))
+        : []
+    const kpByQ = new Map(liveQs.map((q) => [q.id, q.knowledgePointId]))
+
+    for (const row of paper) {
+      const snap = row.snapshot
+      const type = snap?.type ?? "MC"
+      const opts = snap?.options ?? []
+      qRowsForSr.push({ knowledgePointId: kpByQ.get(row.questionId) ?? null })
+
+      if (type === "MC") {
+        const raw = answers[row.questionId]
+        const chosenId = typeof raw === "string" ? raw : null
+        const validChosen =
+          chosenId && opts.some((o) => o.id === chosenId) ? chosenId : null
+        const correctOpt = opts.find((o) => o.isCorrect)
+        const isCorrect = gradeMC(validChosen, correctOpt?.id ?? "")
+        if (isCorrect) correctSlots += 1
         answerRows.push({
           attemptId: quizId,
           questionId: row.questionId,
-          optionId: p.optionId,
-          studentAnswer: studentValue,
-          isCorrect: p.isCorrect,
+          optionId: null,
+          studentAnswer: validChosen,
+          isCorrect,
         })
-        perYy.push({
-          content: opt?.content ?? "",
-          value: studentValue ?? "",
-          isCorrect: p.isCorrect,
-          correct: Boolean(opt?.isCorrect),
+        details.push({
+          questionId: row.questionId,
+          questionType: "MC",
+          studentAnswer: opts.find((o) => o.id === validChosen)?.content ?? "",
+          isCorrect,
+          correctAnswer: correctOpt?.content ?? "",
+        })
+      } else if (type === "SA") {
+        const raw = answers[row.questionId]
+        const val = typeof raw === "string" ? raw : ""
+        const truncated = val.length > 200 ? val.slice(0, 200) : val
+        const accepted = opts.filter((o) => o.isCorrect).map((o) => o.content)
+        const isCorrect = truncated.length > 0 ? gradeSA(truncated, accepted) : false
+        if (isCorrect) correctSlots += 1
+        answerRows.push({
+          attemptId: quizId,
+          questionId: row.questionId,
+          optionId: null,
+          studentAnswer: truncated.length > 0 ? truncated : null,
+          isCorrect,
+        })
+        details.push({
+          questionId: row.questionId,
+          questionType: "SA",
+          studentAnswer: truncated,
+          isCorrect,
+          correctAnswer: accepted[0] ?? "",
+        })
+      } else if (type === "TF") {
+        const map = (typeof answers[row.questionId] === "object" && answers[row.questionId] != null
+          ? (answers[row.questionId] as Record<string, "D" | "S" | null | undefined>)
+          : {}) as Record<string, "D" | "S" | null | undefined>
+        const graded = gradeTF(map, opts)
+        const perYy: { content: string; value: string; isCorrect: boolean; correct: boolean }[] = []
+        for (const p of graded.perOption) {
+          const opt = opts.find((o) => o.id === p.optionId)
+          if (p.isCorrect) correctSlots += 1
+          const studentValue = p.answered ? (map[p.optionId] as string) : null
+          answerRows.push({
+            attemptId: quizId,
+            questionId: row.questionId,
+            optionId: p.optionId,
+            studentAnswer: studentValue,
+            isCorrect: p.isCorrect,
+          })
+          perYy.push({
+            content: opt?.content ?? "",
+            value: studentValue ?? "",
+            isCorrect: p.isCorrect,
+            correct: Boolean(opt?.isCorrect),
+          })
+        }
+        details.push({
+          questionId: row.questionId,
+          questionType: "TF",
+          studentAnswer: JSON.stringify(perYy),
+          isCorrect: perYy.length > 0 && perYy.every((p) => p.isCorrect),
+          correctAnswer: "",
         })
       }
-      details.push({
-        questionId: row.questionId,
-        questionType: "TF",
-        studentAnswer: JSON.stringify(perYy),
-        isCorrect: perYy.length > 0 && perYy.every((p) => p.isCorrect),
-        correctAnswer: "",
-      })
     }
-  }
 
-  correctSlots = Math.min(correctSlots, totalSlots)
-  const { score, percentage } = scoreLinear(correctSlots, totalSlots)
+    correctSlots = Math.min(correctSlots, totalSlots)
+    const { score, percentage } = scoreLinear(correctSlots, totalSlots)
 
-  // 1) update attempt
-  await db
-    .update(quizAttempts)
-    .set({ score, completedAt: new Date() })
-    .where(eq(quizAttempts.id, quizId))
-
-  // 2) insert quiz_answers
-  if (answerRows.length > 0) {
-    await db.insert(quizAnswers).values(answerRows)
-  }
-
-  // 3) seed spaced_repetition cho các KP trong bài
-  const kpIds = [...new Set(qRowsForSr.map((q) => q.knowledgePointId).filter((id): id is string => Boolean(id)))]
-  const tomorrow = new Date()
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  for (const kpId of kpIds) {
-    const [sr] = await db
-      .select({ id: spacedRepetition.id })
-      .from(spacedRepetition)
+    const claimed = await tx
+      .update(quizAttempts)
+      .set({ score, completedAt: new Date() })
       .where(
         and(
-          eq(spacedRepetition.studentId, student.id),
-          eq(spacedRepetition.knowledgePointId, kpId),
+          eq(quizAttempts.id, quizId),
+          eq(quizAttempts.studentId, student.id),
+          sql`${quizAttempts.completedAt} is null`,
         ),
       )
-      .limit(1)
-    if (!sr) {
-      await db.insert(spacedRepetition).values({
-        studentId: student.id,
-        knowledgePointId: kpId,
-        interval: 1,
-        easinessFactor: 2.5,
-        repetitions: 0,
-        nextReview: tomorrow,
-      })
-    }
-  }
+      .returning({ id: quizAttempts.id })
+    if (claimed.length === 0) throw new Error("Bài kiểm tra đã nộp")
 
-  return {
-    attemptId: quizId,
-    score,
-    maxScore: 10,
-    totalSlots,
-    percentage,
-    details,
-  }
+    if (answerRows.length > 0) {
+      await tx.insert(quizAnswers).values(answerRows)
+    }
+
+    const kpIds = [...new Set(qRowsForSr.map((q) => q.knowledgePointId).filter((id): id is string => Boolean(id)))]
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    if (kpIds.length > 0) {
+      await tx
+        .insert(spacedRepetition)
+        .values(
+          kpIds.map((kpId) => ({
+            studentId: student.id,
+            knowledgePointId: kpId,
+            interval: 1,
+            easinessFactor: 2.5,
+            repetitions: 0,
+            nextReview: tomorrow,
+          })),
+        )
+        .onConflictDoNothing({
+          target: [spacedRepetition.studentId, spacedRepetition.knowledgePointId],
+        })
+    }
+
+    return {
+      attemptId: quizId,
+      score,
+      maxScore: 10,
+      totalSlots,
+      percentage,
+      details,
+    }
+  })
 }
 
 /** Lấy kết quả quiz gần nhất (để re-fetch khi HS quay lại Tab 4). */

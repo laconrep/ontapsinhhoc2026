@@ -117,6 +117,34 @@ export function ensureSchema(): Promise<void> {
             ADD COLUMN IF NOT EXISTS "dragRevealed" boolean NOT NULL DEFAULT false
         `),
       )
+      .then(() =>
+        pool.query(`
+          DELETE FROM student_tab1_submissions a USING student_tab1_submissions b
+           WHERE a."studentId"=b."studentId" AND a."lessonId"=b."lessonId"
+             AND (a."submittedAt", a.id) < (b."submittedAt", b.id)
+        `),
+      )
+      .then(() =>
+        pool.query(`
+          DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='s1_student_lesson_unique') THEN
+              ALTER TABLE student_tab1_submissions ADD CONSTRAINT s1_student_lesson_unique UNIQUE ("studentId","lessonId");
+            END IF;
+          END $$;
+        `),
+      )
+      .then(() =>
+        pool.query(`
+          CREATE UNIQUE INDEX IF NOT EXISTS quiz_answers_mc_sa_uidx
+            ON quiz_answers ("attemptId","questionId") WHERE "optionId" IS NULL
+        `),
+      )
+      .then(() =>
+        pool.query(`
+          CREATE UNIQUE INDEX IF NOT EXISTS quiz_answers_tf_uidx
+            ON quiz_answers ("attemptId","questionId","optionId") WHERE "optionId" IS NOT NULL
+        `),
+      )
       .then(() => undefined)
       .catch((e) => {
         schemaReady = null

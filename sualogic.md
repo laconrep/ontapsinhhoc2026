@@ -1,6 +1,6 @@
 # Ke hoach sua logic cham diem (8 phien)
 
-Trang thai: **phien 6 xong**. Day la nguon su that cho 8 phien. Phien sau CHI doc file nay + dung cac file liet ke trong phien do. KHONG doc lai toan repo. KHONG lam phan hoan (muc 3).
+Trang thai: **phien 7 xong**. Day la nguon su that cho 8 phien. Phien sau CHI doc file nay + dung cac file liet ke trong phien do. KHONG doc lai toan repo. KHONG lam phan hoan (muc 3).
 
 Nguon: doi chieu spec `Spec sua logic cham diem — EduSync (ontapsinhhoc2026).md` voi code that. Cac ID (FD-01, QZ-01, ...) giu nguyen de truy vet.
 
@@ -205,7 +205,7 @@ scoreLinear(correctSlots: number, totalSlots: number): { score: number; percenta
 | 4 | Snapshot de Tab 4, TF trong = sai, diem <= 10 | xong — `node --experimental-strip-types scripts/check-scoring-phien4.mjs` in `phien 4 OK` |
 | 5 | Chip id Tab 3, an dap an Tab 2/3, 10 cham/phut | xong — `node --experimental-strip-types scripts/check-scoring-phien5.mjs` in `phien 5 OK` |
 | 6 | Quyen server Tab 1/2/3, ST-01 hoan thanh, LV-01/02 | xong — `node --experimental-strip-types scripts/check-scoring-phien6.mjs` in `phien 6 OK` |
-| 7 | Transaction quiz, unique Tab 1, reset overallStatus, reuse attempt | chua |
+| 7 | Transaction quiz, unique Tab 1, reset overallStatus, reuse attempt | xong — `node --experimental-strip-types scripts/check-scoring-phien7.mjs` in `phien 7 OK` |
 | 8 | Live answers DB, scoring chung live, giu option id, firstTry | chua |
 
 ---
@@ -510,8 +510,23 @@ Khong thi nhom moi. Toi da 8 o/nhom: neu vuot, van cat nhom (khong throw trong e
 **Bao cao phien 7**
 
 - Da lam:
+  - Unique `student_tab1_submissions (studentId, lessonId)` (`s1_student_lesson_unique`); ensureSchema xoa trung (giu submittedAt moi nhat) roi ADD CONSTRAINT IF NOT EXISTS.
+  - Unique partial `quiz_answers`: `(attemptId, questionId) WHERE optionId IS NULL` va `(attemptId, questionId, optionId) WHERE optionId IS NOT NULL`.
+  - `submitTab1`: insert onConflictDoNothing = da nop; 1 lan load progress, 1 insert onConflictDoUpdate selfAssessment+overallStatus (khong vong N query).
+  - `submitTab2/3`: transaction, insert onConflictDoNothing dong rong, `select for update`, attempts SQL +1.
+  - `submitQuiz`: mot `db.transaction`; khoa `update ... completedAt, score where id=? and studentId=? and completedAt is null returning id`; khong row -> "Bai kiem tra da nop". Insert answers. Seed spaced_repetition mot insert onConflictDoNothing.
+  - `startQuiz`: reuse attempt `completedAt is null` cua (HS, lesson) voi `startedAt > submittedAt`; tra de tu `quiz_attempt_questions` + snapshot. Khong thi tao nhu phien 4.
+  - `resetLessonProgress`: overallStatus CASE SA known/unknown/not_started; xoa fill/drag/attempts/revealed; giu lich su quiz_attempts.
+  - Test: computeOverallStatus sau reset theo SA; score cap 10.
 - Con lai / lech ke hoach:
+  - `pnpm exec tsc --noEmit` van co the khong chay duoc neu thieu node_modules / corepack.
+  - QZ-07 option id va live_answers chua doi (phien 8).
 - File da doi:
+  - `lib/db/schema.ts`
+  - `lib/db/index.ts`
+  - `app/actions/student-learn.ts`
+  - `scripts/check-scoring-phien7.mjs`
+  - `sualogic.md`
 
 ---
 
