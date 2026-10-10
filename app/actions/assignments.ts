@@ -8,13 +8,16 @@ import {
   classAssignments,
   classStudents,
   classes,
-  knowledgePoints,
   lessons,
   quizAttempts,
-  studentProgress,
+  studentTab1Submissions,
 } from "@/lib/db/schema"
 import { requireRole } from "@/lib/auth-helpers"
-import { deriveStudentAssignmentStatus } from "@/lib/assignment-status"
+import {
+  assignmentProgressPercent,
+  deriveStudentAssignmentStatus,
+  quizCompletedAfterTab1,
+} from "@/lib/assignment-status"
 import type { AssignedLessonDto, ClassAssignmentDto } from "@/types"
 
 async function assertTeacherOwnsClass(classId: string, teacherId: string) {
@@ -223,35 +226,20 @@ export async function getAssignedLessonsForStudent(): Promise<AssignedLessonDto[
   if (rows.length === 0) return []
 
   const lessonIds = [...new Set(rows.map((r) => r.lessonId))]
-  const kpRows = await db
-    .select({ id: knowledgePoints.id, lessonId: knowledgePoints.lessonId })
-    .from(knowledgePoints)
-    .where(inArray(knowledgePoints.lessonId, lessonIds))
 
-  const kpByLesson = new Map<string, string[]>()
-  for (const k of kpRows) {
-    const list = kpByLesson.get(k.lessonId) ?? []
-    list.push(k.id)
-    kpByLesson.set(k.lessonId, list)
-  }
-  const kpIds = kpRows.map((k) => k.id)
-
-  const progressRows =
-    kpIds.length === 0
-      ? []
-      : await db
-          .select({
-            knowledgePointId: studentProgress.knowledgePointId,
-            overallStatus: studentProgress.overallStatus,
-          })
-          .from(studentProgress)
-          .where(
-            and(eq(studentProgress.studentId, student.id), inArray(studentProgress.knowledgePointId, kpIds)),
-          )
-
-  const touched = new Set(
-    progressRows.filter((p) => p.overallStatus !== "not_started").map((p) => p.knowledgePointId),
-  )
+  const tab1Rows = await db
+    .select({
+      lessonId: studentTab1Submissions.lessonId,
+      submittedAt: studentTab1Submissions.submittedAt,
+    })
+    .from(studentTab1Submissions)
+    .where(
+      and(
+        eq(studentTab1Submissions.studentId, student.id),
+        inArray(studentTab1Submissions.lessonId, lessonIds),
+      ),
+    )
+  const tab1ByLesson = new Map(tab1Rows.map((t) => [t.lessonId, t.submittedAt]))
 
   const quizDone = await db
     .select({ lessonId: quizAttempts.lessonId, completedAt: quizAttempts.completedAt })
@@ -259,7 +247,9 @@ export async function getAssignedLessonsForStudent(): Promise<AssignedLessonDto[
     .where(and(eq(quizAttempts.studentId, student.id), inArray(quizAttempts.lessonId, lessonIds)))
   const quizCompletedIds = new Set<string>()
   for (const q of quizDone) {
-    if (q.completedAt) quizCompletedIds.add(q.lessonId)
+    if (quizCompletedAfterTab1(q.completedAt, tab1ByLesson.get(q.lessonId) ?? null)) {
+      quizCompletedIds.add(q.lessonId)
+    }
   }
 
   const now = new Date()
@@ -268,14 +258,12 @@ export async function getAssignedLessonsForStudent(): Promise<AssignedLessonDto[
   for (const r of rows) {
     if (seen.has(r.lessonId)) continue
     seen.add(r.lessonId)
-    const kps = kpByLesson.get(r.lessonId) ?? []
-    const touchedKp = kps.filter((id) => touched.has(id)).length
-    const totalKp = kps.length
-    const progressPercent = totalKp === 0 ? 0 : Math.round((touchedKp / totalKp) * 100)
+    const hasTab1Submission = tab1ByLesson.has(r.lessonId)
+    const hasCompletedQuiz = quizCompletedIds.has(r.lessonId)
+    const progressPercent = assignmentProgressPercent({ hasTab1Submission, hasCompletedQuiz })
     const studentStatus = deriveStudentAssignmentStatus({
-      totalKp,
-      touchedKp,
-      hasCompletedQuiz: quizCompletedIds.has(r.lessonId),
+      hasCompletedQuiz,
+      hasTab1Submission,
       dueAt: r.dueAt,
       now,
     })

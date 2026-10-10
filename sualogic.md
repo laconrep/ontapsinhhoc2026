@@ -1,6 +1,6 @@
 # Ke hoach sua logic cham diem (8 phien)
 
-Trang thai: **phien 5 xong**. Day la nguon su that cho 8 phien. Phien sau CHI doc file nay + dung cac file liet ke trong phien do. KHONG doc lai toan repo. KHONG lam phan hoan (muc 3).
+Trang thai: **phien 6 xong**. Day la nguon su that cho 8 phien. Phien sau CHI doc file nay + dung cac file liet ke trong phien do. KHONG doc lai toan repo. KHONG lam phan hoan (muc 3).
 
 Nguon: doi chieu spec `Spec sua logic cham diem — EduSync (ontapsinhhoc2026).md` voi code that. Cac ID (FD-01, QZ-01, ...) giu nguyen de truy vet.
 
@@ -204,7 +204,7 @@ scoreLinear(correctSlots: number, totalSlots: number): { score: number; percenta
 | 3 | lib/scoring.ts, matching, normalize quotes, gradeSA so | xong — `node --experimental-strip-types scripts/check-scoring-phien3.mjs` in `phien 3 OK` |
 | 4 | Snapshot de Tab 4, TF trong = sai, diem <= 10 | xong — `node --experimental-strip-types scripts/check-scoring-phien4.mjs` in `phien 4 OK` |
 | 5 | Chip id Tab 3, an dap an Tab 2/3, 10 cham/phut | xong — `node --experimental-strip-types scripts/check-scoring-phien5.mjs` in `phien 5 OK` |
-| 6 | Quyen server Tab 1/2/3, ST-01 hoan thanh, LV-01/02 | chua |
+| 6 | Quyen server Tab 1/2/3, ST-01 hoan thanh, LV-01/02 | xong — `node --experimental-strip-types scripts/check-scoring-phien6.mjs` in `phien 6 OK` |
 | 7 | Transaction quiz, unique Tab 1, reset overallStatus, reuse attempt | chua |
 | 8 | Live answers DB, scoring chung live, giu option id, firstTry | chua |
 
@@ -466,8 +466,24 @@ Khong thi nhom moi. Toi da 8 o/nhom: neu vuot, van cat nhom (khong throw trong e
 **Bao cao phien 6**
 
 - Da lam:
+  - `submitTab2/3`: `assertLessonAccess` qua lessonId cua KP; bat buoc da nop Tab 1; Tab 2 chi `sa=known && fill!==correct`; Tab 3 chi `sa=unknown && drag!==correct`. answers key phai la slotIndex, string <=200.
+  - `getTab3Questions` + `resolveStudyStage`: phuong an B, bo `fill==='incorrect'`.
+  - `submitTab1`: moi key phai la KP cua lesson; value known|unknown; thieu liet ke kpId.
+  - ST-01: `completed` chi khi quiz `completedAt > submittedAt`; `in_progress` khi da nop Tab 1; progress 0/50/100. `deriveStudentAssignmentStatus` bo `touchedKp >= totalKp`.
+  - LV-01: het gio `elapsed > timeLimitSec*1000+1500` throw "Da het thoi gian".
+  - LV-02: cache `classStudentIds` luc join/init, miss query; MC optionId cua cau; TF id thuoc cau; SA <=200.
 - Con lai / lech ke hoach:
+  - `pnpm exec tsc --noEmit` van khong chay duoc (thieu node_modules / corepack).
+  - Script class cu (`check-class-phien1/3/6.mjs`) van goi chu ky cu — ngoai pham vi phien 6.
 - File da doi:
+  - `app/actions/student-learn.ts`
+  - `lib/assignment-status.ts`
+  - `app/actions/assignments.ts`
+  - `app/actions/class-stats.ts`
+  - `app/actions/live-quiz.ts`
+  - `lib/live-session-state.ts`
+  - `scripts/check-scoring-phien6.mjs`
+  - `sualogic.md`
 
 ---
 

@@ -109,6 +109,41 @@ async function getKpIdsOfLesson(lessonId: string): Promise<string[]> {
   return rows.map((r) => r.id)
 }
 
+async function requireTab1Submission(studentId: string, lessonId: string) {
+  const [row] = await db
+    .select({ id: studentTab1Submissions.id })
+    .from(studentTab1Submissions)
+    .where(
+      and(eq(studentTab1Submissions.studentId, studentId), eq(studentTab1Submissions.lessonId, lessonId)),
+    )
+    .limit(1)
+  if (!row) throw new Error("Hãy nộp bước Tự đánh giá trước")
+}
+
+function assertSlotAnswers(terms: UnderlinedTerm[], answers: SlotAnswer[] | Record<string, string>) {
+  const allowed = new Set(terms.map((t) => Number(t.slotIndex)))
+  if (Array.isArray(answers)) {
+    for (const item of answers) {
+      if (!item || typeof item !== "object" || !("slotIndex" in item)) {
+        throw new Error("Ô trả lời không hợp lệ")
+      }
+      const idx = Number((item as { slotIndex: unknown }).slotIndex)
+      if (!Number.isFinite(idx) || !allowed.has(idx)) throw new Error("Ô trả lời không hợp lệ")
+      if (String((item as { value?: unknown }).value ?? "").length > 200) {
+        throw new Error("Câu trả lời quá dài")
+      }
+    }
+    return
+  }
+  if (answers && typeof answers === "object") {
+    for (const [k, v] of Object.entries(answers)) {
+      const idx = Number(k)
+      if (!Number.isFinite(idx) || !allowed.has(idx)) throw new Error("Ô trả lời không hợp lệ")
+      if (String(v ?? "").length > 200) throw new Error("Câu trả lời quá dài")
+    }
+  }
+}
+
 // ============ Tab 1 — Nội dung + tự đánh giá ============
 
 function knownCountOf(assessments: Record<string, "known" | "unknown">) {
@@ -173,8 +208,7 @@ async function resolveStudyStage(
   }
 
   const dragLeft = progressRows.some(
-    (r) =>
-      (r.sa === "unknown" || r.fill === "incorrect") && r.drag !== "correct" && hasTerms.has(r.kpId),
+    (r) => r.sa === "unknown" && r.drag !== "correct" && hasTerms.has(r.kpId),
   )
   if (dragLeft) return "tab3"
   return "tab4"
@@ -338,7 +372,16 @@ export async function submitTab1(lessonId: string, assessments: Record<string, "
     .limit(1)
   if (existingSub) throw new Error(TAB1_LOCKED_MSG)
 
-  const kpIds = Object.keys(assessments)
+  const lessonKpIds = await getKpIdsOfLesson(lessonId)
+  const lessonKpSet = new Set(lessonKpIds)
+  const extra = Object.keys(assessments).filter((id) => !lessonKpSet.has(id))
+  if (extra.length > 0) throw new Error("Điểm kiến thức không thuộc bài học")
+  const invalid = Object.entries(assessments).filter(([, v]) => v !== "known" && v !== "unknown")
+  if (invalid.length > 0) throw new Error("Giá trị tự đánh giá không hợp lệ")
+  const missing = lessonKpIds.filter((id) => assessments[id] !== "known" && assessments[id] !== "unknown")
+  if (missing.length > 0) throw new Error(`Thiếu đánh giá: ${missing.join(", ")}`)
+
+  const kpIds = lessonKpIds
   for (const kpId of kpIds) {
     const [existing] = await db
       .select()
@@ -518,7 +561,10 @@ export async function submitTab2Question(
     .where(eq(knowledgePoints.id, kpId))
     .limit(1)
   if (!kp) throw new Error("Không tìm thấy điểm kiến thức")
+  await assertLessonAccess(student.id, kp.lessonId)
+  await requireTab1Submission(student.id, kp.lessonId)
   const terms = (kp.underlinedTerms as UnderlinedTerm[]) ?? []
+  assertSlotAnswers(terms, answers)
 
   const [existing] = await db
     .select()
@@ -530,6 +576,10 @@ export async function submitTab2Question(
   const currentFillStatus = existing?.fillStatus ?? null
   const currentDragStatus = existing?.dragStatus ?? null
   const currentSelfAssessment = existing?.selfAssessment ?? null
+
+  if (currentSelfAssessment !== "known") {
+    throw new Error("Câu này không thuộc bước Điền khuyết")
+  }
 
   if (currentFillStatus === "correct") {
     return {
@@ -581,7 +631,7 @@ export async function submitTab2Question(
 
 // ============ Tab 3 — Kéo thả ============
 
-/** Câu DRAG cho KP: "Chưa biết" HOẶC "Biết nhưng fill sai". Kèm chip nhiễu. */
+/** Câu DRAG cho KP selfAssessment === "unknown" (phương án B). Kèm chip nhiễu. */
 export async function getTab3Questions(lessonId: string): Promise<{
   questions: Tab3Question[]
   empty: boolean
@@ -596,7 +646,6 @@ export async function getTab3Questions(lessonId: string): Promise<{
     .select({
       kpId: studentProgress.knowledgePointId,
       sa: studentProgress.selfAssessment,
-      fill: studentProgress.fillStatus,
       drag: studentProgress.dragStatus,
     })
     .from(studentProgress)
@@ -606,7 +655,7 @@ export async function getTab3Questions(lessonId: string): Promise<{
         inArray(studentProgress.knowledgePointId, kpIds),
       ),
     )
-  const eligible = rows.filter((r) => r.sa === "unknown" || r.fill === "incorrect")
+  const eligible = rows.filter((r) => r.sa === "unknown")
   const targetKpIds = eligible.filter((r) => r.drag !== "correct").map((r) => r.kpId)
   if (targetKpIds.length === 0) return { questions: [], empty: true, skipped: eligible.length === 0 }
 
@@ -659,7 +708,10 @@ export async function submitTab3Question(
     .where(eq(knowledgePoints.id, kpId))
     .limit(1)
   if (!kp) throw new Error("Không tìm thấy điểm kiến thức")
+  await assertLessonAccess(student.id, kp.lessonId)
+  await requireTab1Submission(student.id, kp.lessonId)
   const terms = (kp.underlinedTerms as UnderlinedTerm[]) ?? []
+  assertSlotAnswers(terms, answers)
 
   const [existing] = await db
     .select()
@@ -671,6 +723,10 @@ export async function submitTab3Question(
   const currentFillStatus = existing?.fillStatus ?? null
   const currentDragStatus = existing?.dragStatus ?? null
   const currentSelfAssessment = existing?.selfAssessment ?? null
+
+  if (currentSelfAssessment !== "unknown") {
+    throw new Error("Câu này không thuộc bước Kéo thả")
+  }
 
   if (currentDragStatus === "correct") {
     return {

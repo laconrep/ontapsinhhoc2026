@@ -44,6 +44,7 @@ export interface LiveSessionState {
   answers: Map<string, LiveAnswer>
   // HS đang thoát fullscreen: studentId -> tên
   notFullscreen: Map<string, string>
+  classStudentIds?: Set<string>
 }
 
 /** Bỏ đáp án đúng — phiên bản an toàn để gửi cho HS. */
@@ -96,6 +97,7 @@ export function initLiveState(
     joined: new Map(),
     answers: new Map(),
     notFullscreen: new Map(),
+    classStudentIds: new Set(),
   }
   store.set(sessionId, state)
   return state

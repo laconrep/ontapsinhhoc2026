@@ -152,6 +152,45 @@ async function ensureLiveState(sessionId: string): Promise<LiveSessionState | nu
   return p
 }
 
+async function loadClassStudentIds(classId: string): Promise<Set<string>> {
+  const rows = await db
+    .select({ studentId: classStudents.studentId })
+    .from(classStudents)
+    .where(eq(classStudents.classId, classId))
+  return new Set(rows.map((r) => r.studentId))
+}
+
+async function assertLiveClassMember(state: LiveSessionState, sessionId: string, studentId: string) {
+  if (state.classStudentIds?.has(studentId)) return
+  const [ok] = await db
+    .select({ studentId: classStudents.studentId })
+    .from(sessions)
+    .innerJoin(classStudents, eq(classStudents.classId, sessions.classId))
+    .where(and(eq(sessions.id, sessionId), eq(classStudents.studentId, studentId)))
+    .limit(1)
+  if (!ok) throw new Error("Bạn không được phép vào phiên này. Vui lòng kiểm tra xem bạn có thuộc lớp không.")
+  if (!state.classStudentIds) state.classStudentIds = new Set()
+  state.classStudentIds.add(studentId)
+}
+
+function assertLiveAnswerShape(q: LiveQuestionFull, answer: string) {
+  const optionIds = new Set(q.options.map((o) => o.id))
+  if (q.type === "MC") {
+    if (!optionIds.has(answer)) throw new Error("Lựa chọn không hợp lệ")
+    return
+  }
+  if (q.type === "TF") {
+    const ids = answer ? answer.split(",").filter(Boolean) : []
+    for (const id of ids) {
+      if (!optionIds.has(id)) throw new Error("Lựa chọn không hợp lệ")
+    }
+    return
+  }
+  if (q.type === "SA") {
+    if (answer.length > 200) throw new Error("Câu trả lời quá dài")
+  }
+}
+
 async function restoreLiveState(sessionId: string): Promise<LiveSessionState | null> {
   const again = getLiveState(sessionId)
   if (again) return again
@@ -165,6 +204,7 @@ async function restoreLiveState(sessionId: string): Promise<LiveSessionState | n
     const qs = await loadQuizQuestions(snap.lessonId, snap.defaultTimeSec ?? 30)
     if (!qs || qs.length === 0) return null
     const state = initLiveState(sessionId, qs)
+    state.classStudentIds = await loadClassStudentIds(s.classId)
     state.currentIndex = snap.currentIndex ?? -1
     state.phase = (snap.phase as LiveSessionState["phase"]) ?? "lobby"
     if (state.currentIndex >= 0 && state.phase === "question") state.questionStartedAt = Date.now()
@@ -253,7 +293,8 @@ export async function startQuizSession(input: {
     status: "active",
     resumeSnapshot: { lessonId: input.lessonId, defaultTimeSec, currentIndex: -1, phase: "lobby" },
   })
-  initLiveState(sessionId, qs)
+  const state = initLiveState(sessionId, qs)
+  state.classStudentIds = await loadClassStudentIds(input.classId)
   revalidatePath(`/teacher/classes/${input.classId}`)
   return { sessionId }
 }
@@ -377,7 +418,8 @@ export async function activateDraftSession(sessionId: string): Promise<{ session
       lastActivityAt: new Date(),
     })
     .where(eq(sessions.id, sessionId))
-  initLiveState(sessionId, qs)
+  const state = initLiveState(sessionId, qs)
+  state.classStudentIds = await loadClassStudentIds(s.classId)
   revalidatePath(`/teacher/classes/${s.classId}`)
   return { sessionId }
 }
@@ -594,14 +636,7 @@ export async function joinQuiz(sessionId: string): Promise<void> {
     console.error("joinQuiz: ensureLiveState returned null for", sessionId)
     throw new Error("Phiên học không tồn tại hoặc đã kết thúc")
   }
-  // xác thực thuộc lớp
-  const [ok] = await db
-  .select({ studentId: classStudents.studentId })
-  .from(sessions)
-  .innerJoin(classStudents, eq(classStudents.classId, sessions.classId))
-  .where(and(eq(sessions.id, sessionId), eq(classStudents.studentId, student.id)))
-  .limit(1)
-  if (!ok) throw new Error("Bạn không được phép vào phiên này. Vui lòng kiểm tra xem bạn có thuộc lớp không.")
+  await assertLiveClassMember(state, sessionId, student.id)
 
   state.joined.set(student.id, { name: student.name, online: true })
   const joinedCount = [...state.joined.values()].filter((s) => s.online).length
@@ -621,10 +656,16 @@ export async function submitLiveAnswer(
   const student = await requireRole("student")
   const state = await ensureLiveState(sessionId)
   if (!state) throw new Error("Phiên không hoạt động")
+  await assertLiveClassMember(state, sessionId, student.id)
   if (state.phase !== "question") throw new Error("Đã hết thời gian trả lời")
   const q = state.questions[state.currentIndex]
   if (!q || q.id !== questionId) throw new Error("Câu hỏi không khớp")
   if (state.answers.has(student.id)) throw new Error("Bạn đã trả lời câu này")
+  if (q.timeLimitSec && state.questionStartedAt != null) {
+    const elapsed = Date.now() - state.questionStartedAt
+    if (elapsed > q.timeLimitSec * 1000 + 1500) throw new Error("Đã hết thời gian")
+  }
+  assertLiveAnswerShape(q, answer)
 
   const correct = gradeLiveAnswer(q, answer)
   state.answers.set(student.id, { studentId: student.id, name: student.name, answer, correct, at: Date.now() })

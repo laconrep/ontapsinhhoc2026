@@ -17,7 +17,7 @@ import {
 } from "@/lib/db/schema"
 import { requireRole } from "@/lib/auth-helpers"
 import { and, asc, desc, eq, inArray } from "drizzle-orm"
-import { deriveStudentAssignmentStatus } from "@/lib/assignment-status"
+import { deriveStudentAssignmentStatus, quizCompletedAfterTab1 } from "@/lib/assignment-status"
 import {
   buildAssignmentStat,
   buildOverview,
@@ -275,15 +275,14 @@ export async function getClassStats(classId: string): Promise<ClassStatsDto> {
     if (touched > 0 || quizSummary.quizAttempts > 0) studentsWithActivity += 1
 
     const assignmentStatuses = assignmentRows.map((a) => {
-      const kps = assignedKpByLesson.get(a.lessonId) ?? []
-      const touchedKp = kps.filter((id) =>
-        assignedRows.some((r) => r.knowledgePointId === id && r.overallStatus !== "not_started"),
-      ).length
-      const hasCompletedQuiz = studentQuiz.some((q) => q.lessonId === a.lessonId && q.completedAt)
+      const tab1At = studentTab1.find((t) => t.lessonId === a.lessonId)?.submittedAt ?? null
+      const hasTab1Submission = Boolean(tab1At)
+      const hasCompletedQuiz = studentQuiz.some(
+        (q) => q.lessonId === a.lessonId && quizCompletedAfterTab1(q.completedAt, tab1At),
+      )
       return deriveStudentAssignmentStatus({
-        totalKp: kps.length,
-        touchedKp,
         hasCompletedQuiz,
+        hasTab1Submission,
         dueAt: a.dueAt,
         now,
       })
@@ -370,16 +369,13 @@ export async function getClassStats(classId: string): Promise<ClassStatsDto> {
       .filter((k) => kps.includes(k.kpId) && isWeakKp(k))
       .map((k) => k.kpId)
     const studentOutcomes = studentRows.map((s) => {
-      const sProgress = progressRows.filter(
-        (p) => p.studentId === s.id && kps.includes(p.knowledgePointId),
-      )
-      const touchedKp = sProgress.filter((r) => r.overallStatus !== "not_started").length
+      const tab1At =
+        (tab1ByStudent.get(s.id) ?? []).find((t) => t.lessonId === a.lessonId)?.submittedAt ?? null
       const sQuiz = (quizByStudent.get(s.id) ?? []).filter((q) => q.lessonId === a.lessonId)
-      const hasCompletedQuiz = sQuiz.some((q) => q.completedAt)
+      const hasCompletedQuiz = sQuiz.some((q) => quizCompletedAfterTab1(q.completedAt, tab1At))
       const status = deriveStudentAssignmentStatus({
-        totalKp: kps.length,
-        touchedKp,
         hasCompletedQuiz,
+        hasTab1Submission: Boolean(tab1At),
         dueAt: a.dueAt,
         now,
       })
