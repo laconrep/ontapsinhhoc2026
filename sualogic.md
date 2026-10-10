@@ -517,7 +517,8 @@ Khong thi nhom moi. Toi da 8 o/nhom: neu vuot, van cat nhom (khong throw trong e
   - `submitQuiz`: mot `db.transaction`; khoa `update ... completedAt, score where id=? and studentId=? and completedAt is null returning id`; khong row -> "Bai kiem tra da nop". Insert answers. Seed spaced_repetition mot insert onConflictDoNothing.
   - `startQuiz`: reuse attempt `completedAt is null` cua (HS, lesson) voi `startedAt > submittedAt`; tra de tu `quiz_attempt_questions` + snapshot. Khong thi tao nhu phien 4.
   - `resetLessonProgress`: overallStatus CASE SA known/unknown/not_started; xoa fill/drag/attempts/revealed; giu lich su quiz_attempts.
-  - Test: computeOverallStatus sau reset theo SA; score cap 10.
+  - Test: computeOverallStatus sau reset theo SA; score cap 10; doi chieu nguon submitQuiz/unique/reset.
+  - Fix: `submitQuiz` dung `openAttempt.totalSlots` (truoc do `attempt` chua khai bao).
 - Con lai / lech ke hoach:
   - `pnpm exec tsc --noEmit` van co the khong chay duoc neu thieu node_modules / corepack.
   - QZ-07 option id va live_answers chua doi (phien 8).

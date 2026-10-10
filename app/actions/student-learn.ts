@@ -359,6 +359,7 @@ export async function saveTab1Progress(kpId: string, assessment: "known" | "unkn
 /** Nộp Tab 1: khoá tab + cập nhật toàn bộ selfAssessment/overallStatus. */
 export async function submitTab1(lessonId: string, assessments: Record<string, "known" | "unknown">) {
   const student = await requireRole("student")
+  await ensureSchema()
   await assertLessonAccess(student.id, lessonId)
 
   const lessonKpIds = await getKpIdsOfLesson(lessonId)
@@ -434,6 +435,7 @@ export async function submitTab1(lessonId: string, assessments: Record<string, "
  */
 export async function resetLessonProgress(lessonId: string): Promise<{ success: true }> {
   const student = await requireRole("student")
+  await ensureSchema()
   await assertLessonAccess(student.id, lessonId)
 
   const [submission] = await db
@@ -1045,7 +1047,7 @@ export async function submitQuiz(
       .where(eq(quizAttemptQuestions.attemptId, quizId))
       .orderBy(asc(quizAttemptQuestions.position))
 
-    const totalSlots = attempt.totalSlots ?? 1
+    const totalSlots = openAttempt.totalSlots ?? 1
     let correctSlots = 0
     const answerRows: {
       attemptId: string
