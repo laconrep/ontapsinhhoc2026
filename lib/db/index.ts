@@ -145,6 +145,52 @@ export function ensureSchema(): Promise<void> {
             ON quiz_answers ("attemptId","questionId","optionId") WHERE "optionId" IS NOT NULL
         `),
       )
+      .then(() =>
+        pool.query(`
+          CREATE TABLE IF NOT EXISTS live_answers (
+            "sessionId" uuid NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+            "questionId" uuid NOT NULL,
+            "studentId" text NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+            round integer NOT NULL DEFAULT 1,
+            answer text,
+            "isCorrect" boolean NOT NULL,
+            "answeredAt" timestamp NOT NULL DEFAULT now(),
+            "responseMs" integer,
+            PRIMARY KEY ("sessionId","questionId","studentId", round)
+          )
+        `),
+      )
+      .then(() =>
+        pool.query(`
+          ALTER TABLE student_progress
+            ADD COLUMN IF NOT EXISTS "fillFirstTry" text,
+            ADD COLUMN IF NOT EXISTS "dragFirstTry" text
+        `),
+      )
+      .then(() =>
+        pool.query(`
+          UPDATE student_progress SET "fillFirstTry"='incorrect'
+           WHERE "fillFirstTry" IS NULL AND ("fillStatus"='incorrect' OR ("fillStatus"='correct' AND "fillAttempts">1))
+        `),
+      )
+      .then(() =>
+        pool.query(`
+          UPDATE student_progress SET "fillFirstTry"='correct'
+           WHERE "fillFirstTry" IS NULL AND "fillStatus"='correct' AND "fillAttempts"=1
+        `),
+      )
+      .then(() =>
+        pool.query(`
+          UPDATE student_progress SET "dragFirstTry"='incorrect'
+           WHERE "dragFirstTry" IS NULL AND ("dragStatus"='incorrect' OR ("dragStatus"='correct' AND "dragAttempts">1))
+        `),
+      )
+      .then(() =>
+        pool.query(`
+          UPDATE student_progress SET "dragFirstTry"='correct'
+           WHERE "dragFirstTry" IS NULL AND "dragStatus"='correct' AND "dragAttempts"=1
+        `),
+      )
       .then(() => undefined)
       .catch((e) => {
         schemaReady = null

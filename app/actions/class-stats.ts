@@ -32,6 +32,7 @@ import {
   quizPercent,
   summarizeStudentQuiz,
 } from "@/lib/class-stats-calc"
+import { isOverconfident } from "@/lib/scoring"
 import type { AssignmentStatRow, ClassStatsDto, KPStatRow, StudentStatRow } from "@/types"
 
 async function assignmentLessonIds(classId: string): Promise<string[]> {
@@ -126,6 +127,8 @@ export async function getClassStats(classId: string): Promise<ClassStatsDto> {
       selfAssessment: studentProgress.selfAssessment,
       fillStatus: studentProgress.fillStatus,
       dragStatus: studentProgress.dragStatus,
+      fillFirstTry: studentProgress.fillFirstTry,
+      fillAttempts: studentProgress.fillAttempts,
       overallStatus: studentProgress.overallStatus,
       updatedAt: studentProgress.updatedAt,
     })
@@ -237,8 +240,12 @@ export async function getClassStats(classId: string): Promise<ClassStatsDto> {
     ).length
     const unknownCount = rows.filter((r) => r.overallStatus === "unknown").length
     const masteredCount = rows.filter((r) => r.overallStatus === "mastered").length
-    const overconfidentCount = rows.filter(
-      (r) => r.selfAssessment === "known" && r.fillStatus === "incorrect",
+    const overconfidentCount = rows.filter((r) =>
+      isOverconfident({
+        selfAssessment: r.selfAssessment,
+        fillFirstTry: r.fillFirstTry,
+        fillAttempts: r.fillAttempts,
+      }),
     ).length
     const progressBase = assignedKpIds.length > 0 ? assignedRows : rows
     const progressDenom = assignedKpIds.length > 0 ? assignedKpIds.length : totalKp
@@ -246,7 +253,11 @@ export async function getClassStats(classId: string): Promise<ClassStatsDto> {
     const weakKpCount = assignedRows.filter(
       (r) =>
         r.overallStatus === "unknown" ||
-        (r.selfAssessment === "known" && r.fillStatus === "incorrect"),
+        isOverconfident({
+          selfAssessment: r.selfAssessment,
+          fillFirstTry: r.fillFirstTry,
+          fillAttempts: r.fillAttempts,
+        }),
     ).length
     masteredAcrossAssigned += assignedRows.filter((r) => r.overallStatus === "mastered").length
 
@@ -337,8 +348,12 @@ export async function getClassStats(classId: string): Promise<ClassStatsDto> {
     const knownCount = rows.filter(
       (r) => r.selfAssessment === "known" || r.overallStatus === "known" || r.overallStatus === "mastered",
     ).length
-    const overconfidentCount = rows.filter(
-      (r) => r.selfAssessment === "known" && r.fillStatus === "incorrect",
+    const overconfidentCount = rows.filter((r) =>
+      isOverconfident({
+        selfAssessment: r.selfAssessment,
+        fillFirstTry: r.fillFirstTry,
+        fillAttempts: r.fillAttempts,
+      }),
     ).length
     const reinforcedCount = rows.filter(
       (r) =>

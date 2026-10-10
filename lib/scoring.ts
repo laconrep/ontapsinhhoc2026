@@ -181,3 +181,55 @@ export function scoreLinear(
   const percentage = Math.min(100, Math.max(0, Math.floor((correct * 100) / totalSlots)))
   return { score, percentage }
 }
+
+export function gradeLive(input: {
+  type: "MC" | "TF" | "SA"
+  answer: string
+  options: { id: string; isCorrect: boolean; content: string }[]
+}): boolean {
+  if (input.type === "MC") {
+    const correctId = input.options.find((o) => o.isCorrect)?.id ?? ""
+    return gradeMC(input.answer || null, correctId)
+  }
+  if (input.type === "SA") {
+    const accepted = input.options.filter((o) => o.isCorrect).map((o) => o.content)
+    return gradeSA(input.answer, accepted)
+  }
+  const picked = new Set(input.answer ? input.answer.split(",").filter(Boolean) : [])
+  const student: Record<string, "D" | "S"> = {}
+  for (const o of input.options) {
+    student[o.id] = picked.has(o.id) ? "D" : "S"
+  }
+  const graded = gradeTF(student, input.options)
+  return input.options.length > 0 && graded.perOption.every((p) => p.isCorrect)
+}
+
+export function resolveFirstTry(
+  current: string | null | undefined,
+  result: "correct" | "incorrect",
+): "correct" | "incorrect" {
+  if (current === "correct" || current === "incorrect") return current
+  return result
+}
+
+export function inferFirstTryFromHistory(
+  status: string | null | undefined,
+  attempts: number,
+): "correct" | "incorrect" | null {
+  if (status === "incorrect" || (status === "correct" && attempts > 1)) return "incorrect"
+  if (status === "correct" && attempts === 1) return "correct"
+  return null
+}
+
+export function isOverconfident(args: {
+  selfAssessment: string | null | undefined
+  fillFirstTry: string | null | undefined
+  fillAttempts?: number | null
+}): boolean {
+  if (args.selfAssessment !== "known") return false
+  if (args.fillFirstTry === "incorrect") return true
+  if ((args.fillFirstTry == null || args.fillFirstTry === "") && (args.fillAttempts ?? 0) > 1) {
+    return true
+  }
+  return false
+}

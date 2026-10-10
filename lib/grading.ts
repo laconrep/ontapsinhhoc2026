@@ -14,6 +14,10 @@ export {
   gradeTF,
   gradeSA,
   scoreLinear,
+  gradeLive,
+  resolveFirstTry,
+  inferFirstTryFromHistory,
+  isOverconfident,
 } from "@/lib/scoring"
 
 export type SelfAssessment = "known" | "unknown" | null

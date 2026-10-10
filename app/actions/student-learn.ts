@@ -27,7 +27,7 @@ import {
   type FillDragStatus,
   type SlotAnswer,
 } from "@/lib/grading"
-import { gradeMC, gradeSA, gradeTF, scoreLinear } from "@/lib/scoring"
+import { gradeMC, gradeSA, gradeTF, resolveFirstTry, scoreLinear } from "@/lib/scoring"
 import {
   buildDragChips,
   pickDistractors,
@@ -489,6 +489,8 @@ export async function resetLessonProgress(lessonId: string): Promise<{ success: 
         dragAttempts: 0,
         fillRevealed: false,
         dragRevealed: false,
+        fillFirstTry: null,
+        dragFirstTry: null,
         overallStatus: sql`CASE
           WHEN ${studentProgress.selfAssessment} = 'known' THEN 'known'
           WHEN ${studentProgress.selfAssessment} = 'unknown' THEN 'unknown'
@@ -625,6 +627,7 @@ export async function submitTab2Question(
     const attemptsAfter = (existing?.fillAttempts ?? 0) + 1
     const { stripped, revealed } = stripFillResults(results, attemptsAfter, allCorrect)
     const fillRevealed = Boolean(existing?.fillRevealed) || revealed
+    const fillFirstTry = resolveFirstTry(existing?.fillFirstTry, newFillStatus)
 
     await tx
       .update(studentProgress)
@@ -632,6 +635,7 @@ export async function submitTab2Question(
         fillStatus: newFillStatus,
         fillAttempts: sql`${studentProgress.fillAttempts} + 1`,
         fillRevealed,
+        fillFirstTry,
         overallStatus,
         updatedAt: new Date(),
       })
@@ -776,6 +780,7 @@ export async function submitTab3Question(
     const attemptsAfter = (existing?.dragAttempts ?? 0) + 1
     const { stripped, revealed } = stripDragResults(results, attemptsAfter, allCorrect)
     const dragRevealed = Boolean(existing?.dragRevealed) || revealed
+    const dragFirstTry = resolveFirstTry(existing?.dragFirstTry, newDragStatus)
 
     await tx
       .update(studentProgress)
@@ -783,6 +788,7 @@ export async function submitTab3Question(
         dragStatus: newDragStatus,
         dragAttempts: sql`${studentProgress.dragAttempts} + 1`,
         dragRevealed,
+        dragFirstTry,
         overallStatus,
         updatedAt: new Date(),
       })

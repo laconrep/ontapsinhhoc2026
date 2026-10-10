@@ -1,6 +1,6 @@
 # Ke hoach sua logic cham diem (8 phien)
 
-Trang thai: **phien 7 xong**. Day la nguon su that cho 8 phien. Phien sau CHI doc file nay + dung cac file liet ke trong phien do. KHONG doc lai toan repo. KHONG lam phan hoan (muc 3).
+Trang thai: **phien 8 xong**. Day la nguon su that cho 8 phien. Het 8 phien — dung. KHONG lam phan hoan (muc 3).
 
 Nguon: doi chieu spec `Spec sua logic cham diem — EduSync (ontapsinhhoc2026).md` voi code that. Cac ID (FD-01, QZ-01, ...) giu nguyen de truy vet.
 
@@ -206,7 +206,7 @@ scoreLinear(correctSlots: number, totalSlots: number): { score: number; percenta
 | 5 | Chip id Tab 3, an dap an Tab 2/3, 10 cham/phut | xong — `node --experimental-strip-types scripts/check-scoring-phien5.mjs` in `phien 5 OK` |
 | 6 | Quyen server Tab 1/2/3, ST-01 hoan thanh, LV-01/02 | xong — `node --experimental-strip-types scripts/check-scoring-phien6.mjs` in `phien 6 OK` |
 | 7 | Transaction quiz, unique Tab 1, reset overallStatus, reuse attempt | xong — `node --experimental-strip-types scripts/check-scoring-phien7.mjs` in `phien 7 OK` |
-| 8 | Live answers DB, scoring chung live, giu option id, firstTry | chua |
+| 8 | Live answers DB, scoring chung live, giu option id, firstTry | xong — `node --experimental-strip-types scripts/check-scoring-phien8.mjs` in `phien 8 OK` |
 
 ---
 
@@ -560,8 +560,32 @@ Khong thi nhom moi. Toi da 8 o/nhom: neu vuot, van cat nhom (khong throw trong e
 **Bao cao phien 8**
 
 - Da lam:
+  - Bang `live_answers` PK (sessionId, questionId, studentId, round); questionId **khong** FK; session + student CASCADE. Cot `fillFirstTry`/`dragFirstTry` + backfill SQL trong `ensureSchema`.
+  - `gradeLive` dung `gradeMC`/`gradeTF`/`gradeSA`; TF live all-or-nothing o cau (dung het y).
+  - `goToQuestion` tang `round` per question, khong xoa DB; RAM clear roi load `live_answers` round hien tai. Snapshot luu `rounds`.
+  - `submitLiveAnswer` insert ON CONFLICT DO NOTHING -> "Bạn đã trả lời"; cham bang scoring.ts.
+  - `ensureLiveState` restore answers cau hien tai tu DB (va max round neu snapshot thieu).
+  - `updateQuestion` update option theo id; option moi insert; id khong gui thi xoa. Khong delete-all insert-all.
+  - `validateOptions`: MC length===4 va dung 1; TF length===4. `createQuestion` dung cung ham.
+  - `fillFirstTry`/`dragFirstTry` ghi mot lan luc cham dau chu ky (`resolveFirstTry`); reset xoa de chu ky moi.
+  - `overconfident = known && fillFirstTry==='incorrect'` (fallback `fillAttempts>1` neu firstTry null).
+  - Test: gradeLive TF/SA trung Tab 4 all-correct; firstTry cong thuc; doi chieu nguon DDL/live/questions.
 - Con lai / lech ke hoach:
+  - UI soan cau (`question-form-dialog`) chua gui `option.id` — ngoai file duoc mo. Server giu id khi client gui; UI hien tai van insert moi khi sua.
+  - Live TF wire chi gui id "Dung" (giao thuc cu); unpicked = Sai. UI bat chon het y truoc khi nop.
+  - `pnpm exec tsc --noEmit` co the khong chay duoc neu thieu node_modules / corepack.
 - File da doi:
+  - `lib/db/schema.ts`
+  - `lib/db/index.ts`
+  - `lib/scoring.ts`
+  - `lib/grading.ts`
+  - `lib/live-session-state.ts`
+  - `app/actions/live-quiz.ts`
+  - `app/actions/questions.ts`
+  - `app/actions/student-learn.ts`
+  - `app/actions/class-stats.ts`
+  - `scripts/check-scoring-phien8.mjs`
+  - `sualogic.md`
 
 ---
 

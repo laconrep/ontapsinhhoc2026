@@ -87,6 +87,7 @@ export async function getQuestionBank(): Promise<QuestionBankItem[]> {
 }
 
 interface OptionInput {
+  id?: string
   content: string
   isCorrect: boolean
   bodyHtml?: string | null
@@ -267,11 +268,11 @@ export async function moveQuestion(
 
 function validateOptions(type: QuestionType, options: OptionInput[]) {
   if (type === "MC") {
-    if (options.length < 2) throw new Error("Câu trắc nghiệm cần ít nhất 2 lựa chọn")
+    if (options.length !== 4) throw new Error("Câu trắc nghiệm phải có đúng 4 lựa chọn")
     if (options.filter((o) => o.isCorrect).length !== 1)
       throw new Error("Câu trắc nghiệm phải có đúng 1 đáp án đúng")
   } else if (type === "TF") {
-    if (options.length < 1) throw new Error("Câu Đúng/Sai cần ít nhất 1 ý")
+    if (options.length !== 4) throw new Error("Câu Đúng/Sai phải có đúng 4 ý")
   } else if (type === "SA") {
     if (options.length !== 1 || !options[0].content.trim())
       throw new Error("Câu trả lời ngắn cần đúng 1 đáp án")
@@ -376,18 +377,34 @@ export async function updateQuestion(input: {
     })
     .where(eq(questions.id, input.id))
 
-  // replace options
-  await db.delete(questionOptions).where(eq(questionOptions.questionId, input.id))
-  if (input.options.length > 0) {
-    await db.insert(questionOptions).values(
-      input.options.map((o, i) => ({
+  const existing = await db
+    .select({ id: questionOptions.id })
+    .from(questionOptions)
+    .where(eq(questionOptions.questionId, input.id))
+  const existingIds = new Set(existing.map((o) => o.id))
+  const keepIds = new Set(input.options.map((o) => o.id).filter((id): id is string => !!id && existingIds.has(id)))
+  const removedIds = existing.map((o) => o.id).filter((id) => !keepIds.has(id))
+  if (removedIds.length > 0) {
+    await db.delete(questionOptions).where(inArray(questionOptions.id, removedIds))
+  }
+  for (let i = 0; i < input.options.length; i++) {
+    const o = input.options[i]
+    const content = o.content.trim()
+    const bodyHtml = o.bodyHtml ?? null
+    if (o.id && existingIds.has(o.id)) {
+      await db
+        .update(questionOptions)
+        .set({ content, bodyHtml, isCorrect: o.isCorrect, order: i })
+        .where(eq(questionOptions.id, o.id))
+    } else {
+      await db.insert(questionOptions).values({
         questionId: input.id,
-        content: o.content.trim(),
-        bodyHtml: o.bodyHtml ?? null,
+        content,
+        bodyHtml,
         isCorrect: o.isCorrect,
         order: i,
-      })),
-    )
+      })
+    }
   }
   revalidateQuestionPaths(q.lessonId)
 }

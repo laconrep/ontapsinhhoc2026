@@ -1,6 +1,5 @@
 // Trạng thái in-memory cho phiên trình chiếu quiz (một tiến trình).
-// Nguồn sự thật cho board GV và HS khi kết nối SSE. Câu trả lời của HS
-// là ephemeral (chỉ trong RAM); lịch sử vẫn được ghi vào session_events.
+// RAM là cache; câu trả lời HS lưu live_answers. round per question trên state.
 
 export type LivePhase = "lobby" | "question" | "revealed" | "ended"
 
@@ -40,11 +39,12 @@ export interface LiveSessionState {
   questions: LiveQuestionFull[]
   // studentId -> tên, còn online?
   joined: Map<string, { name: string; online: boolean }>
-  // câu trả lời cho câu hiện tại: studentId -> LiveAnswer
+  // câu trả lời cho câu hiện tại: studentId -> LiveAnswer (cache từ live_answers)
   answers: Map<string, LiveAnswer>
   // HS đang thoát fullscreen: studentId -> tên
   notFullscreen: Map<string, string>
   classStudentIds?: Set<string>
+  rounds: Map<string, number>
 }
 
 /** Bỏ đáp án đúng — phiên bản an toàn để gửi cho HS. */
@@ -98,6 +98,7 @@ export function initLiveState(
     answers: new Map(),
     notFullscreen: new Map(),
     classStudentIds: new Set(),
+    rounds: new Map(),
   }
   store.set(sessionId, state)
   return state
@@ -105,6 +106,16 @@ export function initLiveState(
 
 export function getLiveState(sessionId: string): LiveSessionState | null {
   return store.get(sessionId) ?? null
+}
+
+export function nextQuestionRound(state: LiveSessionState, questionId: string): number {
+  const next = (state.rounds.get(questionId) ?? 0) + 1
+  state.rounds.set(questionId, next)
+  return next
+}
+
+export function currentQuestionRound(state: LiveSessionState, questionId: string): number {
+  return state.rounds.get(questionId) ?? 1
 }
 
 export function clearLiveState(sessionId: string): void {

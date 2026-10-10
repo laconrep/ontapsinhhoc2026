@@ -189,6 +189,8 @@ export const studentProgress = pgTable(
     dragAttempts: integer("dragAttempts").notNull().default(0),
     fillRevealed: boolean("fillRevealed").notNull().default(false),
     dragRevealed: boolean("dragRevealed").notNull().default(false),
+    fillFirstTry: text("fillFirstTry", { enum: ["correct", "incorrect"] }),
+    dragFirstTry: text("dragFirstTry", { enum: ["correct", "incorrect"] }),
     updatedAt: timestamp("updatedAt").notNull().defaultNow(),
   },
   (t) => ({
@@ -476,5 +478,26 @@ export const classAssignments = pgTable(
   (t) => ({
     byClass: index("ca_class_idx").on(t.classId),
     uniqClassLesson: unique("ca_class_lesson_unique").on(t.classId, t.lessonId),
+  }),
+)
+
+export const liveAnswers = pgTable(
+  "live_answers",
+  {
+    sessionId: uuid("sessionId")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    questionId: uuid("questionId").notNull(),
+    studentId: text("studentId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    round: integer("round").notNull().default(1),
+    answer: text("answer"),
+    isCorrect: boolean("isCorrect").notNull(),
+    answeredAt: timestamp("answeredAt").notNull().defaultNow(),
+    responseMs: integer("responseMs"),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.sessionId, t.questionId, t.studentId, t.round] }),
   }),
 )

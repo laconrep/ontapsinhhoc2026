@@ -14,9 +14,10 @@ import {
   questionOptions,
   sessions,
   sessionEvents,
+  liveAnswers,
 } from "@/lib/db/schema"
 import { requireRole, getCurrentUser } from "@/lib/auth-helpers"
-import { normalizeAnswer } from "@/lib/grading"
+import { gradeLive } from "@/lib/scoring"
 import { publish } from "@/lib/realtime"
 import {
   initLiveState,
@@ -25,6 +26,8 @@ import {
   maskQuestion,
   slimQuestion,
   serializeState,
+  nextQuestionRound,
+  currentQuestionRound,
   type LiveQuestionFull,
   type LiveSessionState,
 } from "@/lib/live-session-state"
@@ -197,7 +200,13 @@ async function restoreLiveState(sessionId: string): Promise<LiveSessionState | n
 
   const [s] = await db.select().from(sessions).where(eq(sessions.id, sessionId)).limit(1)
   if (!s || s.status !== "active") return null
-  const snap = (s.resumeSnapshot as { lessonId?: string; defaultTimeSec?: number; currentIndex?: number; phase?: string } | null) ?? null
+  const snap = (s.resumeSnapshot as {
+    lessonId?: string
+    defaultTimeSec?: number
+    currentIndex?: number
+    phase?: string
+    rounds?: Record<string, number>
+  } | null) ?? null
   if (!snap?.lessonId) return null
 
   try {
@@ -207,7 +216,26 @@ async function restoreLiveState(sessionId: string): Promise<LiveSessionState | n
     state.classStudentIds = await loadClassStudentIds(s.classId)
     state.currentIndex = snap.currentIndex ?? -1
     state.phase = (snap.phase as LiveSessionState["phase"]) ?? "lobby"
+    if (snap.rounds) {
+      for (const [qid, r] of Object.entries(snap.rounds)) {
+        const n = Number(r)
+        if (Number.isFinite(n) && n > 0) state.rounds.set(qid, n)
+      }
+    }
     if (state.currentIndex >= 0 && state.phase === "question") state.questionStartedAt = Date.now()
+    if (state.currentIndex >= 0) {
+      const q = state.questions[state.currentIndex]
+      if (q) {
+        if (!state.rounds.has(q.id)) {
+          const [maxRow] = await db
+            .select({ m: sql<number>`coalesce(max(${liveAnswers.round}), 1)` })
+            .from(liveAnswers)
+            .where(and(eq(liveAnswers.sessionId, sessionId), eq(liveAnswers.questionId, q.id)))
+          state.rounds.set(q.id, Number(maxRow?.m ?? 1))
+        }
+        await loadRoundAnswers(state, q.id)
+      }
+    }
     return state
   } catch (err) {
     console.error("ensureLiveState error loading questions:", err)
@@ -224,6 +252,7 @@ async function persistSnapshot(sessionId: string, lessonId: string, defaultTimeS
         defaultTimeSec,
         currentIndex: state.currentIndex,
         phase: state.phase,
+        rounds: Object.fromEntries(state.rounds),
       },
       lastActivityAt: new Date(),
     })
@@ -544,12 +573,13 @@ export async function goToQuestion(sessionId: string, index: number) {
   if (!state) throw new Error("Phiên không hoạt động")
   if (index < 0 || index >= state.total) throw new Error("Chỉ số câu hỏi không hợp lệ")
 
+  const q = state.questions[index]
+  nextQuestionRound(state, q.id)
   state.currentIndex = index
   state.phase = "question"
   state.questionStartedAt = Date.now()
   state.answers.clear()
-
-  const q = state.questions[index]
+  await loadRoundAnswers(state, q.id)
   const snap = (session.resumeSnapshot as { lessonId: string; defaultTimeSec: number }) ?? { lessonId: "", defaultTimeSec: 30 }
   await persistSnapshot(sessionId, snap.lessonId, snap.defaultTimeSec, state)
   
@@ -660,14 +690,32 @@ export async function submitLiveAnswer(
   if (state.phase !== "question") throw new Error("Đã hết thời gian trả lời")
   const q = state.questions[state.currentIndex]
   if (!q || q.id !== questionId) throw new Error("Câu hỏi không khớp")
-  if (state.answers.has(student.id)) throw new Error("Bạn đã trả lời câu này")
+  if (state.answers.has(student.id)) throw new Error("Bạn đã trả lời")
   if (q.timeLimitSec && state.questionStartedAt != null) {
     const elapsed = Date.now() - state.questionStartedAt
     if (elapsed > q.timeLimitSec * 1000 + 1500) throw new Error("Đã hết thời gian")
   }
   assertLiveAnswerShape(q, answer)
 
-  const correct = gradeLiveAnswer(q, answer)
+  const correct = gradeLiveQuestion(q, answer)
+  const round = currentQuestionRound(state, q.id)
+  const responseMs =
+    state.questionStartedAt != null ? Math.max(0, Date.now() - state.questionStartedAt) : null
+  const inserted = await db
+    .insert(liveAnswers)
+    .values({
+      sessionId,
+      questionId,
+      studentId: student.id,
+      round,
+      answer,
+      isCorrect: correct,
+      responseMs,
+    })
+    .onConflictDoNothing()
+    .returning({ studentId: liveAnswers.studentId })
+  if (inserted.length === 0) throw new Error("Bạn đã trả lời")
+
   state.answers.set(student.id, { studentId: student.id, name: student.name, answer, correct, at: Date.now() })
   if (!state.joined.has(student.id)) state.joined.set(student.id, { name: student.name, online: true })
 
@@ -690,13 +738,39 @@ export async function reportFullscreen(sessionId: string, isFullscreen: boolean)
   publishLight(sessionId, "fullscreen_changed", { isFullscreen }, student.id, student.name)
 }
 
-function gradeLiveAnswer(q: LiveQuestionFull, answer: string): boolean {
-  if (q.type === "MC") return q.correctOptionIds.includes(answer)
-  if (q.type === "SA") return !!q.correctText && normalizeAnswer(answer) === normalizeAnswer(q.correctText)
-  if (q.type === "TF") {
-    const picked = (answer ? answer.split(",").filter(Boolean) : []).sort()
-    const correct = [...q.correctOptionIds].sort()
-    return picked.length === correct.length && picked.every((v, i) => v === correct[i])
+function gradeLiveQuestion(q: LiveQuestionFull, answer: string): boolean {
+  const options = q.options.map((o) => ({
+    id: o.id,
+    content: o.content,
+    isCorrect: q.correctOptionIds.includes(o.id) || (q.type === "SA" && q.correctText != null && o.content === q.correctText),
+  }))
+  if (q.type === "SA" && options.length === 0 && q.correctText) {
+    options.push({ id: "sa", content: q.correctText, isCorrect: true })
   }
-  return false
+  return gradeLive({ type: q.type, answer, options })
+}
+
+async function loadRoundAnswers(state: LiveSessionState, questionId: string): Promise<void> {
+  const round = currentQuestionRound(state, questionId)
+  const rows = await db
+    .select()
+    .from(liveAnswers)
+    .where(
+      and(
+        eq(liveAnswers.sessionId, state.sessionId),
+        eq(liveAnswers.questionId, questionId),
+        eq(liveAnswers.round, round),
+      ),
+    )
+  state.answers.clear()
+  for (const row of rows) {
+    const name = state.joined.get(row.studentId)?.name ?? ""
+    state.answers.set(row.studentId, {
+      studentId: row.studentId,
+      name,
+      answer: row.answer ?? "",
+      correct: row.isCorrect,
+      at: row.answeredAt.getTime(),
+    })
+  }
 }
