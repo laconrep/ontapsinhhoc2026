@@ -4,6 +4,7 @@ const nextConfig = {
     unoptimized: true,
   },
   allowedDevOrigins: ['.monkeycode-ai.live', '*.monkeycode-ai.live'],
+  serverExternalPackages: ['pg'],
   experimental: {
     serverActions: {
       allowedOrigins: ['*.monkeycode-ai.live', '.monkeycode-ai.live'],

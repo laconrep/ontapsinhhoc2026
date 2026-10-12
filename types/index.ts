@@ -357,3 +357,67 @@ export interface PaginatedResponse<T> {
   pageSize: number
   totalPages: number
 }
+
+export type StudyStage = "tab1" | "tab2" | "tab3" | "tab4" | "done"
+
+export interface LiveSession {
+  id: string
+  classId: string
+  className: string
+  status: "created" | "active" | "paused" | "ended"
+  createdAt: string
+}
+
+export interface LessonAttemptProgress {
+  lessonId: string
+  title: string
+  chapterTitle: string
+  attempts: number
+  firstScore: number
+  latestScore: number
+  bestScore: number
+  improvement: number
+  lastAttemptAt: string
+}
+
+export interface QuestionBankItem {
+  id: string
+  type: "MC" | "TF" | "SA" | "FILL" | "DRAG"
+  content: string
+  difficulty: number
+  chapterTitle: string
+  lessonId: string
+  lessonTitle: string
+  knowledgePointId: string | null
+  knowledgePointContent: string | null
+  optionCount: number
+  correctAnswer?: string
+}
+
+export interface LessonQuestionItem {
+  id: string
+  lessonId: string
+  knowledgePointId: string | null
+  type: "MC" | "TF" | "SA" | "FILL" | "DRAG"
+  content: string
+  bodyHtml: string | null
+  order: number
+  options: QuestionOptionDto[]
+  correctAnswer?: string
+}
+
+export interface QuizLessonOption {
+  id: string
+  title: string
+  chapterTitle: string
+  questionCount: number
+}
+
+export interface DraftSessionDto {
+  id: string
+  lessonTitle: string
+  chapterTitle: string
+  questionCount: number
+  defaultTimeSec: number
+  createdAt: string
+}

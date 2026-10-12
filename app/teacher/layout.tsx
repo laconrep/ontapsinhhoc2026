@@ -4,6 +4,7 @@ import { requireRole } from "@/lib/auth-helpers"
 import { TeacherShell } from "@/components/teacher/teacher-shell"
 
 export const metadata: Metadata = { title: "Giáo viên" }
+export const dynamic = "force-dynamic"
 
 export default async function TeacherLayout({
   children,

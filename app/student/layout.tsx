@@ -4,6 +4,7 @@ import { requireRole } from "@/lib/auth-helpers"
 import { StudentShell } from "@/components/student/student-shell"
 
 export const metadata: Metadata = { title: "Học sinh" }
+export const dynamic = "force-dynamic"
 
 export default async function StudentLayout({ children }: { children: React.ReactNode }) {
   const user = await requireRole("student")

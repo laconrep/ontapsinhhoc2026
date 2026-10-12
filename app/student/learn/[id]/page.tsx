@@ -3,6 +3,8 @@ import { requireRole } from "@/lib/auth-helpers"
 import { LessonStudy } from "@/components/student/lesson-study"
 import { notFound } from "next/navigation"
 
+export const dynamic = "force-dynamic"
+
 export default async function StudentLessonPage({
   params,
 }: {

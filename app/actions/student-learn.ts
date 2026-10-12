@@ -37,31 +37,29 @@ import {
   type ClientSlotPart,
 } from "@/lib/slot-render"
 import { selectQuizQuestions } from "@/lib/quiz-selection"
-import type { KnowledgePointDto, UnderlinedTerm, QuizResultDto } from "@/types"
-
-export type StudyStage = "tab1" | "tab2" | "tab3" | "tab4" | "done"
+import type { KnowledgePointDto, UnderlinedTerm, QuizResultDto, StudyStage } from "@/types"
 
 const TAB1_LOCKED_MSG = "Bạn đã nộp bước Tự đánh giá"
 const GRADE_BURST_LIMIT = 10
 const GRADE_BURST_WINDOW_MS = 60_000
 const gradeBurst = new Map<string, number[]>()
 
-export type Tab2Question = {
+type Tab2Question = {
   id: string
   knowledgePointId: string
   parts: ClientSlotPart[]
 }
 
-export type Tab3Chip = { id: string; text: string }
+type Tab3Chip = { id: string; text: string }
 
-export type Tab3Question = {
+type Tab3Question = {
   id: string
   knowledgePointId: string
   parts: ClientSlotPart[]
   chips: Tab3Chip[]
 }
 
-export type SlotGradeResult = {
+type SlotGradeResult = {
   slotIndex: number
   isCorrect: boolean
   hint?: string

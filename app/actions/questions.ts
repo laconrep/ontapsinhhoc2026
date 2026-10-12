@@ -6,35 +6,9 @@ import { requireRole } from "@/lib/auth-helpers"
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm"
 import { revalidatePath, unstable_noStore as noStore } from "next/cache"
 import { chapters } from "@/lib/db/schema"
-import type { QuestionDto, QuestionOptionDto } from "@/types"
+import type { QuestionDto, QuestionOptionDto, QuestionBankItem, LessonQuestionItem } from "@/types"
 
 type QuestionType = "MC" | "TF" | "SA" | "FILL" | "DRAG"
-
-export interface QuestionBankItem {
-  id: string
-  type: QuestionType
-  content: string
-  difficulty: number
-  chapterTitle: string
-  lessonId: string
-  lessonTitle: string
-  knowledgePointId: string | null
-  knowledgePointContent: string | null
-  optionCount: number
-  correctAnswer?: string
-}
-
-export interface LessonQuestionItem {
-  id: string
-  lessonId: string
-  knowledgePointId: string | null
-  type: QuestionType
-  content: string
-  bodyHtml: string | null
-  order: number
-  options: QuestionOptionDto[]
-  correctAnswer?: string
-}
 
 function revalidateQuestionPaths(lessonId: string) {
   revalidatePath("/teacher/lessons")

@@ -7,14 +7,7 @@ import { db } from "@/lib/db"
 import { classes, classStudents, sessions, sessionEvents, user } from "@/lib/db/schema"
 import { requireRole } from "@/lib/auth-helpers"
 import { publish, type RealtimeEvent } from "@/lib/realtime"
-
-export interface LiveSession {
-  id: string
-  classId: string
-  className: string
-  status: "created" | "active" | "paused" | "ended"
-  createdAt: string
-}
+import type { LiveSession } from "@/types"
 
 // Ghi sự kiện vào DB (lịch sử) và phát realtime cho subscriber.
 async function emit(

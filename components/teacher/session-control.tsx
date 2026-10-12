@@ -3,15 +3,13 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import type { LiveSession } from "@/app/actions/sessions"
+import type { DraftSessionDto, LiveSession, QuizLessonOption } from "@/types"
 import {
   getLessonsForQuiz,
   startQuizSession,
   createDraftSession,
   activateDraftSession,
   deleteDraftSession,
-  type QuizLessonOption,
-  type DraftSessionDto,
 } from "@/app/actions/live-quiz"
 import { Button } from "@/components/ui/button"
 import {

@@ -9,8 +9,6 @@ import {
   type SaveResult,
 } from "@/lib/worksheet-import"
 
-export type { WorksheetPreview, SaveResult }
-
 function toUserError(e: unknown, fallback: string): Error {
   if (e && typeof e === "object" && "digest" in e) throw e
   if (e instanceof Error && e.message && !/unexpected response/i.test(e.message)) {

@@ -17,6 +17,7 @@ import {
   liveAnswers,
 } from "@/lib/db/schema"
 import { requireRole, getCurrentUser } from "@/lib/auth-helpers"
+import type { DraftSessionDto, QuizLessonOption } from "@/types"
 import { gradeLive } from "@/lib/scoring"
 import { publish } from "@/lib/realtime"
 import {
@@ -260,13 +261,6 @@ async function persistSnapshot(sessionId: string, lessonId: string, defaultTimeS
 }
 
 // ---- GV: danh sách bài có thể trình chiếu (đã sẵn sàng, có câu MC/TF/SA) ----
-export interface QuizLessonOption {
-  id: string
-  title: string
-  chapterTitle: string
-  questionCount: number
-}
-
 export async function getLessonsForQuiz(): Promise<QuizLessonOption[]> {
   const teacher = await requireRole("teacher")
   const rows = await db
@@ -360,15 +354,6 @@ export async function createDraftSession(input: {
 }
 
 // ---- GV: danh sách phiên nháp của lớp ----
-export interface DraftSessionDto {
-  id: string
-  lessonTitle: string
-  chapterTitle: string
-  questionCount: number
-  defaultTimeSec: number
-  createdAt: string
-}
-
 export async function getDraftSessions(classId: string): Promise<DraftSessionDto[]> {
   const teacher = await requireRole("teacher")
   const rows = await db

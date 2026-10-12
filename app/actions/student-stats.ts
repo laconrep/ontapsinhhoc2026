@@ -13,7 +13,13 @@ import {
 } from "@/lib/db/schema"
 import { requireRole } from "@/lib/auth-helpers"
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm"
-import type { StudentStatsDto, BadgeDto, WeeklyPoint, BadgeType } from "@/types"
+import type {
+  StudentStatsDto,
+  BadgeDto,
+  WeeklyPoint,
+  BadgeType,
+  LessonAttemptProgress,
+} from "@/types"
 
 /** Chuẩn hoá 1 Date về "YYYY-MM-DD" theo giờ địa phương server. */
 function toDayKey(d: Date): string {
@@ -179,18 +185,6 @@ export async function getStudentStats(): Promise<StudentStatsDto> {
   }
 
   return { streak, totalReviewed, badges, weeklyProgress, lessonProgress }
-}
-
-export interface LessonAttemptProgress {
-  lessonId: string
-  title: string
-  chapterTitle: string
-  attempts: number
-  firstScore: number
-  latestScore: number
-  bestScore: number
-  improvement: number
-  lastAttemptAt: string
 }
 
 /**

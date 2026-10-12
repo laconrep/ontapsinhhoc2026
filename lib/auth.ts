@@ -1,8 +1,13 @@
 import { betterAuth } from "better-auth"
 import { pool } from "@/lib/db"
 
+const isBuild = process.env.NEXT_PHASE === "phase-production-build"
+
 export const auth = betterAuth({
   database: pool,
+  secret:
+    process.env.BETTER_AUTH_SECRET ??
+    (isBuild ? "edusync-build-placeholder-secret-min-32" : undefined),
   baseURL:
     process.env.BETTER_AUTH_URL ??
     (process.env.VERCEL_PROJECT_PRODUCTION_URL
@@ -50,14 +55,15 @@ export const auth = betterAuth({
     expiresIn: 60 * 60 * 24 * 7, // 7 ngày
     updateAge: 60 * 60 * 24, // 1 ngày
   },
-  ...(process.env.NODE_ENV === "development"
-    ? {
-        advanced: {
+  advanced: {
+    database: { validateSchema: false },
+    ...(process.env.NODE_ENV === "development"
+      ? {
           defaultCookieAttributes: {
             sameSite: "none" as const,
             secure: true,
           },
-        },
-      }
-    : {}),
+        }
+      : {}),
+  },
 })

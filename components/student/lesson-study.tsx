@@ -4,8 +4,7 @@ import { useState, useTransition } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { ArrowLeft, RotateCcw } from "lucide-react"
-import type { KnowledgePointDto } from "@/types"
-import type { StudyStage } from "@/app/actions/student-learn"
+import type { KnowledgePointDto, StudyStage } from "@/types"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,

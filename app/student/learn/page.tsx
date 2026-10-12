@@ -4,6 +4,8 @@ import { LessonAccordion } from "@/components/student/lesson-accordion"
 import { BookOpen } from "lucide-react"
 import type { AssignedLessonDto } from "@/types"
 
+export const dynamic = "force-dynamic"
+
 export default async function StudentLearnPage() {
   const chapters = await getStudentLessons()
   let assigned: AssignedLessonDto[] = []

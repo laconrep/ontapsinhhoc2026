@@ -6,7 +6,7 @@ import { Check, Library, Search } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import type { QuestionBankItem } from "@/app/actions/questions"
+import type { QuestionBankItem } from "@/types"
 
 type QType = "MC" | "TF" | "SA" | "FILL" | "DRAG"
 

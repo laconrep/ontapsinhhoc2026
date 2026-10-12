@@ -1,6 +1,6 @@
 import { TrendingUp, TrendingDown, Minus, Repeat2, Trophy } from "lucide-react"
 import { StatCard } from "@/components/shared/stat-card"
-import type { LessonAttemptProgress } from "@/app/actions/student-stats"
+import type { LessonAttemptProgress } from "@/types"
 
 export function QuizProgress({ items }: { items: LessonAttemptProgress[] }) {
   if (items.length === 0) {

@@ -53,7 +53,8 @@ import {
   deleteKnowledgePoint,
   updateLesson,
 } from "@/app/actions/content"
-import { deleteQuestion, moveQuestion, type LessonQuestionItem } from "@/app/actions/questions"
+import { deleteQuestion, moveQuestion } from "@/app/actions/questions"
+import type { LessonQuestionItem } from "@/types"
 import { QuestionFormDialog } from "@/components/teacher/question-form-dialog"
 import { KpContentEditor } from "@/components/teacher/kp-content-editor"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"

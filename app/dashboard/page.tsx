@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation"
 import { requireUser } from "@/lib/auth-helpers"
 
+export const dynamic = "force-dynamic"
+
 /** Trang trung chuyển: điều hướng người dùng tới đúng khu vực theo vai trò. */
 export default async function DashboardPage() {
   const user = await requireUser()
