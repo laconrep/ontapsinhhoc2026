@@ -2,10 +2,26 @@
 
 import { createAuthClient } from "better-auth/react"
 import { inferAdditionalFields } from "better-auth/client/plugins"
-import type { auth } from "@/lib/auth"
 
 export const authClient = createAuthClient({
-  plugins: [inferAdditionalFields<typeof auth>()],
+  plugins: [
+    inferAdditionalFields({
+      user: {
+        role: {
+          type: "string",
+          required: false,
+          defaultValue: "student",
+          input: true,
+        },
+        isOnboarded: {
+          type: "boolean",
+          required: false,
+          defaultValue: false,
+          input: false,
+        },
+      },
+    }),
+  ],
 })
 
 export const { signIn, signUp, signOut, useSession } = authClient
