@@ -56,7 +56,6 @@ export const auth = betterAuth({
     updateAge: 60 * 60 * 24, // 1 ngày
   },
   advanced: {
-    database: { validateSchema: false },
     ...(process.env.NODE_ENV === "development"
       ? {
           defaultCookieAttributes: {
