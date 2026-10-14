@@ -164,10 +164,11 @@ async function resolveStudyStage(
     .from(quizAttempts)
     .where(and(eq(quizAttempts.studentId, studentId), eq(quizAttempts.lessonId, lessonId)))
 
+  // Cung mot tieu chi voi getLatestQuizResult: attempt da nop va bat dau sau lan nop Tab 1.
+  // Khong so `completedAt > submittedAt` vi completedAt (dong ho app) va submittedAt
+  // (dong ho DB) co the lech nhau, gay UI hien "done" nhung stage lai != "done".
   const after = attempts.filter((a) => a.startedAt.getTime() > submittedAt.getTime())
-  const completed = after.find(
-    (a) => a.completedAt != null && a.completedAt.getTime() > submittedAt.getTime(),
-  )
+  const completed = after.find((a) => a.completedAt != null)
   if (completed) return "done"
   const inProgress = after.find((a) => a.completedAt == null)
   if (inProgress) return "tab4"
@@ -431,7 +432,9 @@ export async function submitTab1(lessonId: string, assessments: Record<string, "
  * Xoá dấu khoá Tab 1 (studentTab1Submissions) để mở lại tab Nội dung.
  * GIỮ LẠI lịch sử quiz_attempts — không xoá attempt đã nộp.
  */
-export async function resetLessonProgress(lessonId: string): Promise<{ success: true }> {
+export async function resetLessonProgress(
+  lessonId: string,
+): Promise<{ success: true } | { success: false; reason: string }> {
   const student = await requireRole("student")
   await ensureSchema()
   await assertLessonAccess(student.id, lessonId)
@@ -466,39 +469,44 @@ export async function resetLessonProgress(lessonId: string): Promise<{ success: 
     submission?.submittedAt ?? null,
     skippedTab2,
   )
-  if (stage !== "done") throw new Error("Hãy hoàn thành bài kiểm tra trước")
+  if (stage !== "done") return { success: false, reason: "Hãy hoàn thành bài kiểm tra trước" }
 
-  await db
-    .delete(studentTab1Submissions)
-    .where(
-      and(
-        eq(studentTab1Submissions.studentId, student.id),
-        eq(studentTab1Submissions.lessonId, lessonId),
-      ),
-    )
-
-  if (kpIds.length > 0) {
+  try {
     await db
-      .update(studentProgress)
-      .set({
-        fillStatus: null,
-        dragStatus: null,
-        fillAttempts: 0,
-        dragAttempts: 0,
-        fillRevealed: false,
-        dragRevealed: false,
-        fillFirstTry: null,
-        dragFirstTry: null,
-        overallStatus: sql`CASE
-          WHEN ${studentProgress.selfAssessment} = 'known' THEN 'known'
-          WHEN ${studentProgress.selfAssessment} = 'unknown' THEN 'unknown'
-          ELSE 'not_started'
-        END`,
-        updatedAt: new Date(),
-      })
+      .delete(studentTab1Submissions)
       .where(
-        and(eq(studentProgress.studentId, student.id), inArray(studentProgress.knowledgePointId, kpIds)),
+        and(
+          eq(studentTab1Submissions.studentId, student.id),
+          eq(studentTab1Submissions.lessonId, lessonId),
+        ),
       )
+
+    if (kpIds.length > 0) {
+      await db
+        .update(studentProgress)
+        .set({
+          fillStatus: null,
+          dragStatus: null,
+          fillAttempts: 0,
+          dragAttempts: 0,
+          fillRevealed: false,
+          dragRevealed: false,
+          fillFirstTry: null,
+          dragFirstTry: null,
+          overallStatus: sql`CASE
+            WHEN ${studentProgress.selfAssessment} = 'known' THEN 'known'
+            WHEN ${studentProgress.selfAssessment} = 'unknown' THEN 'unknown'
+            ELSE 'not_started'
+          END`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(eq(studentProgress.studentId, student.id), inArray(studentProgress.knowledgePointId, kpIds)),
+        )
+    }
+  } catch (err) {
+    console.error("resetLessonProgress failed:", err)
+    return { success: false, reason: "Không thể làm lại. Vui lòng thử lại." }
   }
 
   revalidatePath(`/student/learn/${lessonId}`)
@@ -1161,7 +1169,7 @@ export async function submitQuiz(
 
     const claimed = await tx
       .update(quizAttempts)
-      .set({ score, completedAt: new Date() })
+      .set({ score, completedAt: sql`now()` })
       .where(
         and(
           eq(quizAttempts.id, quizId),

@@ -60,7 +60,11 @@ export function LessonStudy({
   const handleReset = () => {
     startReset(async () => {
       try {
-        await resetLessonProgress(lessonId)
+        const res = await resetLessonProgress(lessonId)
+        if (!res.success) {
+          toast.error(res.reason)
+          return
+        }
         try {
           localStorage.removeItem(`edusync:tab1:${lessonId}`)
           localStorage.removeItem(`edusync:tab2:${userId}:${lessonId}`)
