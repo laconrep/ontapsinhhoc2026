@@ -195,17 +195,29 @@ export function ensureSchema(): Promise<void> {
         `),
       )
       // SEC-08: bảng rate_limits (xem lib/rate-limit.ts).
+      // Hai lệnh DDL của đợt SEC bọc catch riêng: nếu user DB production
+      // thiếu quyền DDL (không phải owner của bảng trên Supabase) thì chỉ
+      // log cảnh báo, KHÔNG được làm sập ensureSchema — các hàm đọc như
+      // getQuestionBank gọi ensureSchema ở đầu và sẽ ném lỗi ra trang.
+      // Hệ quả khi lỗi: rate limit tự fail-open (lib/rate-limit.ts), mã
+      // mời lớp mới tạm giữ 6 ký tự tới khi ALTER chạy được.
       .then(() =>
-        pool.query(`
+        pool
+          .query(`
           CREATE TABLE IF NOT EXISTS rate_limits (
             "key" text PRIMARY KEY,
             "count" integer NOT NULL DEFAULT 0,
             "windowStart" timestamp NOT NULL DEFAULT now()
           )
-        `),
+        `)
+          .catch((e) => console.error("[ensureSchema] rate_limits DDL failed:", e)),
       )
       // SEC-05: nới cột mã mời lớp 6 -> 32 ký tự cho mã mới 8 ký tự.
-      .then(() => pool.query(`ALTER TABLE classes ALTER COLUMN "inviteCode" TYPE varchar(32)`))
+      .then(() =>
+        pool
+          .query(`ALTER TABLE classes ALTER COLUMN "inviteCode" TYPE varchar(32)`)
+          .catch((e) => console.error("[ensureSchema] inviteCode DDL failed:", e)),
+      )
       .then(() => undefined)
       .catch((e) => {
         schemaReady = null
