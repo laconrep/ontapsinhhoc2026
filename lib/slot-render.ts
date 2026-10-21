@@ -142,6 +142,54 @@ export function renderClientSlots(content: string, terms: UnderlinedTerm[]): Cli
   return toClientSlotParts(renderSlots(content, terms))
 }
 
+/** Số ô thực sự dựng được so với số term: lệch là dấu hiệu offset DB hỏng (BUG-01). */
+export function countRenderedSlots(content: string, terms: UnderlinedTerm[]): number {
+  return renderSlots(content, terms).filter((p) => p.type === "slot").length
+}
+
+export function slotRenderMismatch(content: string, terms: UnderlinedTerm[]): boolean {
+  if (terms.length === 0) return false
+  return countRenderedSlots(content, terms) !== terms.length
+}
+
+/**
+ * Chuẩn bị KP trước khi LƯU (tạo/sửa/import): chuẩn hóa content và
+ * term.text về NFC, tính lại end = start + text.length, rồi kiểm tra bất
+ * biến content.slice(start, end) === text cho MỌI term. Không khớp -> ném
+ * lỗi rõ ràng để giáo viên sửa, thay vì lưu dữ liệu lệch offset khiến học
+ * sinh mất ô (BUG-01, BUG-12). Không tự đoán vị trí mới.
+ */
+export function prepareKpTermsForSave(
+  content: string,
+  terms: UnderlinedTerm[],
+): { content: string; terms: UnderlinedTerm[] } {
+  const nfcContent = (content ?? "").trim().normalize("NFC")
+  const fixed = (terms ?? []).map((t) => {
+    const text = (t.text ?? "").normalize("NFC")
+    const hasStart = typeof t.start === "number" && Number.isInteger(t.start)
+    return {
+      ...t,
+      text,
+      start: hasStart ? (t.start as number) : t.start,
+      end: hasStart ? (t.start as number) + text.length : t.end,
+    }
+  })
+  const bad = fixed.filter(
+    (t) =>
+      typeof t.start !== "number" ||
+      typeof t.end !== "number" ||
+      t.start < 0 ||
+      t.end > nfcContent.length ||
+      nfcContent.slice(t.start, t.end) !== t.text,
+  )
+  if (bad.length > 0) {
+    throw new Error(
+      `Vị trí ô trống không khớp nội dung (${bad.map((t) => `"${t.text}"`).join(", ")}). Hãy kiểm tra lại phần gạch chân rồi lưu lại.`,
+    )
+  }
+  return { content: nfcContent, terms: fixed }
+}
+
 export function acceptedNormsOf(terms: UnderlinedTerm[]): Set<string> {
   const out = new Set<string>()
   for (const t of terms) {

@@ -8,6 +8,8 @@ export interface ParsedOption {
   content: string
   isCorrect: boolean
   bodyHtml?: string
+  /** Gạch chân chỉ bao một phần nội dung phương án (không bao trọn) — BUG-09. */
+  underlinePartial?: boolean
 }
 
 export interface ParsedQuestion {
@@ -58,6 +60,8 @@ export interface ValidationError {
 export interface ValidationResult {
   isValid: boolean
   errors: ValidationError[]
+  /** Cảnh báo không chặn lưu: nhóm hoán đổi nhờ nhãn lặp, danh sách chưa bật hoán đổi, phương án chứa mẫu giống nhãn. */
+  warnings: ValidationError[]
 }
 
 // ============ Tách ô trống trong nội dung KP ============
@@ -80,8 +84,122 @@ function peelBlankText(raw: string): { core: string; prefix: string; suffix: str
 // (, / - – →) và/hoặc từ nối "và"/"hoặc" (có dấu hoặc không dấu), cho phép
 // tổ hợp như ", và " hay " và, ". Văn bản xen khác (vd " bổ sung với ")
 // hoặc dấu ngắt câu (. ! ? ;) sẽ tách nhóm. Xem sualogic.md mục 10.
-const SWAP_GROUP_JOIN_RE = /^\s*(?:(?:[,\/\-–→]|và|hoặc|va|hoac)\s*)*$/i
-const MAX_SWAP_GROUP_SIZE = 8
+// Chuỗi nối được chuẩn hóa NFC trước khi xét regex (mục 11, BUG-04).
+export const SWAP_GROUP_JOIN_RE = /^\s*(?:(?:[,\/\-–→]|và|hoặc|va|hoac)\s*)*$/i
+export const MAX_SWAP_GROUP_SIZE = 8
+
+const JOIN_ONLY_WORDS = new Set(["và", "hoặc", "va", "hoac"])
+
+/**
+ * Phần "nhãn lặp" còn lại trong chuỗi giữa hai ô sau khi bỏ dấu nối và
+ * và/hoặc: ", vùng " -> "vùng". Trả null nếu không còn gì hoặc phần còn lại
+ * dài hơn 3 từ (vd " bổ sung với bazơ " -> 4 từ -> null). Xem BUG-04.
+ */
+function residualSwapLabel(between: string): string | null {
+  const tokens = between
+    .normalize("NFC")
+    .replace(/[,\/\-–→]/g, " ")
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .filter((t) => !JOIN_ONLY_WORDS.has(t.toLowerCase()))
+  if (tokens.length === 0 || tokens.length > 3) return null
+  return tokens.join(" ")
+}
+
+function tokenizeWords(s: string): string[] {
+  return s
+    .normalize("NFC")
+    .replace(/[,\/\-–→]/g, " ")
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter(Boolean)
+}
+
+function wordsEndWith(words: string[], tail: string[]): boolean {
+  if (tail.length === 0 || tail.length > words.length) return false
+  const slice = words.slice(words.length - tail.length)
+  return slice.join(" ").toLowerCase() === tail.join(" ").toLowerCase()
+}
+
+export interface SwapRun {
+  terms: UnderlinedTerm[]
+  /** Ít nhất một cặp ô trong run được gộp nhờ nhãn lặp (không phải chỉ dấu nối/từ nối). */
+  viaLabel: boolean
+  label: string | null
+}
+
+/**
+ * Tìm các run ô liên tiếp có thể gộp một nhóm hoán đổi. Hai ô kề nhau gộp
+ * được khi chuỗi giữa chúng khớp SWAP_GROUP_JOIN_RE (sau NFC), hoặc phần
+ * còn lại sau khi bỏ dấu nối/và/hoặc là một nhãn ngắn (<= 3 từ) VÀ nhãn đó
+ * cũng đứng ngay trước ô đầu tiên của run (vd "là vùng __A__, vùng __B__").
+ * swapOnly = true: ô không hoán đổi sẽ ngắt run và không thuộc run nào
+ * (dùng khi gán swapGroupId). swapOnly = false: mọi ô đều là ứng viên
+ * (dùng để cảnh báo danh sách trông hoán đổi được nhưng chưa bật hoán đổi).
+ */
+export function computeSwapRuns(
+  content: string,
+  terms: UnderlinedTerm[],
+  opts?: { swapOnly?: boolean },
+): SwapRun[] {
+  const swapOnly = opts?.swapOnly ?? false
+  const ordered = [...terms].sort((a, b) => a.slotIndex - b.slotIndex)
+  const runs: (SwapRun & { preWords: string[] })[] = []
+  let current: (SwapRun & { preWords: string[] }) | null = null
+  let prev: UnderlinedTerm | null = null
+  for (const t of ordered) {
+    if (swapOnly && !t.allowSwap) {
+      current = null
+      prev = t
+      continue
+    }
+    let joined = false
+    if (current && prev && typeof prev.end === "number" && typeof t.start === "number") {
+      const between = content.slice(prev.end, t.start)
+      if (SWAP_GROUP_JOIN_RE.test(between.normalize("NFC"))) {
+        joined = true
+      } else {
+        const label = residualSwapLabel(between)
+        if (label && wordsEndWith(current.preWords, label.split(" "))) {
+          joined = true
+          current.viaLabel = true
+          current.label = label
+        }
+      }
+    }
+    if (joined && current) {
+      current.terms.push(t)
+    } else {
+      const from = prev && typeof prev.end === "number" ? prev.end : 0
+      const chunk = typeof t.start === "number" ? content.slice(from, t.start) : ""
+      current = { terms: [t], viaLabel: false, label: null, preWords: tokenizeWords(chunk) }
+      runs.push(current)
+    }
+    prev = t
+  }
+  return runs.map(({ terms: ts, viaLabel, label }) => ({ terms: ts, viaLabel, label }))
+}
+
+/**
+ * Gán swapGroupId từ content + offset: mỗi run (tối đa MAX_SWAP_GROUP_SIZE
+ * ô/nhóm) thành một nhóm; nhóm chỉ có 1 ô -> swapGroupId = null (chấm như
+ * ô thường). Dùng chung cho extractBlanks và backfill-swap-groups.
+ */
+export function assignSwapGroupIds(content: string, terms: UnderlinedTerm[]): void {
+  for (const t of terms) t.swapGroupId = null
+  const runs = computeSwapRuns(content, terms, { swapOnly: true })
+  let groupCounter = 0
+  for (const run of runs) {
+    for (let s = 0; s < run.terms.length; s += MAX_SWAP_GROUP_SIZE) {
+      const slice = run.terms.slice(s, s + MAX_SWAP_GROUP_SIZE)
+      if (slice.length < 2) continue
+      groupCounter += 1
+      const gid = `g${groupCounter}`
+      for (const t of slice) t.swapGroupId = gid
+    }
+  }
+}
 
 /**
  * Word/mammoth hay ra `"__từ"__` thay vì `__"từ"__`.
@@ -116,28 +234,7 @@ export function unusedPlainQuotes(raw: string): string[] {
 }
 
 export function uncappedSwapRunLengths(content: string, terms: UnderlinedTerm[]): number[] {
-  const runs: number[] = []
-  let run = 0
-  let prevEnd = -1
-  for (const t of terms) {
-    if (!t.allowSwap) {
-      if (run > 0) runs.push(run)
-      run = 0
-      prevEnd = typeof t.end === "number" ? t.end : -1
-      continue
-    }
-    const start = typeof t.start === "number" ? t.start : -1
-    const canJoin =
-      run > 0 && start >= 0 && prevEnd >= 0 && SWAP_GROUP_JOIN_RE.test(content.slice(prevEnd, start))
-    if (canJoin) run += 1
-    else {
-      if (run > 0) runs.push(run)
-      run = 1
-    }
-    prevEnd = typeof t.end === "number" ? t.end : start >= 0 ? start + t.text.length : -1
-  }
-  if (run > 0) runs.push(run)
-  return runs
+  return computeSwapRuns(content, terms, { swapOnly: true }).map((r) => r.terms.length)
 }
 
 /**
@@ -154,8 +251,11 @@ export function extractBlanks(raw: string): {
   underlinedTerms: UnderlinedTerm[]
 } {
   const markers: RawMarker[] = []
-  // 1) tìm __...__ trước (có thể chứa "..." bên trong)
-  const underlineRe = /__(.+?)__/g
+  // 1) tìm __...__ trước (có thể chứa "..." bên trong). Delimiter phải là
+  // đúng "__" không dính thêm gạch dưới hai phía: dãy _{3,} (________,
+  // ____) là chỗ trống chưa có đáp án, không được ghép mảnh thành ô rác
+  // (BUG-06) — dãy được giữ nguyên trong content để validateDocument báo lỗi.
+  const underlineRe = /(?<!_)__(?!_)(.+?)(?<!_)__(?!_)/g
   let m: RegExpExecArray | null
   while ((m = underlineRe.exec(raw)) !== null) {
     let inner = m[1]
@@ -172,6 +272,10 @@ export function extractBlanks(raw: string): {
     if (parts.length > 1) {
       synonyms = parts.slice(1).filter(p => p.trim().length > 0)
     }
+    // Dãy gạch dưới không có đáp án (________, ____): "chỗ trống chưa có
+    // đáp án" — KHÔNG tạo term rác. Giữ nguyên dãy trong content để
+    // validateDocument báo lỗi và hướng dẫn viết __đáp án__ (BUG-06).
+    if (/^[_\s]*$/.test(inner)) continue
     markers.push({ start: m.index, end: m.index + m[0].length, text: inner, allowSwap, synonyms })
   }
 
@@ -200,52 +304,27 @@ export function extractBlanks(raw: string): {
 
   const lead = content.length - content.trimStart().length
 
-  // gán swapGroupId: hai ô swap cùng nhóm khi between khớp SWAP_GROUP_JOIN_RE; tối đa 8 ô/nhóm
-  const terms: UnderlinedTerm[] = []
-  let groupCounter = 0
-  let currentGroup: string | null = null
-  let currentGroupSize = 0
-  let prevEnd = -1
-  let prevWasSwap = false
-  placed.forEach((p, i) => {
-    let swapGroupId: string | null = null
-    if (p.allowSwap) {
-      const between = prevEnd >= 0 ? content.slice(prevEnd, p.cleanStart) : "."
-      const canJoin = prevWasSwap && currentGroup != null && SWAP_GROUP_JOIN_RE.test(between)
-      if (canJoin && currentGroupSize < MAX_SWAP_GROUP_SIZE) {
-        swapGroupId = currentGroup
-        currentGroupSize += 1
-      } else {
-        groupCounter += 1
-        currentGroup = `g${groupCounter}`
-        swapGroupId = currentGroup
-        currentGroupSize = 1
-      }
-    } else {
-      currentGroup = null
-      currentGroupSize = 0
-    }
+  const terms: UnderlinedTerm[] = placed.map((p, i) => {
     const start = p.cleanStart - lead
-    terms.push({
+    return {
       text: p.text,
       slotIndex: i,
       allowSwap: p.allowSwap,
-      swapGroupId,
+      swapGroupId: null,
       extraAccepted: [],
       synonyms: p.synonyms && p.synonyms.length > 0 ? p.synonyms : undefined,
       start,
       end: start + p.text.length,
-    })
-    prevEnd = p.cleanStart + p.text.length
-    prevWasSwap = p.allowSwap
+    }
   })
 
-  // group chỉ có 1 thành viên → swapGroupId = null (chấm như slot thường)
-  const groupCount = new Map<string, number>()
-  for (const t of terms) if (t.swapGroupId) groupCount.set(t.swapGroupId, (groupCount.get(t.swapGroupId) ?? 0) + 1)
-  for (const t of terms) if (t.swapGroupId && (groupCount.get(t.swapGroupId) ?? 0) < 2) t.swapGroupId = null
+  // Gán swapGroupId: hai ô swap cùng nhóm khi chuỗi giữa chúng chỉ gồm dấu
+  // nối/và/hoặc, hoặc là nhãn lặp đứng ngay trước ô đầu (BUG-04). Tối đa
+  // 8 ô/nhóm; nhóm 1 ô -> null (chấm như ô thường).
+  const trimmed = content.trim()
+  assignSwapGroupIds(trimmed, terms)
 
-  return { content: content.trim(), underlinedTerms: terms }
+  return { content: trimmed, underlinedTerms: terms }
 }
 
 // ============ Helper parse lựa chọn MC/TF ============
@@ -349,12 +428,75 @@ function takeFirstTfBlock(block: string): { first: string; leftover: boolean } {
   return { first: block.slice(0, cut), leftover: true }
 }
 
-/** Tách A-D (hoặc a-d) trong 1 khối: 1 dòng, 4-trong-1, hoặc 2+2. Giữ @@IMG/@@TBL. */
-function splitChoiceBlock(
-  block: string,
+interface ChoicePart {
+  letter: string
+  text: string
+  underlined: boolean
+  underlinePartial: boolean
+}
+
+/** Mọi vị trí ứng viên của nhãn `letter` trong khối (trên bản đã che "__"). */
+function markerCandidates(searchable: string, letter: string): number[] {
+  const re = new RegExp(`(^|[\\s\\u00A0]|\\.)\\s*(${letter}[.)])`, "gi")
+  const out: number[] = []
+  let m: RegExpExecArray | null
+  while ((m = re.exec(searchable)) !== null) {
+    out.push(m.index + m[0].length - m[2].length)
+  }
+  return out
+}
+
+/**
+ * Ưu tiên 1 — tách theo đầu dòng: dòng bắt đầu bằng nhãn kế tiếp theo đúng
+ * thứ tự mới mở phương án mới; dòng khác là phần tiếp của phương án trước.
+ * Nhãn giống hệt nằm giữa dòng (vd "Nhóm B. là...") không bị cắt (BUG-07).
+ */
+function lineStartPositions(
+  searchable: string,
   letters: string[],
-): { letter: string; text: string; underlined: boolean }[] {
-  const searchable = block.replace(/__/g, "  ")
+): { letter: string; start: number }[] | null {
+  const positions: { letter: string; start: number }[] = []
+  let expect = 0
+  let offset = 0
+  for (const line of searchable.split("\n")) {
+    if (expect < letters.length) {
+      const m = line.match(new RegExp(`^\\s*(${letters[expect]}[.)])`, "i"))
+      if (m) {
+        positions.push({ letter: letters[expect], start: offset + line.indexOf(m[1]) })
+        expect += 1
+      }
+    }
+    offset += line.length + 1
+  }
+  return expect === letters.length ? positions : null
+}
+
+/**
+ * Ưu tiên 2 — khối gộp một dòng: chọn lùi từ chữ cái cuối. Ứng viên nhái
+ * nằm trong nội dung phương án trước luôn đứng TRƯỚC nhãn thật của phương
+ * án sau, nên lấy ứng viên cuối cùng còn hợp lệ cho mỗi chữ (theo thứ tự
+ * A -> B -> C -> D tăng dần) sẽ bỏ qua nhãn nhái (BUG-07).
+ */
+function backwardPositions(
+  searchable: string,
+  letters: string[],
+): { letter: string; start: number }[] | null {
+  const chosen = new Array<number>(letters.length).fill(-1)
+  let bound = Number.POSITIVE_INFINITY
+  for (let i = letters.length - 1; i >= 0; i--) {
+    const cands = markerCandidates(searchable, letters[i]).filter((p) => p < bound)
+    if (cands.length === 0) return null
+    chosen[i] = cands[cands.length - 1]
+    bound = chosen[i]
+  }
+  return letters.map((L, i) => ({ letter: L, start: chosen[i] }))
+}
+
+/** Dự phòng — thuật toán quét tiến cũ (khi hai cách trên không đủ chữ cái). */
+function forwardPositions(
+  searchable: string,
+  letters: string[],
+): { letter: string; start: number }[] {
   const positions: { letter: string; start: number }[] = []
   let from = 0
   for (const L of letters) {
@@ -367,18 +509,53 @@ function splitChoiceBlock(
     positions.push({ letter: L, start: idx })
     from = idx + L.length + 1
   }
-  const parts: { letter: string; text: string; underlined: boolean }[] = []
+  return positions
+}
+
+function normalizeForCompare(s: string): string {
+  return s
+    .replace(/^[A-Da-d][.)]\s*/i, "")
+    .replace(/\s+/g, " ")
+    .replace(/[\s.,;:!?…]+$/g, "")
+    .trim()
+}
+
+/** Tách A-D (hoặc a-d) trong 1 khối: 1 dòng, 4-trong-1, hoặc 2+2. Giữ @@IMG/@@TBL. */
+function splitChoiceBlock(block: string, letters: string[]): ChoicePart[] {
+  const searchable = block.replace(/__/g, "  ")
+  const positions =
+    lineStartPositions(searchable, letters) ??
+    backwardPositions(searchable, letters) ??
+    forwardPositions(searchable, letters)
+  const parts: ChoicePart[] = []
   for (let i = 0; i < positions.length; i++) {
     const start = positions[i].start
     let end = i + 1 < positions.length ? positions[i + 1].start : block.length
     if (i + 1 < positions.length && end >= 2 && block.slice(end - 2, end) === "__") {
       end -= 2
     }
+    // "__" mở ngay trước nhãn thuộc về phương án này (vd __B. ...__).
+    const segStart = start >= 2 && block.slice(start - 2, start) === "__" ? start - 2 : start
     const raw = block.slice(start, end)
-    const underlined = raw.includes("__") || (start >= 2 && block.slice(start - 2, start) === "__")
+    const rawFull = block.slice(segStart, end)
+    const underlined = raw.includes("__") || segStart < start
     let text = raw.replace(/^[A-Da-d][.)]\s*/i, "")
     text = text.replace(/__/g, "").trim()
-    parts.push({ letter: positions[i].letter, text, underlined })
+    // BUG-09: gạch chân chỉ bao một phần nội dung phương án thì KHÔNG được
+    // coi là chỉ định đáp án đúng — validateDocument sẽ báo lỗi. Bao trọn
+    // phương án (hoặc trọn phần nội dung sau nhãn) vẫn hợp lệ như cũ.
+    let underlinePartial = false
+    if (underlined) {
+      const segs: string[] = []
+      const re = /__([\s\S]*?)__/g
+      let mm: RegExpExecArray | null
+      while ((mm = re.exec(rawFull)) !== null) segs.push(mm[1])
+      if (segs.length > 0) {
+        const underText = normalizeForCompare(segs.join("").replace(/__/g, ""))
+        underlinePartial = underText !== normalizeForCompare(text)
+      }
+    }
+    parts.push({ letter: positions[i].letter, text, underlined, underlinePartial })
   }
   return parts
 }
@@ -434,6 +611,7 @@ export function parseTextContent(text: string): ParseResult {
       curQuestion.options = parts.map((p) => ({
         content: mcOptionContent(p.letter, p.text),
         isCorrect: p.underlined,
+        underlinePartial: p.underlinePartial || undefined,
       }))
     } else if (curQuestion.type === "TF") {
       const { first, leftover } = takeFirstTfBlock(optionBuffer)
@@ -441,6 +619,7 @@ export function parseTextContent(text: string): ParseResult {
       curQuestion.options = parts.slice(0, 4).map((p) => ({
         content: tfOptionContent(p.letter, p.text),
         isCorrect: p.underlined,
+        underlinePartial: p.underlinePartial || undefined,
       }))
       if (leftover) {
         errors.push({
@@ -879,6 +1058,22 @@ export function parseHtmlContent(html: string): ParseResult {
   return parseHtmlToResultAndText(html).parseResult
 }
 
+/**
+ * Tách đáp án SA dạng "x | y" thành các đáp án chấp nhận được (BUG-08):
+ * mỗi vế là một đáp án đúng độc lập, giống cú pháp synonyms của ô điền
+ * khuyết. Trả mảng đã trim, bỏ rỗng, bỏ trùng; rỗng -> [].
+ */
+export function splitSaAcceptedAnswers(correctAnswer: string | undefined | null): string[] {
+  return [
+    ...new Set(
+      (correctAnswer ?? "")
+        .split("|")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ),
+  ]
+}
+
 // ============ Validate ============
 
 function isEffectivelyEmpty(text: string, html?: string): boolean {
@@ -901,6 +1096,7 @@ function optionLabel(type: ParsedQuestionType, index: number, content: string): 
 
 export function validateDocument(result: ParseResult): ValidationResult {
   const errors: ValidationError[] = [...result.errors]
+  const warnings: ValidationError[] = []
 
   const lessons = result.chapters.flatMap((c) => c.lessons)
   if (lessons.length === 0) {
@@ -918,6 +1114,35 @@ export function validateDocument(result: ParseResult): ValidationResult {
           message: `Điểm kiến thức phải có ít nhất 1 từ gạch chân (__từ__ hoặc __"từ"__): "${kp.content.slice(0, 30)}"`,
         })
       }
+      // BUG-06: dãy gạch dưới chưa có đáp án còn sót trong nội dung KP
+      // (________, ____ hoặc __ chưa đóng) — không học sinh nào điền đúng được.
+      if (/__/.test(kp.content) || /_{3,}/.test(kp.content)) {
+        errors.push({
+          line: kp.line,
+          message: `Còn dãy gạch dưới chưa thành ô trống tại dòng ${kp.line}: hãy viết đáp án vào trong __đáp án__ (không để dãy gạch dưới trống): "${kp.content.slice(0, 40)}"`,
+        })
+      }
+      // BUG-04: cảnh báo nhóm hoán đổi được gộp nhờ nhãn lặp — giáo viên rà
+      // soát trường hợp danh sách có thứ tự cố định dùng chung nhãn (vd các
+      // giai đoạn nguyên phân) thì không nên cho hoán đổi.
+      for (const run of computeSwapRuns(kp.content, kp.underlinedTerms, { swapOnly: true })) {
+        if (run.terms.length >= 2 && run.viaLabel) {
+          warnings.push({
+            line: kp.line,
+            message: `Nhóm hoán đổi tại dòng ${kp.line} được gộp nhờ nhãn lặp "${run.label}" — học sinh điền đảo thứ tự vẫn đúng. Nếu đây là danh sách có thứ tự cố định, hãy bỏ ngoặc kép để chấm theo vị trí.`,
+          })
+        }
+      }
+      // BUG-04: danh sách trông hoán đổi được (nhãn lặp) nhưng các ô chưa
+      // bật hoán đổi (chưa dùng __"từ"__).
+      for (const run of computeSwapRuns(kp.content, kp.underlinedTerms)) {
+        if (run.terms.length >= 2 && run.viaLabel && run.terms.some((t) => !t.allowSwap)) {
+          warnings.push({
+            line: kp.line,
+            message: `Danh sách tại dòng ${kp.line} có nhãn lặp "${run.label}" trông như hoán đổi được nhưng các ô chưa bật hoán đổi — dùng __"từ"__ nếu muốn học sinh điền đảo thứ tự vẫn đúng.`,
+          })
+        }
+      }
       for (const n of uncappedSwapRunLengths(kp.content, kp.underlinedTerms)) {
         if (n > 8) {
           errors.push({
@@ -927,6 +1152,31 @@ export function validateDocument(result: ParseResult): ValidationResult {
         }
       }
       for (const q of kp.questions) {
+        if (q.type === "MC" || q.type === "TF") {
+          // BUG-09: gạch chân chỉ bao MỘT PHẦN phương án -> chặn cứng. Gạch
+          // chân trong phương án chỉ để chỉ định đáp án khi bao trọn phương
+          // án; dùng để nhấn mạnh sẽ âm thầm biến phương án sai thành đúng.
+          q.options.forEach((o, i) => {
+            if (o.underlinePartial) {
+              const X = optionLabel(q.type, i, o.content)
+              errors.push({
+                line: q.line,
+                message: `Lựa chọn ${X} có gạch chân chỉ bao một phần nội dung — gạch chân như vậy sẽ bị hiểu là đáp án đúng. Muốn chỉ định đáp án, hãy gạch chân toàn bộ lựa chọn; không dùng gạch chân để nhấn mạnh trong lựa chọn.`,
+              })
+            }
+            // BUG-07: nội dung phương án chứa mẫu giống nhãn (B., c)...) —
+            // cảnh báo để giáo viên rà soát việc tách phương án.
+            const body = o.content.replace(/^[A-Da-d][.)]\s*/i, "")
+            const fake = body.match(/[\s\u00A0]([A-Da-d][.)])[\s\u00A0]/)
+            if (fake) {
+              const X = optionLabel(q.type, i, o.content)
+              warnings.push({
+                line: q.line,
+                message: `Lựa chọn ${X} chứa mẫu giống nhãn "${fake[1]}" trong nội dung — kiểm tra lại việc tách lựa chọn có đúng ý không.`,
+              })
+            }
+          })
+        }
         if (q.type === "MC") {
           if (q.options.length !== 4) {
             errors.push({ line: q.line, message: `Câu trắc nghiệm phải có đúng 4 lựa chọn (hiện có ${q.options.length})` })
@@ -969,7 +1219,7 @@ export function validateDocument(result: ParseResult): ValidationResult {
     }
   }
 
-  return { isValid: errors.length === 0, errors }
+  return { isValid: errors.length === 0, errors, warnings }
 }
 
 // ============ Thống kê preview ============

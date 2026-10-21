@@ -13,7 +13,7 @@ const doc = new Document({
   sections: [
     {
       children: [
-        p("// HUONG DAN: Gach chan tu de tao o dien khuyet co dinh. Dat tu trong \"dau nhay kep\" de tao o hoan doi. Gach chan dong lua chon dung (MC/TF). Cac dong bat dau bang // se duoc bo qua. Khong dung dau + va dau *.", {
+        p("// HUONG DAN: Gach chan tu de tao o dien khuyet co dinh. Gach chan kem ngoac kep (viet __\"tu\"__) de tao o hoan doi; ngoac kep thuong mot minh KHONG tao o trong. Gach chan dong lua chon dung (MC/TF). Cac dong bat dau bang // se duoc bo qua. Khong dung dau + va dau *.", {
           heading: HeadingLevel.HEADING_3,
         }),
         p("{Chương I - Cơ sở vật chất di truyền}"),
@@ -42,11 +42,11 @@ const doc = new Document({
         p("dap an: nucleotide"),
         p([
           T("- Hai mạch của ADN liên kết theo nguyên tắc "),
-          T("\"bổ sung\""),
+          U("\"bổ sung\""),
           T(", trong đó A liên kết với "),
-          T("\"T\""),
+          U("\"T\""),
           T(" và G liên kết với "),
-          T("\"X\""),
+          U("\"X\""),
           T("."),
         ]),
       ],

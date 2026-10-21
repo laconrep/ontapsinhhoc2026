@@ -299,6 +299,19 @@ function FillInCard({
         Object.values(results).every((r) => r.isCorrect))
   const wrongSlots = slots.filter((s) => graded && results[s] && !results[s].isCorrect)
 
+  // BUG-01: KP không dựng được ô nào (dữ liệu lỗi) — không render nút Kiểm
+  // tra (trước đây allFilled trên mảng rỗng luôn true, học sinh bấm chấm
+  // mãi vẫn sai và kẹt). Báo lỗi rõ để học sinh báo giáo viên.
+  if (slots.length === 0) {
+    return (
+      <div className="rounded-xl border border-destructive/50 bg-destructive/5 p-4">
+        <p className="text-sm text-destructive">
+          Câu này đang bị lỗi dữ liệu (không hiển thị được ô trống). Vui lòng báo giáo viên để kiểm tra lại.
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div className="rounded-xl border border-border bg-card p-4">
       <p className="max-w-prose text-base leading-relaxed text-foreground">
@@ -317,6 +330,9 @@ function FillInCard({
                 value={answers[slotIndex] ?? ""}
                 onChange={(e) => setAnswer(slotIndex, e.target.value)}
                 onKeyDown={(e) => {
+                  // BUG-13: đang gõ Telex/VNI (IME composition) thì Enter là
+                  // để chốt dấu — không được hiểu là chuyển ô/nộp bài.
+                  if (e.nativeEvent.isComposing) return
                   if (e.key === "Enter") {
                     e.preventDefault()
                     focusNext(slotIndex)

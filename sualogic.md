@@ -737,3 +737,167 @@ mục 1 giữ nguyên, đặc biệt: KHÔNG bỏ dấu tiếng Việt, `0,5` v�
   in `bo sung OK`.
 - Toàn bộ scripts/check-*.mjs cũ vẫn PASS (trừ kỳ vọng phiên 2 đã cập
   nhật ở 10.1). `pnpm exec tsc --noEmit` cần chạy ở máy có node_modules.
+
+---
+
+## 11. Phiên batch 2 (2026-10-21) — sửa theo spec BUG-01..15
+
+Ngày: 2026-10-21. Nguồn: spec `Spec_s_a_l_i_ch_m_sai_v__l_i_t_o_c_u_h_i_-_ontapsinhhoc2026.md`
+(BUG-01..15), đã đối chiếu code thật và tái hiện trước khi sửa. Chi tiết
+triển khai + dữ liệu cũ: `FIX-2026-10-21.md`. Các quyết định ở mục 1 và
+mục 10 giữ nguyên, TRỪ thay đổi được ghi rõ ở 11.5 (BUG-05 yêu cầu 3).
+
+### 11.1 BUG-01 — ô mất khỏi màn hình, học sinh kẹt (P0)
+
+- `lib/slot-render.ts` thêm `prepareKpTermsForSave(content, terms)`:
+  chuẩn hóa content + `term.text` về NFC, tính lại `end = start +
+  text.length`, kiểm tra `content.slice(start, end) === text` cho mọi
+  term; lệch -> ném lỗi rõ ràng. Dùng ở MỌI đường lưu KP:
+  `app/actions/content.ts` (`createKnowledgePoint`,
+  `updateKnowledgePoint`) và `lib/worksheet-import.ts` (import). Server
+  không còn tin hoàn toàn `underlinedTerms` do client gửi (gộp BUG-12).
+- `getTab2Questions` / `getTab3Questions`: dựng `renderClientSlots` cho
+  từng KP; số ô dựng được != số term (`slotRenderMismatch`) -> LOẠI KP
+  khỏi danh sách trả cho học sinh + `console.error` kèm `kpId`.
+- Client Tab 2/Tab 3: `slots.length === 0` -> hiển thị thông báo lỗi dữ
+  liệu, không render nút Kiểm tra.
+- `console.error "renderSlots legacy missing slots"` (mục 10) giữ làm
+  tín hiệu giám sát.
+
+### 11.2 BUG-02 — import mất liên kết câu hỏi <-> KP (P0)
+
+- `persistParseResult` bọc trong MỘT `db.transaction`.
+- Insert KP có `.returning({ id })`; câu hỏi gán
+  `knowledgePointId = kpRow.id` (trước: cứng `null`).
+- Dữ liệu đã import trước đây: KHÔNG tự suy KP cho câu cũ. Giáo viên
+  import lại bài cần thiết hoặc gán tay (quyết định triển khai, xem
+  FIX-2026-10-21.md).
+
+### 11.3 BUG-03 — file mẫu dạy cú pháp đã bỏ (P0)
+
+- `public/templates/mau-cau-hoi.txt` + `scripts/gen-docx-template.mjs`
+  (đã sinh lại `.docx`): chuyển sang `__"từ"__`, ghi rõ ngoặc kép thường
+  KHÔNG tạo ô; ô hoán đổi chỉ hoạt động khi các ô `__"từ"__` đứng liền
+  nhau trong cùng câu; thêm hướng dẫn `dap an: x | y` cho SA (BUG-08).
+- Test mới `scripts/check-template.mjs`: parse cả hai file mẫu ->
+  `isValid = true`, mọi KP >= 1 ô.
+
+### 11.4 BUG-04 — nhóm hoán đổi với nhãn lặp (P1)
+
+- `computeSwapRuns(content, terms, { swapOnly })` (parser, export):
+  hai ô kề nhau gộp nhóm khi chuỗi giữa chúng khớp SWAP_GROUP_JOIN_RE
+  (đã NFC trước khi xét) HOẶC phần còn lại sau khi bỏ dấu nối/và/hoặc là
+  nhãn ngắn (<= 3 từ) VÀ nhãn đó cũng đứng ngay trước ô đầu tiên của run
+  (vd `là vùng __"điều hòa"__, vùng __"mã hóa"__`). `assignSwapGroupIds`
+  dùng chung cho `extractBlanks` và backfill — một nguồn sự thật.
+- Cảnh báo (không chặn): `validateDocument` trả thêm `warnings` —
+  (a) nhóm được gộp nhờ nhãn lặp (giáo viên rà soát danh sách thứ tự cố
+  định dùng chung nhãn, vd các giai đoạn nguyên phân); (b) danh sách có
+  nhãn lặp trông hoán đổi được nhưng ô chưa bật hoán đổi. Cả hai cũng
+  hiện trong `kp-content-editor`; importer hiện warnings ở khối riêng.
+- `scripts/backfill-swap-groups.mjs`: bỏ bản chép tay regex, import
+  `assignSwapGroupIds` từ parser; thêm `--dry-run` (không ghi DB, vẫn
+  xuất CSV needsReview).
+
+### 11.5 BUG-05 — ký hiệu/số còn thiếu (P1) — CÓ THAY ĐỔI QUYẾT ĐỊNH
+
+- `normalizeAnswer`: bỏ khoảng trắng quanh `= ≡ + : / ×` (bổ sung vào
+  bước cũ cho `-`, `→`); `x` đứng độc lập giữa hai khoảng trắng với hai
+  vế kề là token chữ/số (công thức) -> `×`. Đối chứng giữ nguyên: `x`
+  trong từ (xitozin), `x` đầu/cuối câu không đổi.
+- **THAY ĐỔI QUYẾT ĐỊNH CŨ:** mục 1.2/4 từng chốt "`0,5` xử lý ở
+  `gradeSA`, không nhét vào normalize chuỗi" — cho SA vẫn đúng, nhưng
+  nay `accepts` (điền khuyết Tab 2/3) cũng so sánh theo GIÁ TRỊ khi cả
+  hai vế là số thuần qua `parsePureNumber` (`0,5` = `0.5` ở điền
+  khuyết). Lý do: học sinh điền khuyết gõ `0.5` cho đáp án `0,5` bị
+  chấm sai oan giống hệt ca SA đã xử lý ở phiên 3.
+- Các chốt liên quan VẪN GIỮ và có test đối chứng bắt buộc trong
+  `check-scoring-bo-sung.mjs` mục 6: `1/2` != `0.5` (parsePureNumber từ
+  chối phân số), `1 500` != `1500` (từ chối số có khoảng trắng),
+  `nucleotit` != `nuclêôtit` (không bỏ dấu).
+
+### 11.6 BUG-06 — dãy gạch dưới dài thành ô rác (P1)
+
+- `extractBlanks`: delimiter phải là đúng `__` không dính thêm gạch
+  dưới (lookaround `(?<!_)__(?!_)` ở cả hai đầu) và nội dung chỉ gồm
+  gạch dưới/khoảng trắng thì không tạo term. Dãy `_{3,}` ở lại nguyên
+  trong content.
+- `validateDocument`: KP còn `__` hoặc `_{3,}` trong content -> LỖI,
+  thông báo ghi rõ dòng + hướng dẫn viết `__đáp án__`.
+- `________` trong ĐỀ câu hỏi MC/TF/SA vẫn được phép (cách viết đề bình
+  thường) và không biến thành ô điền khuyết.
+
+### 11.7 BUG-07 — cắt sai option khi nội dung chứa mẫu `B.` (P1)
+
+- `splitChoiceBlock` viết lại, thứ tự ưu tiên: (1) tách theo ĐẦU DÒNG —
+  dòng bắt đầu bằng nhãn kế tiếp theo đúng thứ tự mới mở phương án mới;
+  (2) khối gộp một dòng: chọn LÙI từ chữ cái cuối (ứng viên nhái trong
+  nội dung phương án trước luôn đứng trước nhãn thật của phương án sau);
+  (3) dự phòng thuật toán quét tiến cũ khi hai cách trên không đủ chữ.
+- `validateDocument` cảnh báo khi nội dung một phương án chứa mẫu giống
+  nhãn (`B.`, `c)`...) để giáo viên rà soát việc tách.
+
+### 11.8 BUG-08 — đáp án SA dạng `x | y` (P1)
+
+- `splitSaAcceptedAnswers` (parser): tách `correctAnswer` theo `|`
+  (trim, bỏ rỗng, bỏ trùng). Import SA tạo MỘT `questionOptions`
+  isCorrect cho mỗi vế; `gradeSA`/snapshot đã nhận danh sách accepted
+  nên chấm đúng ngay, không cần đổi schema.
+- Ghi chú: trong ô điền khuyết, `|` vẫn là cú pháp synonyms (quyết định
+  cũ); đáp án chứa ký tự `|` theo nghĩa đen chưa có cú pháp thoát —
+  chấp nhận giữ nguyên, giáo viên tránh dùng `|` trong đáp án điền
+  khuyết ngoài nghĩa synonyms.
+
+### 11.9 BUG-09 — gạch chân nhấn mạnh trong option (P2, LÀM MẠNH HƠN SPEC)
+
+- Spec chỉ yêu cầu cảnh báo preview; quyết định đã chốt: CHẶN CỨNG ở
+  `validateDocument` khi phần gạch chân chỉ bao MỘT PHẦN của option
+  MC/TF (parser đánh dấu `ParsedOption.underlinePartial` từ
+  `splitChoiceBlock`). Gạch chân bao trọn option (hoặc trọn phần nội
+  dung sau nhãn) vẫn là cơ chế chỉ định đáp án hợp lệ như hiện nay.
+- Hệ quả đã được chủ sản phẩm xác nhận: một câu lỗi trong file import
+  thì TOÀN BỘ file bị từ chối tới khi giáo viên sửa (persistParseResult
+  vốn all-or-nothing theo BUG-02, không mất dữ liệu đã lưu).
+
+### 11.10 BUG-10..13, 15
+
+- BUG-10: `submitQuiz` chấm SA bằng đáp án ĐẦY ĐỦ; chỉ cắt 200 ký tự
+  khi lưu `studentAnswer`.
+- BUG-11 (ĐÃ XÁC MINH trong `app/actions/student-learn.ts`): nhánh mở
+  lại attempt lấy `content` từ DB hiện tại còn options từ snapshot;
+  câu bị xóa -> stem rỗng `""`. Đã sửa: snapshot lưu thêm `stem` +
+  `bodyHtml` lúc tạo đề; mở lại ưu tiên `snap.stem`, fallback DB cho
+  snapshot cũ. Chấm vẫn theo snapshot như phiên 4.
+- BUG-12: phần "server tin client" đã gộp vào BUG-01 (11.1). Phần
+  "reset tiến độ khi sửa KP": **CHỜ QUYẾT ĐỊNH** chính sách của chủ
+  sản phẩm (reset hay giữ `fillStatus` khi GV đổi ô/đáp án của KP đã
+  có học sinh mastered) — hiện GIỮ NGUYÊN tiến độ, chưa cài đặt reset.
+- BUG-13: Tab 2 `onKeyDown` bỏ qua sự kiện khi
+  `e.nativeEvent.isComposing` (đang gõ Telex/VNI).
+- BUG-15: `validateOptions` (app/actions/questions.ts) chặn option
+  MC/TF rỗng (không nội dung và không bodyHtml); `updateQuestion` giữ
+  nguyên `difficulty` hiện tại khi client không gửi. Transaction của
+  import ở BUG-02; `--dry-run` backfill ở BUG-04.
+
+### 11.11 BUG-14 — KHÔNG triển khai
+
+Bảng alias thuật ngữ (gene/gen, ADN/DNA...) chờ chủ sản phẩm duyệt
+danh sách alias. Không cài đặt gì ở phiên này.
+
+### 11.12 Vá bảo mật Next.js
+
+`next` 16.2.6 -> 16.4.1 bằng `pnpm add next@16.4.1` (package.json +
+pnpm-lock.yaml đồng bộ). Không đổi code.
+
+### 11.13 Nghiệm thu batch 2
+
+- Test mới: `scripts/check-parser-batch2.mjs` (BUG-04/06/07/09 + câu
+  kiểm chứng tổng hợp gene cấu trúc: đúng thứ tự, đảo thứ tự, `điều
+  hoà` dấu kiểu cũ đều `allCorrect`), `scripts/check-import-batch2.mjs`
+  (BUG-01/02/08/10/11/13/15), `scripts/check-template.mjs` (BUG-03),
+  mở rộng `scripts/check-scoring-bo-sung.mjs` mục 6 (BUG-05).
+- Toàn bộ `scripts/check-*.mjs`: 24/31 PASS; 7 FAIL là các script cũ
+  đã fail từ bản gốc __10 (check-class-phien1/2/3/6,
+  check-parser-phien6/8, check-preview-phien3) — không tăng thêm.
+- `npx tsc --noEmit`: sạch trước và sau (baseline 2026-10-21 vốn đã
+  sạch khi có node_modules).

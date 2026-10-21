@@ -276,6 +276,9 @@ export const quizAttemptQuestions = pgTable(
     snapshot: jsonb("snapshot")
       .$type<{
         type: string
+        /** Nội dung câu hỏi lúc tạo đề (BUG-11). Snapshot cũ không có -> fallback DB. */
+        stem?: string
+        bodyHtml?: string | null
         options: { id: string; content: string; isCorrect: boolean }[]
       }>()
       .notNull(),

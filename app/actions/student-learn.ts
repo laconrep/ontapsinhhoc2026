@@ -32,6 +32,7 @@ import {
   buildDragChips,
   pickDistractors,
   renderClientSlots,
+  slotRenderMismatch,
   stripDragResults,
   stripFillResults,
   type ClientSlotPart,
@@ -557,10 +558,22 @@ export async function getTab2Questions(lessonId: string): Promise<{
         knowledgePointId: kp.id,
         parts: renderClientSlots(kp.content, terms),
         slotCount: terms.length,
+        // BUG-01: số ô dựng được khác số term (offset DB lệch) -> KP hỏng.
+        mismatch: slotRenderMismatch(kp.content, terms),
       }
     })
-    .filter((q) => q.slotCount > 0)
-    .map(({ slotCount: _slotCount, ...q }) => q)
+    // Loại KP hỏng khỏi danh sách trả cho học sinh (kèm log) thay vì để
+    // học sinh điền đúng mọi ô nhìn thấy mà vẫn bị chấm sai và kẹt.
+    .filter((q) => {
+      if (q.mismatch) {
+        console.error("getTab2Questions: loại KP vì số ô hiển thị khác số term", {
+          kpId: q.knowledgePointId,
+        })
+        return false
+      }
+      return q.slotCount > 0
+    })
+    .map(({ slotCount: _slotCount, mismatch: _mismatch, ...q }) => q)
 
   return { questions: built, empty: built.length === 0, skipped: false }
 }
@@ -710,10 +723,20 @@ export async function getTab3Questions(lessonId: string): Promise<{
         parts: renderClientSlots(kp.content, terms),
         chips,
         slotCount: terms.length,
+        // BUG-01: như getTab2Questions — loại KP có offset lệch.
+        mismatch: slotRenderMismatch(kp.content, terms),
       }
     })
-    .filter((q) => q.slotCount > 0)
-    .map(({ slotCount: _slotCount, ...q }) => q)
+    .filter((q) => {
+      if (q.mismatch) {
+        console.error("getTab3Questions: loại KP vì số ô hiển thị khác số term", {
+          kpId: q.knowledgePointId,
+        })
+        return false
+      }
+      return q.slotCount > 0
+    })
+    .map(({ slotCount: _slotCount, mismatch: _mismatch, ...q }) => q)
 
   return { questions: built, empty: built.length === 0, skipped: false }
 }
@@ -907,8 +930,11 @@ export async function startQuiz(lessonId: string): Promise<{
       return {
         id: row.questionId,
         type,
-        content: live?.content ?? "",
-        bodyHtml: live?.bodyHtml ?? null,
+        // BUG-11: ưu tiên stem trong snapshot (đề lúc tạo) — trước đây lấy
+        // stem từ DB hiện tại còn options từ snapshot nên GV sửa/xóa câu
+        // giữa chừng làm đề hiển thị lệch hoặc rỗng.
+        content: snap?.stem ?? live?.content ?? "",
+        bodyHtml: snap?.bodyHtml ?? live?.bodyHtml ?? null,
         knowledgePointId: live?.knowledgePointId ?? null,
         options: type === "SA" ? [] : hideQuizOptions(ordered),
       }
@@ -1018,6 +1044,10 @@ export async function startQuiz(lessonId: string): Promise<{
           optionOrder: clientOpts.map((o) => o.id),
           snapshot: {
             type: q.type,
+            // BUG-11: lưu cả nội dung câu hỏi vào snapshot để mở lại bài
+            // làm dở hiển thị đúng đề lúc tạo, kể cả khi GV sửa/xóa câu.
+            stem: q.content,
+            bodyHtml: q.bodyHtml ?? null,
             options: opts.map((o) => ({ id: o.id, content: o.content, isCorrect: o.isCorrect })),
           },
         }
@@ -1112,9 +1142,12 @@ export async function submitQuiz(
       } else if (type === "SA") {
         const raw = answers[row.questionId]
         const val = typeof raw === "string" ? raw : ""
+        // BUG-10: chấm bằng đáp án ĐẦY ĐỦ; chỉ cắt 200 ký tự khi LƯU
+        // studentAnswer (trước đây cắt trước khi chấm nên đáp án đúng dài
+        // hơn 200 ký tự không bao giờ đúng).
         const truncated = val.length > 200 ? val.slice(0, 200) : val
         const accepted = opts.filter((o) => o.isCorrect).map((o) => o.content)
-        const isCorrect = truncated.length > 0 ? gradeSA(truncated, accepted) : false
+        const isCorrect = val.length > 0 ? gradeSA(val, accepted) : false
         if (isCorrect) correctSlots += 1
         answerRows.push({
           attemptId: quizId,

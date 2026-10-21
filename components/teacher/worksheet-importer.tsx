@@ -20,6 +20,7 @@ import type { ParseResult, ValidationError } from "@/lib/worksheet-parser"
 interface WorksheetPreview {
   parseResult: ParseResult
   errors: ValidationError[]
+  warnings?: ValidationError[]
   isValid: boolean
   summary: { chapters: number; lessons: number; kps: number; questions: number }
   sourceText: string
@@ -274,6 +275,19 @@ export function WorksheetImporter() {
           />
         </CardContent>
       </Card>
+
+      {preview?.warnings && preview.warnings.length > 0 && (
+        <Card className="border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40">
+          <CardContent className="space-y-1 pt-4 text-sm text-amber-800 dark:text-amber-300">
+            <p className="font-medium">Cảnh báo (không chặn lưu):</p>
+            <ul className="list-inside list-disc space-y-1">
+              {preview.warnings.map((w, i) => (
+                <li key={i}>{w.message}</li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       {preview && (
         <ImportErrorFix

@@ -251,6 +251,13 @@ function validateOptions(type: QuestionType, options: OptionInput[]) {
     if (options.length !== 1 || !options[0].content.trim())
       throw new Error("Câu trả lời ngắn cần đúng 1 đáp án")
   }
+  // BUG-15: chặn lựa chọn rỗng (MC/TF) — trước đây option trắng vẫn qua
+  // được validateOptions và chỉ lộ ra ở phía học sinh.
+  if (type === "MC" || type === "TF") {
+    if (options.some((o) => !o.content.trim() && !o.bodyHtml)) {
+      throw new Error("Lựa chọn không được để trống")
+    }
+  }
 }
 
 export async function createQuestion(input: {
@@ -335,6 +342,7 @@ export async function updateQuestion(input: {
       type: questions.type,
       kpId: questions.knowledgePointId,
       lessonId: questions.lessonId,
+      difficulty: questions.difficulty,
     })
     .from(questions)
     .innerJoin(lessons, eq(lessons.id, questions.lessonId))
@@ -347,7 +355,9 @@ export async function updateQuestion(input: {
     .set({
       content: input.content.trim(),
       bodyHtml: input.bodyHtml === undefined ? undefined : input.bodyHtml,
-      difficulty: input.difficulty ?? 1,
+      // BUG-15: không gửi difficulty thì GIỮ NGUYÊN giá trị hiện tại
+      // (trước đây reset về 1).
+      difficulty: input.difficulty ?? q.difficulty ?? 1,
     })
     .where(eq(questions.id, input.id))
 

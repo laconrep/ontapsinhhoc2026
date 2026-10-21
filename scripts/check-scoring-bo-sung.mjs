@@ -162,4 +162,40 @@ assert(normalizeAnswer("1 500") !== normalizeAnswer("1500"), "1 500 vẫn khác 
   assert(broken.unmatched, "backfill: offset lệch -> needsReview, không đoán")
 }
 
+// ---- 6. BUG-05 (mục 11): toán tử + số trong accepts của điền khuyết ----
+const opPairs = [
+  ["A=T", "A = T"],
+  ["G≡C", "G ≡ C"],
+  ["A+T", "A + T"],
+  ["A/T", "A / T"],
+  ["n=23", "n = 23"],
+  ["9:3:3:1", "9 : 3 : 3 : 1"],
+  ["3:1", "3 : 1"],
+  ["AaBb x aabb", "AaBb × aabb"],
+  ["Aa × Aa", "Aa x Aa"],
+]
+for (const [a, b] of opPairs) {
+  assertEq(normalizeAnswer(a), normalizeAnswer(b), `BUG-05 toán tử: ${a} = ${b}`)
+  const terms = [{ text: b, slotIndex: 0, allowSwap: false, swapGroupId: null, extraAccepted: [] }]
+  assert(gradeSlots(terms, [a]).allCorrect, `BUG-05 gradeSlots: gõ "${a}", đáp án "${b}" -> đúng`)
+}
+// Đối chứng x -> ×: chỉ đổi khi x đứng độc lập giữa hai token chữ/số.
+assertEq(normalizeAnswer("xitozin"), "xitozin", "BUG-05 đối chứng: x trong từ không đổi")
+assertEq(normalizeAnswer("gen x"), "gen x", "BUG-05 đối chứng: x cuối câu không đổi")
+assertEq(normalizeAnswer("x quang"), "x quang", "BUG-05 đối chứng: x đầu câu không đổi")
+assertEq(normalizeAnswer("ax b"), "ax b", "BUG-05 đối chứng: không có x độc lập")
+// Số thuần trong accepts (điền khuyết): 0,5 = 0.5 — THAY ĐỔI quyết định cũ
+// "0,5 chỉ ở gradeSA" (xem sualogic.md mục 11). Các chốt cũ vẫn giữ:
+{
+  const t05 = [{ text: "0,5", slotIndex: 0, allowSwap: false, swapGroupId: null, extraAccepted: [] }]
+  assert(gradeSlots(t05, ["0.5"]).allCorrect, "BUG-05: điền khuyết 0,5 = 0.5")
+  assert(gradeSlots(t05, ["0,50"]).allCorrect, "BUG-05: điền khuyết 0,5 = 0,50")
+  const tFrac = [{ text: "1/2", slotIndex: 0, allowSwap: false, swapGroupId: null, extraAccepted: [] }]
+  assert(!gradeSlots(tFrac, ["0.5"]).allCorrect, "BUG-05 CHỐT: 1/2 vẫn khác 0.5 ở điền khuyết")
+  const t1500 = [{ text: "1 500", slotIndex: 0, allowSwap: false, swapGroupId: null, extraAccepted: [] }]
+  assert(!gradeSlots(t1500, ["1500"]).allCorrect, "BUG-05 CHỐT: '1 500' vẫn khác 1500 ở điền khuyết")
+  const tNu = [{ text: "nuclêôtit", slotIndex: 0, allowSwap: false, swapGroupId: null, extraAccepted: [] }]
+  assert(!gradeSlots(tNu, ["nucleotit"]).allCorrect, "BUG-05 CHỐT: nucleotit vẫn khác nuclêôtit")
+}
+
 console.log("bo sung OK")

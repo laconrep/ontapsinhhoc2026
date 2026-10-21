@@ -18,7 +18,7 @@ d. ADN không có trong nhân
 ###
 cau: Đơn phân của ADN được gọi là gì?
 dap an: nucleotide
-- Hai mạch của ADN liên kết theo nguyên tắc "bổ sung", trong đó A liên kết với "T" và G liên kết với "X".
+- Hai mạch của ADN liên kết theo nguyên tắc __"bổ sung"__, trong đó A liên kết với __"T"__ và G liên kết với __"X"__.
 
 // ============================================================
 // HUONG DAN CU PHAP (cac dong bat dau bang // se duoc bo qua)
@@ -27,8 +27,9 @@ dap an: nucleotide
 // [Ten bai]                   -> Tieu de bai (bat buoc)
 // - Noi dung kien thuc...     -> Mot diem kien thuc
 // __tu__                      -> O dien khuyet co dinh
-// "tu"                        -> O dien khuyet hoan doi (cac "tu" lien nhau trong cung cau co the trao cho)
-// __"tu"__                    -> Vua gach chan vua hoan doi
+// __"tu"__                    -> O dien khuyet hoan doi (cac o __"tu"__ dung lien nhau trong cung cau co the trao cho nhau)
+// LUU Y: "tu" (ngoac kep thuong, khong co __) KHONG tao o trong nao ca.
+// O hoan doi chi hoat dong khi dung __"tu"__ va cac o dung lien nhau trong cung cau.
 //
 // #                           -> Cau trac nghiem (MC)
 // cau: ...                    -> De cau
@@ -44,3 +45,4 @@ dap an: nucleotide
 // ###                         -> Cau tra loi ngan (SA)
 // cau: ...                    -> De cau
 // dap an: ...                 -> Dap an (tu hoac so). Chap nhan "Đáp án:"
+// dap an: x | y               -> Chap nhan ca x va y (hoc sinh gõ mot trong hai deu dung)

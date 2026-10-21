@@ -3,7 +3,7 @@
 import { useMemo, useRef, type MouseEvent } from "react"
 import { Textarea } from "@/components/ui/textarea"
 import { applyKpWrap } from "@/lib/kp-blank-wrap"
-import { extractBlanks, unusedPlainQuotes } from "@/lib/worksheet-parser"
+import { computeSwapRuns, extractBlanks, unusedPlainQuotes } from "@/lib/worksheet-parser"
 import { highlightBlanks } from "@/components/teacher/worksheet-preview-doc"
 
 export function KpContentEditor({
@@ -18,6 +18,28 @@ export function KpContentEditor({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const preview = useMemo(() => extractBlanks(value), [value])
   const unusedQuotes = useMemo(() => unusedPlainQuotes(value), [value])
+  // BUG-04: cảnh báo khi nhóm hoán đổi được gộp nhờ NHÃN LẶP (giáo viên rà
+  // soát danh sách thứ tự cố định dùng chung nhãn) và khi danh sách trông
+  // hoán đổi được mà các ô chưa bật hoán đổi.
+  const swapWarnings = useMemo(() => {
+    const msgs: string[] = []
+    const { content, underlinedTerms } = preview
+    for (const run of computeSwapRuns(content, underlinedTerms, { swapOnly: true })) {
+      if (run.terms.length >= 2 && run.viaLabel) {
+        msgs.push(
+          `Nhóm hoán đổi được gộp nhờ nhãn lặp "${run.label}" — học sinh điền đảo thứ tự vẫn đúng. Nếu đây là danh sách có thứ tự cố định, hãy bỏ ngoặc kép để chấm theo vị trí.`,
+        )
+      }
+    }
+    for (const run of computeSwapRuns(content, underlinedTerms)) {
+      if (run.terms.length >= 2 && run.viaLabel && run.terms.some((t) => !t.allowSwap)) {
+        msgs.push(
+          `Danh sách có nhãn lặp "${run.label}" trông như hoán đổi được nhưng các ô chưa bật hoán đổi — dùng __"từ"__ nếu muốn cho phép điền đảo thứ tự.`,
+        )
+      }
+    }
+    return msgs
+  }, [preview])
   const duplicateWarnings = useMemo(() => {
     const seen = new Set<string>()
     const msgs: string[] = []
@@ -79,6 +101,11 @@ export function KpContentEditor({
           Ngoặc kép thường không tạo ô trống (cần __&quot;từ&quot;__): {unusedQuotes.slice(0, 3).join(", ")}
         </p>
       ) : null}
+      {swapWarnings.map((msg) => (
+        <p key={msg} className="text-xs text-amber-700 dark:text-amber-400">
+          {msg}
+        </p>
+      ))}
       {duplicateWarnings.map((msg) => (
         <p key={msg} className="text-xs text-muted-foreground">
           {msg}

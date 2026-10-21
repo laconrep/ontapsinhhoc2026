@@ -3,6 +3,7 @@
 import { db, ensureSchema } from "@/lib/db"
 import { chapters, lessons, knowledgePoints, questions } from "@/lib/db/schema"
 import { requireRole } from "@/lib/auth-helpers"
+import { prepareKpTermsForSave } from "@/lib/slot-render"
 import { and, asc, eq, sql } from "drizzle-orm"
 import { revalidatePath, unstable_noStore as noStore } from "next/cache"
 import type { ChapterDto, LessonDto, KnowledgePointDto, UnderlinedTerm } from "@/types"
@@ -196,6 +197,9 @@ export async function createKnowledgePoint(
   const user = await requireRole("teacher")
   await assertLessonOwner(lessonId, user.id)
   if (!content.trim()) throw new Error("Nội dung không được để trống")
+  // BUG-01/BUG-12: server tự chuẩn hóa NFC và kiểm tra offset, không tin
+  // hoàn toàn underlinedTerms do client gửi — lệch thì từ chối lưu.
+  const prepared = prepareKpTermsForSave(content, underlinedTerms)
   const countRes = await db
     .select({ c: sql<number>`count(*)` })
     .from(knowledgePoints)
@@ -203,7 +207,7 @@ export async function createKnowledgePoint(
   const order = Number(countRes[0]?.c ?? 0)
   const [row] = await db
     .insert(knowledgePoints)
-    .values({ lessonId, content: content.trim(), underlinedTerms, order })
+    .values({ lessonId, content: prepared.content, underlinedTerms: prepared.terms, order })
     .returning({ id: knowledgePoints.id })
   revalidatePath(`/teacher/lessons/${lessonId}`)
   return row
@@ -222,9 +226,15 @@ export async function updateKnowledgePoint(
     .innerJoin(lessons, eq(lessons.id, knowledgePoints.lessonId))
     .where(and(eq(knowledgePoints.id, id), eq(lessons.teacherId, user.id)))
   if (!kp) throw new Error("Không tìm thấy điểm kiến thức")
+  // BUG-01/BUG-12: như createKnowledgePoint — chuẩn hóa NFC + kiểm tra
+  // offset phía server trước khi lưu.
+  // LƯU Ý (BUG-12): việc sửa KP có reset tiến độ học sinh hay không là
+  // quyết định chính sách CHƯA chốt — hiện giữ nguyên tiến độ. Xem
+  // sualogic.md mục 11.
+  const prepared = prepareKpTermsForSave(content, underlinedTerms)
   await db
     .update(knowledgePoints)
-    .set({ content: content.trim(), underlinedTerms })
+    .set({ content: prepared.content, underlinedTerms: prepared.terms })
     .where(eq(knowledgePoints.id, id))
   revalidatePath(`/teacher/lessons/${kp.lessonId}`)
 }

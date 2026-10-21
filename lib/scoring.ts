@@ -93,9 +93,15 @@ export function normalizeAnswer(input: string): string {
     .toLowerCase()
   // Vị trí dấu thanh: hoá = hóa, thuỷ = thủy (không bỏ dấu — xem ghi chú trên).
   s = canonicalizeTonePlacement(s)
-  // Khoảng trắng quanh dấu nối/mũi tên và trước % không mang nghĩa: A - T = A-T, 50 % = 50%.
+  // "x" đứng độc lập giữa hai token chữ/số (công thức lai, vd "AaBb x aabb")
+  // là dấu nhân: AaBb x aabb = AaBb × aabb. Chỉ đổi khi x đứng một mình giữa
+  // hai khoảng trắng và hai vế kề đều bắt đầu/kết thúc bằng chữ hoặc số;
+  // "x" trong từ (xitozin) hoặc đứng đầu/cuối câu không đổi. Xem sualogic.md mục 11 (BUG-05).
+  s = s.replace(/(?<=[\p{L}\p{N}]) x (?=[\p{L}\p{N}])/gu, "×")
+  // Khoảng trắng quanh dấu nối/mũi tên/các toán tử và trước % không mang
+  // nghĩa: A - T = A-T, A = T = A=T, G ≡ C, A + T, A / T, 9 : 3 : 3 : 1, 50 % = 50%.
   s = s
-    .replace(/\s*([-→])\s*/g, "$1")
+    .replace(/\s*([-→=≡+:/×])\s*/g, "$1")
     .replace(/\s+%/g, "%")
     .replace(/\s+/g, " ")
     .trim()
@@ -137,9 +143,18 @@ function parseAnswers(answers: unknown): Record<number, string> {
 
 function accepts(term: UnderlinedTerm, value: string): boolean {
   const norm = normalizeAnswer(value)
-  if (norm === normalizeAnswer(term.text)) return true
-  if ((term.extraAccepted ?? []).some((e) => normalizeAnswer(e) === norm)) return true
-  if ((term.synonyms ?? []).some((s) => normalizeAnswer(s) === norm)) return true
+  const candidates = [term.text, ...(term.extraAccepted ?? []), ...(term.synonyms ?? [])]
+  if (candidates.some((c) => normalizeAnswer(c) === norm)) return true
+  // So sánh theo giá trị khi cả hai vế là số thuần (0,5 = 0.5 trong điền
+  // khuyết). parsePureNumber chỉ nhận chữ số + một dấu , hoặc . nên các
+  // chốt cũ vẫn giữ: 1/2 ≠ 0.5, "1 500" ≠ 1500. Xem sualogic.md mục 11 (BUG-05).
+  const nv = parsePureNumber(value)
+  if (nv !== null) {
+    return candidates.some((c) => {
+      const nc = parsePureNumber(c)
+      return nc !== null && nc === nv
+    })
+  }
   return false
 }
 

@@ -3,12 +3,14 @@ import { chapters, lessons, knowledgePoints, questions, questionOptions } from "
 import { and, eq, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { extractAndParse } from "@/lib/extract-file"
+import { prepareKpTermsForSave } from "@/lib/slot-render"
 import {
   validateDocument,
   summarize,
   parseTextContent,
   attachBodyHtml,
   attachOptionBodyHtml,
+  splitSaAcceptedAnswers,
   type ParseResult,
   type ValidationError,
 } from "@/lib/worksheet-parser"
@@ -19,6 +21,7 @@ export type { ParseResult, ValidationError }
 export interface WorksheetPreview {
   parseResult: ParseResult
   errors: ValidationError[]
+  warnings: ValidationError[]
   isValid: boolean
   summary: { chapters: number; lessons: number; kps: number; questions: number }
   sourceText: string
@@ -70,6 +73,7 @@ export async function validateWorksheetBuffer(buffer: Buffer, filename: string):
   return {
     parseResult: previewParseResult(parseResult),
     errors: validation.errors,
+    warnings: validation.warnings,
     isValid: validation.isValid,
     summary: summarize(parseResult),
     sourceText,
@@ -101,8 +105,11 @@ async function persistParseResult(
     lessonIds: [],
   }
 
+  // BUG-02: toàn bộ import trong MỘT transaction — lỗi giữa chừng thì
+  // không để lại bài dở dang (trước đây insert rời từng dòng).
+  await db.transaction(async (tx) => {
   for (const pChapter of parseResult.chapters) {
-    const [existingChapter] = await db
+    const [existingChapter] = await tx
       .select({ id: chapters.id })
       .from(chapters)
       .where(and(eq(chapters.teacherId, user.id), eq(chapters.title, pChapter.title)))
@@ -112,11 +119,11 @@ async function persistParseResult(
     if (existingChapter) {
       chapterId = existingChapter.id
     } else {
-      const [countRow] = await db
+      const [countRow] = await tx
         .select({ c: sql<number>`count(*)` })
         .from(chapters)
         .where(eq(chapters.teacherId, user.id))
-      const [row] = await db
+      const [row] = await tx
         .insert(chapters)
         .values({ title: pChapter.title, teacherId: user.id, order: Number(countRow?.c ?? 0) })
         .returning({ id: chapters.id })
@@ -125,7 +132,7 @@ async function persistParseResult(
     }
 
     for (const pLesson of pChapter.lessons) {
-      const existing = await db
+      const existing = await tx
         .select({ title: lessons.title })
         .from(lessons)
         .where(and(eq(lessons.chapterId, chapterId), eq(lessons.teacherId, user.id)))
@@ -137,11 +144,11 @@ async function persistParseResult(
         n += 1
       }
 
-      const [lessonCount] = await db
+      const [lessonCount] = await tx
         .select({ c: sql<number>`count(*)` })
         .from(lessons)
         .where(eq(lessons.chapterId, chapterId))
-      const [lessonRow] = await db
+      const [lessonRow] = await tx
         .insert(lessons)
         .values({
           title,
@@ -159,22 +166,27 @@ async function persistParseResult(
       let kpOrder = 0
       let qOrder = 0
       for (const pKp of pLesson.knowledgePoints) {
-        await db
+        // BUG-01: không lưu KP nào mà offset không khớp nội dung.
+        const prepared = prepareKpTermsForSave(pKp.content, pKp.underlinedTerms)
+        const [kpRow] = await tx
           .insert(knowledgePoints)
           .values({
             lessonId,
-            content: pKp.content,
-            underlinedTerms: pKp.underlinedTerms,
+            content: prepared.content,
+            underlinedTerms: prepared.terms,
             order: kpOrder++,
           })
+          .returning({ id: knowledgePoints.id })
         result.createdKps += 1
 
         for (const pQ of pKp.questions) {
-          const [qRow] = await db
+          const [qRow] = await tx
             .insert(questions)
             .values({
               lessonId,
-              knowledgePointId: null,
+              // BUG-02: câu hỏi thuộc về KP chứa nó (trước đây gán cứng null
+              // làm Tab 4 rơi vào chế độ ngẫu nhiên và mất seed spaced repetition).
+              knowledgePointId: kpRow.id,
               order: qOrder++,
               type: pQ.type,
               content: pQ.content,
@@ -185,14 +197,20 @@ async function persistParseResult(
           result.createdQuestions += 1
 
           if (pQ.type === "SA") {
-            await db.insert(questionOptions).values({
-              questionId: qRow.id,
-              content: pQ.correctAnswer ?? "",
-              isCorrect: true,
-              order: 0,
-            })
+            // BUG-08: "dap an: x | y" = chấp nhận x HOẶC y — mỗi vế một
+            // option isCorrect (gradeSA đã nhận danh sách accepted).
+            const acceptedParts = splitSaAcceptedAnswers(pQ.correctAnswer)
+            const acceptedList = acceptedParts.length > 0 ? acceptedParts : [pQ.correctAnswer ?? ""]
+            await tx.insert(questionOptions).values(
+              acceptedList.map((content, i) => ({
+                questionId: qRow.id,
+                content,
+                isCorrect: true,
+                order: i,
+              })),
+            )
           } else if (pQ.options.length > 0) {
-            await db.insert(questionOptions).values(
+            await tx.insert(questionOptions).values(
               pQ.options.map((o, i) => ({
                 questionId: qRow.id,
                 content: o.content,
@@ -206,6 +224,7 @@ async function persistParseResult(
       }
     }
   }
+  })
 
   revalidatePath("/teacher/lessons")
   revalidatePath("/teacher/questions")

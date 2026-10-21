@@ -367,6 +367,18 @@ function DragDropCard({
         Object.values(results).every((r) => r.isCorrect))
   const wrongSlots = slots.filter((s) => graded && results[s] && !results[s].isCorrect)
 
+  // BUG-01: như Tab 2 — KP không dựng được ô nào thì báo lỗi, không cho
+  // bấm Kiểm tra trong vô vọng.
+  if (slots.length === 0) {
+    return (
+      <div className="rounded-xl border border-destructive/50 bg-destructive/5 p-4">
+        <p className="text-sm text-destructive">
+          Câu này đang bị lỗi dữ liệu (không hiển thị được ô trống). Vui lòng báo giáo viên để kiểm tra lại.
+        </p>
+      </div>
+    )
+  }
+
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
       <div className="rounded-xl border border-border bg-card p-4">
