@@ -7,6 +7,12 @@ import { subscribe, type RealtimeEvent } from "@/lib/realtime"
 
 export const dynamic = "force-dynamic"
 
+// SEC-11: tối đa 3 kết nối SSE đồng thời cho mỗi (user, phiên). Đếm trong
+// bộ nhớ tiến trình — đủ cho mục này (nhiều instance thì mỗi instance có
+// bộ đếm riêng, chấp nhận được ở quy mô hiện tại).
+const MAX_STREAMS_PER_USER_SESSION = 3
+const activeStreams = new Map<string, number>()
+
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id: sessionId } = await params
   const user = await getCurrentUser()
@@ -29,6 +35,19 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   }
   if (!hasAccess) return new Response("Forbidden", { status: 403 })
 
+  // SEC-11: chặn kết nối thừa trước khi tạo stream.
+  const streamKey = `${user.id}:${sessionId}`
+  const current = activeStreams.get(streamKey) ?? 0
+  if (current >= MAX_STREAMS_PER_USER_SESSION) {
+    return new Response("Too many connections", { status: 429 })
+  }
+  activeStreams.set(streamKey, current + 1)
+  const releaseStream = () => {
+    const n = (activeStreams.get(streamKey) ?? 1) - 1
+    if (n <= 0) activeStreams.delete(streamKey)
+    else activeStreams.set(streamKey, n)
+  }
+
   const encoder = new TextEncoder()
   let unsubscribe: (() => void) | null = null
   let heartbeat: ReturnType<typeof setInterval> | null = null
@@ -47,8 +66,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       }, 25000)
     },
     cancel() {
+      // Dọn dẹp khi client ngắt: huỷ subscribe, heartbeat và nhả slot kết nối.
       if (unsubscribe) unsubscribe()
       if (heartbeat) clearInterval(heartbeat)
+      releaseStream()
     },
   })
 

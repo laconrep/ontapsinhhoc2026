@@ -38,12 +38,15 @@ import {
   type ClientSlotPart,
 } from "@/lib/slot-render"
 import { selectQuizQuestions } from "@/lib/quiz-selection"
+import { hitRateLimit } from "@/lib/rate-limit"
 import type { KnowledgePointDto, UnderlinedTerm, QuizResultDto, StudyStage } from "@/types"
 
 const TAB1_LOCKED_MSG = "Bạn đã nộp bước Tự đánh giá"
+// SEC-08: giữ nguyên ngưỡng burst cũ (10 lần / 60 giây / học sinh / KP)
+// nhưng bộ đếm chuyển từ Map trong bộ nhớ sang DB (lib/rate-limit.ts)
+// để còn đúng khi chạy nhiều instance.
 const GRADE_BURST_LIMIT = 10
 const GRADE_BURST_WINDOW_MS = 60_000
-const gradeBurst = new Map<string, number[]>()
 
 type Tab2Question = {
   id: string
@@ -67,13 +70,13 @@ type SlotGradeResult = {
   correctAnswer?: string
 }
 
-function assertGradeBurst(studentId: string, kpId: string) {
-  const key = `${studentId}:${kpId}`
-  const now = Date.now()
-  const prev = (gradeBurst.get(key) ?? []).filter((t) => now - t < GRADE_BURST_WINDOW_MS)
-  if (prev.length >= GRADE_BURST_LIMIT) throw new Error("Thử chấm chậm lại")
-  prev.push(now)
-  gradeBurst.set(key, prev)
+async function assertGradeBurst(studentId: string, kpId: string) {
+  const ok = await hitRateLimit(
+    `grade-burst:${studentId}:${kpId}`,
+    GRADE_BURST_LIMIT,
+    GRADE_BURST_WINDOW_MS,
+  )
+  if (!ok) throw new Error("Thử chấm chậm lại")
 }
 
 function alreadyCorrectResults(terms: UnderlinedTerm[]): SlotGradeResult[] {
@@ -634,7 +637,7 @@ export async function submitTab2Question(
       }
     }
 
-    assertGradeBurst(student.id, kpId)
+    await assertGradeBurst(student.id, kpId)
     const { results, allCorrect } = gradeSlots(terms, answers)
 
     const newFillStatus: FillDragStatus = allCorrect ? "correct" : "incorrect"
@@ -797,7 +800,7 @@ export async function submitTab3Question(
       }
     }
 
-    assertGradeBurst(student.id, kpId)
+    await assertGradeBurst(student.id, kpId)
     const { results, allCorrect } = gradeSlots(terms, answers)
 
     const newDragStatus: FillDragStatus = allCorrect ? "correct" : "incorrect"

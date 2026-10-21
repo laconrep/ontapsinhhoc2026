@@ -18,11 +18,23 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     autoSignIn: true,
-    minPasswordLength: 6,
+    // SEC-08: nâng độ dài mật khẩu tối thiểu 6 -> 8.
+    minPasswordLength: 8,
     sendResetPassword: async () => {
       throw new Error(
         "Chưa cấu hình gửi email. Liên hệ quản trị viên để đặt lại mật khẩu.",
       )
+    },
+  },
+  // SEC-01 (phòng thủ nhiều lớp): kể cả khi client tìm được đường gửi role,
+  // hook phía server luôn ép tài khoản mới về "student".
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (newUser) => ({
+          data: { ...newUser, role: "student" },
+        }),
+      },
     },
   },
   user: {
@@ -31,7 +43,10 @@ export const auth = betterAuth({
         type: "string",
         required: false,
         defaultValue: "student",
-        input: true,
+        // SEC-01: client KHÔNG được tự gửi role khi đăng ký/cập nhật.
+        // Đăng ký luôn là student; quyền teacher chỉ cấp qua
+        // completeOnboarding kèm mã mời (xem app/actions/onboarding.ts).
+        input: false,
       },
       isOnboarded: {
         type: "boolean",

@@ -3,22 +3,43 @@
 import { db } from "@/lib/db"
 import { classes, classStudents, chapters, lessons, knowledgePoints, user } from "@/lib/db/schema"
 import { requireRole } from "@/lib/auth-helpers"
+import { isInviteCodeFormat } from "@/lib/invite-code"
+import { hitRateLimit, peekRateLimit, resetRateLimit } from "@/lib/rate-limit"
 import { and, asc, eq, inArray, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import type { ChapterDto } from "@/types"
+
+const JOIN_FAIL_LIMIT = 5
+const JOIN_FAIL_WINDOW_MS = 10 * 60_000
 
 /** HS tham gia lớp bằng mã mời. */
 export async function joinClass(inviteCodeRaw: string) {
   const student = await requireRole("student")
   const inviteCode = inviteCodeRaw.trim().toUpperCase()
-  if (inviteCode.length !== 6) throw new Error("Mã mời phải gồm 6 ký tự")
+
+  // SEC-05: giới hạn thử sai — tối đa 5 lần sai / 10 phút / tài khoản
+  // (bộ đếm lưu DB qua lib/rate-limit.ts).
+  const failKey = `join-class-fail:${student.id}`
+  if ((await peekRateLimit(failKey, JOIN_FAIL_WINDOW_MS)) >= JOIN_FAIL_LIMIT) {
+    throw new Error("Bạn đã nhập sai mã mời quá nhiều lần. Vui lòng thử lại sau ít phút.")
+  }
+
+  // SEC-05: chấp nhận cả mã cũ 6 ký tự (chuyển tiếp) và mã mới 8 ký tự.
+  if (!isInviteCodeFormat(inviteCode)) {
+    await hitRateLimit(failKey, JOIN_FAIL_LIMIT, JOIN_FAIL_WINDOW_MS)
+    throw new Error("Mã mời phải gồm 6 hoặc 8 ký tự hợp lệ")
+  }
 
   const [cls] = await db
     .select({ id: classes.id, name: classes.name })
     .from(classes)
     .where(eq(classes.inviteCode, inviteCode))
     .limit(1)
-  if (!cls) throw new Error("Mã mời không hợp lệ")
+  if (!cls) {
+    await hitRateLimit(failKey, JOIN_FAIL_LIMIT, JOIN_FAIL_WINDOW_MS)
+    throw new Error("Mã mời không hợp lệ")
+  }
+  await resetRateLimit(failKey)
 
   const existing = await db
     .select({ classId: classStudents.classId })

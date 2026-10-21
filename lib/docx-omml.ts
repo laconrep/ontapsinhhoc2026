@@ -80,6 +80,46 @@ function replaceOmmlFragments(xml: string, maths: (string | null)[], re: RegExp)
   })
 }
 
+// --- SEC-06: giới hạn chống zip bomb -------------------------------------
+// Duyệt danh sách entry (kích thước giải nén lấy từ central directory,
+// CHƯA giải nén nội dung) và từ chối file vượt ngưỡng trước khi xử lý.
+export const MAX_ZIP_ENTRIES = 2000
+export const MAX_ZIP_TOTAL_UNCOMPRESSED = 50 * 1024 * 1024 // 50MB
+export const MAX_DOCUMENT_XML_SIZE = 20 * 1024 * 1024 // 20MB
+export const MAX_SINGLE_IMAGE_SIZE = 5 * 1024 * 1024 // 5MB
+export const MAX_IMAGE_COUNT = 200
+
+const GUARD_PREFIX = "File tải lên bị từ chối:"
+
+export function assertDocxZipSafe(zip: JSZip): void {
+  const files = Object.values(zip.files).filter((f) => !f.dir)
+  if (files.length > MAX_ZIP_ENTRIES) {
+    throw new Error(`${GUARD_PREFIX} file nén có quá nhiều thành phần (>${MAX_ZIP_ENTRIES})`)
+  }
+  let total = 0
+  let imageCount = 0
+  for (const f of files) {
+    const size =
+      (f as unknown as { _data?: { uncompressedSize?: number } })._data?.uncompressedSize ?? 0
+    total += size
+    if (f.name === "word/document.xml" && size > MAX_DOCUMENT_XML_SIZE) {
+      throw new Error(`${GUARD_PREFIX} nội dung tài liệu giải nén vượt quá 20MB`)
+    }
+    if (/^word\/media\//i.test(f.name)) {
+      imageCount += 1
+      if (size > MAX_SINGLE_IMAGE_SIZE) {
+        throw new Error(`${GUARD_PREFIX} có ảnh đơn lẻ vượt quá 5MB`)
+      }
+    }
+  }
+  if (total > MAX_ZIP_TOTAL_UNCOMPRESSED) {
+    throw new Error(`${GUARD_PREFIX} tổng dung lượng giải nén vượt quá 50MB`)
+  }
+  if (imageCount > MAX_IMAGE_COUNT) {
+    throw new Error(`${GUARD_PREFIX} số ảnh trong file vượt quá 200`)
+  }
+}
+
 /**
  * Giai nen docx, thay moi m:oMath (va m:oMathPara) bang token @@MATHn@@,
  * dong thoi render SVG data URI tuong ung. Khong co oMath -> buffer goc.
@@ -89,6 +129,8 @@ export async function preprocessOmml(buffer: Buffer): Promise<{ buffer: Buffer; 
 
   try {
     const zip = await JSZip.loadAsync(buffer)
+    // SEC-06: quét entry TRƯỚC khi đọc/giải nén bất kỳ nội dung nào.
+    assertDocxZipSafe(zip)
     const docFile = zip.file("word/document.xml")
     if (!docFile) return { buffer, maths: [] }
 
@@ -103,7 +145,10 @@ export async function preprocessOmml(buffer: Buffer): Promise<{ buffer: Buffer; 
     zip.file("word/document.xml", next)
     const out = await zip.generateAsync({ type: "nodebuffer" })
     return { buffer: out, maths }
-  } catch {
+  } catch (e) {
+    // SEC-06: lỗi guard (zip bomb...) phải nổi lên để route từ chối file;
+    // các lỗi xử lý OMML khác vẫn nuốt như cũ (trả buffer gốc).
+    if (e instanceof Error && e.message.startsWith(GUARD_PREFIX)) throw e
     return { buffer, maths: [] }
   }
 }

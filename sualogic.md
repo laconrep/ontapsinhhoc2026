@@ -901,3 +901,179 @@ pnpm-lock.yaml đồng bộ). Không đổi code.
   check-parser-phien6/8, check-preview-phien3) — không tăng thêm.
 - `npx tsc --noEmit`: sạch trước và sau (baseline 2026-10-21 vốn đã
   sạch khi có node_modules).
+
+## 12. Bảo mật (2026-10-21) — sửa theo spec SEC-01..12
+
+Quyết định cho từng mục SEC (chi tiết triển khai: `FIX-SEC-2026-10-21.md`):
+
+### 12.1 SEC-01 — khóa đường tự cấp quyền giáo viên [ĐÃ SỬA]
+
+- `lib/auth.ts`: `role` để `input: false`; thêm `databaseHooks.user.create.before`
+  ép mọi tài khoản mới về `role = "student"` bất kể client gửi gì. Form
+  đăng ký bỏ hẳn bộ chọn vai trò và không gửi `role` nữa.
+- `completeOnboarding(role, inviteCode?)` (`app/actions/onboarding.ts`):
+  whitelist vai trò {"student","teacher"}; chỉ chạy khi `isOnboarded = false`;
+  gọi lại sau khi đã onboard bị từ chối (hết đường tự đổi vai trò).
+- Cấp quyền giáo viên: **[CHỜ QUYẾT ĐỊNH] cơ chế chính thức** (admin duyệt /
+  mã mời dùng một lần / whitelist email — cần cột duyệt riêng như
+  `teacherApprovedAt` khi chốt). **Cơ chế TẠM THỜI đang chạy:** onboarding
+  chọn "teacher" phải nhập mã mời khớp env `TEACHER_INVITE_CODE` (so sánh
+  `timingSafeEqual` trong `lib/teacher-invite.ts`; env chưa đặt hoặc ngắn
+  hơn 8 ký tự thì fail-closed — không ai tự cấp được quyền giáo viên).
+  Hệ quả cần biết: giáo viên mới CHƯA có mã mời sẽ chỉ tạo được tài khoản
+  học sinh cho tới khi cơ chế chính thức được chốt và làm xong.
+- Rà soát dữ liệu: `scripts/audit-teachers.mjs` (chỉ đọc) liệt kê mọi
+  tài khoản `role='teacher'`; việc hạ quyền tài khoản không hợp lệ làm
+  THỦ CÔNG sau khi sao lưu DB — script không tự hạ quyền ai.
+
+### 12.2 SEC-02 — XSS lưu trữ qua bodyHtml [ĐÃ SỬA]
+
+- Chốt thư viện sau rà soát: phía server lúc ghi dùng `sanitize-html`
+  (`lib/sanitize.ts`); phía hiển thị (client component
+  `components/question/question-stem.tsx`) dùng `dompurify`. DOMPurify
+  KHÔNG dùng ở server (cần jsdom), sanitize-html KHÔNG dùng ở client.
+- Allowlist dùng chung ở `lib/sanitize-shared.ts` (một nguồn sự thật):
+  thẻ img/table/thead/tbody/tfoot/tr/th/td/caption/br/p/u; thuộc tính
+  img src/alt/class (class chỉ eq-inline|eq-figure), th/td colspan/rowspan
+  (chỉ số); KHÔNG nhận `style` từ đầu vào. `img src` chỉ chấp nhận
+  `data:image/(png|jpeg|gif|webp|svg+xml);base64` — loại //host, http:,
+  https:, javascript:, đường dẫn thường.
+- Style chiều cao của ảnh eq-inline do CHÍNH app tính từ nội dung SVG
+  (`equationHeightEmFromSrc`) sau khi sanitize — không phải dữ liệu vào.
+- Áp dụng lúc ghi: `createQuestion`/`updateQuestion` (câu + options);
+  đường import: `persistParseResult` sanitize mọi bodyHtml, và
+  `parseMediaArray` giới hạn 200 phần tử/mảng + 1.000.000 ký tự/phần tử
+  rồi sanitize từng phần tử trước `attachBodyHtml`.
+- Dữ liệu đã lưu: `scripts/resanitize-body-html.mjs` — mặc định
+  `--dry-run` (chỉ liệt kê bản ghi sẽ đổi), ghi thật khi có `--write`.
+- Kiểm chứng: `scripts/check-sanitize.mjs` (toàn bộ payload tái hiện +
+  nghiệm thu của spec, kể cả thẻ viết hoa, svg onload, iframe, a
+  javascript:, thực thể HTML; khẳng định ảnh eq-inline/eq-figure và bảng
+  hợp lệ còn nguyên).
+
+### 12.3 SEC-03 — kiểm quyền phiên/lớp dùng chung [ĐÃ SỬA]
+
+- Helper `lib/session-access.ts`: `assertSessionAccess(sessionId, user)`
+  (chủ phiên theo `sessions.teacherId` HOẶC thành viên lớp qua
+  `class_students` — đúng mẫu `app/api/sessions/[id]/stream/route.ts`) và
+  `assertClassAccess(classId, user)` (giáo viên sở hữu lớp hoặc học sinh
+  thuộc lớp).
+- Đã áp cho `getSession`, `getActiveSessionForClass`,
+  `getSessionEvents` (app/actions/sessions.ts) và `getLiveQuizSnapshot`
+  (app/actions/live-quiz.ts). Cả bốn đều từ chối khi chưa đăng nhập.
+- Test: `scripts/check-session-access.mjs` (đối chiếu nguồn với stream
+  route + mô phỏng quy tắc trên dữ liệu giả).
+
+### 12.4 SEC-04 — allowedOrigins Server Actions [ĐÃ SỬA]
+
+- `next.config.mjs`: allowedOrigins lấy từ env
+  `SERVER_ACTIONS_ALLOWED_ORIGINS` (phân tách bằng dấu phẩy). Env trống:
+  bỏ hẳn khóa (về mặc định same-origin của Next), ngoại trừ development
+  thì cho localhost + domain dev. Wildcard monkeycode chỉ xuất hiện khi
+  `NODE_ENV !== 'production'` và không có env override.
+- `allowedDevOrigins` giữ nguyên (chỉ có tác dụng lúc `next dev`, đã ghi
+  comment nói rõ). Cookie `sameSite: "none"` trong `lib/auth.ts` ĐÃ đúng
+  từ trước (chỉ nằm trong nhánh development) — xác nhận, không sửa.
+
+### 12.5 SEC-05 — mã mời lớp [ĐÃ SỬA]
+
+- Mã MỚI: 8 ký tự, `crypto.randomInt` trên cùng bảng 32 ký tự
+  (`lib/invite-code.ts`). Cột `classes.inviteCode` nới varchar(6) -> 32
+  (schema + ALTER trong ensureSchema). Mã cũ 6 ký tự vẫn được `joinClass`
+  chấp nhận (chuyển tiếp).
+- `joinClass`: tối đa 5 lần nhập sai / 10 phút / tài khoản (rate limit
+  lưu DB, mục 12.8); đúng mã thì xoá bộ đếm.
+- Xoay mã: action `rotateInviteCode` (bản chất `regenerateInviteCode` đã
+  có, UI chi tiết lớp đã có nút) — mã mới sinh ra đều là mã 8 ký tự.
+
+### 12.6 SEC-06 — DoS khi upload [ĐÃ SỬA]
+
+- Hai route worksheet kiểm `Content-Length` TRƯỚC khi đọc body: validate
+  vượt 10MB (+64KB khung multipart) -> 413. **Lưu ý có chủ đích:** route
+  save đặt ngưỡng body 32MB vì ngoài file (vẫn giới hạn cứng 10MB ở
+  `bufferFromFormData`/extract) nó còn nhận text + images/tables JSON
+  (base64 phình ~4/3) khi giáo viên sửa bản nháp — đặt 10MB sẽ làm hỏng
+  luồng lưu hợp lệ.
+- `bufferFromFormData`: chặn cứng theo `file.size` và độ dài buffer.
+- Zip (lib/docx-omml.ts `assertDocxZipSafe`): duyệt entry từ central
+  directory TRƯỚC khi xử lý — từ chối >2000 entry, tổng giải nén >50MB,
+  `word/document.xml` >20MB, 1 ảnh >5MB, >200 ảnh. Lỗi guard nổi lên
+  thành lỗi từ chối file (không bị nuốt như lỗi OMML thường).
+- Timeout 20s cho bước phân tích file (`extractAndParse` bọc
+  Promise.race; giới hạn này ngừng chờ phía route, không huỷ được tác vụ
+  đồng bộ của thư viện — đã ghi chú trong code).
+- Tần suất upload: 10 lần/giờ/user (rate limit DB) -> 429.
+- `pnpm audit --prod`: ngày 2026-10-21 môi trường chạy thử bị registry
+  chặn endpoint audit (403 policy) nên CHƯA có kết quả — cần chạy lại ở
+  môi trường/CI của dự án (xem FIX-SEC-2026-10-21.md).
+
+### 12.7 SEC-07 — header bảo mật + CSP Report-Only [ĐÃ SỬA]
+
+- `next.config.mjs` thêm `headers()` cho `/:path*`: CSP ở chế độ
+  `Content-Security-Policy-Report-Only` (default-src 'self'; img-src
+  'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self';
+  frame-ancestors 'none'; base-uri 'self'; form-action 'self';
+  object-src 'none'), X-Frame-Options DENY, HSTS, nosniff,
+  Referrer-Policy strict-origin-when-cross-origin, Permissions-Policy
+  tắt camera/microphone/geolocation nhưng GIỮ `fullscreen=(self)` cho
+  màn hình live.
+- Quy trình: theo dõi báo cáo Report-Only ~1 tuần rồi mới chuyển sang
+  CSP bắt buộc. Lưu ý Next có thể cần 'unsafe-inline'/'unsafe-eval' cho
+  script ở một số chế độ — quyết định khi bật thật dựa trên báo cáo.
+
+### 12.8 SEC-08 — xác thực + rate limit lưu DB [ĐÃ SỬA một phần]
+
+- `minPasswordLength` 6 -> 8.
+- Bảng `rate_limits` (key, count, windowStart) tạo bằng CREATE TABLE IF
+  NOT EXISTS trong `ensureSchema` (đúng mô hình repo) + helper
+  `lib/rate-limit.ts` (`hitRateLimit`/`peekRateLimit`/`resetRateLimit`,
+  fail-open có log khi DB lỗi). Đã dùng cho: joinClass (SEC-05), upload
+  worksheet (SEC-06), và `assertGradeBurst` trong student-learn.ts (đổi
+  sang async dùng helper này, GIỮ NGUYÊN ngưỡng 10 lần/60 giây).
+- **[CHỜ QUYẾT ĐỊNH]** xác minh email khi đăng ký và luồng quên mật khẩu
+  qua email (hiện `sendResetPassword` vẫn ném lỗi "chưa cấu hình gửi
+  email") — không làm ở phiên này.
+
+### 12.9 SEC-09 — không lộ lỗi nội bộ [ĐÃ SỬA]
+
+- `lib/api-error.ts` (`safeErrorMessage`): chỉ các message nghiệp vụ đã
+  biết mới trả nguyên văn cho client; lỗi lạ -> message chung +
+  `console.error` chi tiết phía server. Đã áp ở 3 route:
+  `app/api/sessions/[id]/live`, `app/api/worksheet/validate`,
+  `app/api/worksheet/save`.
+
+### 12.10 SEC-10 — cấu hình DB [CHỜ QUYẾT ĐỊNH — KHÔNG triển khai]
+
+- Giữ nguyên `lib/db/index.ts` cho mục này. Điều kiện tiên quyết bắt
+  buộc nếu sau này làm: phải có hệ thống migration chạy lúc triển khai
+  THAY THẾ các thay đổi schema trong `ensureSchema()` TRƯỚC, rồi mới
+  tước quyền DDL của user ứng dụng — làm ngược thứ tự sẽ khiến
+  `ensureSchema()` lỗi và app hỏng các luồng ghi. Repo hiện vận hành
+  theo mô hình "DB cấp sẵn bên ngoài, mọi thay đổi schema qua
+  ensureSchema, không có migration" nên mục này cần chủ sản phẩm chốt
+  quy trình triển khai trước.
+
+### 12.11 SEC-11 — giới hạn kết nối SSE [ĐÃ SỬA]
+
+- Stream route: tối đa 3 kết nối đồng thời mỗi (user, phiên), đếm trong
+  bộ nhớ tiến trình; kết nối thừa -> 429; `cancel()` nhả slot kết nối
+  cùng lúc dọn unsubscribe/heartbeat như trước.
+
+### 12.12 SEC-12 — phụ thuộc [ĐÃ SỬA]
+
+- `react` + `react-dom` 19.2.4 -> 19.3.1 (bản 19.x mới nhất tại
+  2026-10-21, cao hơn mốc 19.2.9 spec yêu cầu). `next` giữ 16.4.1.
+- Thêm mới: `sanitize-html` 2.18.1, `dompurify` 3.4.17 (cho SEC-02) +
+  `@types/sanitize-html` (dev).
+
+### 12.13 Nghiệm thu bảo mật
+
+- Test mới: `scripts/check-sanitize.mjs` (SEC-02),
+  `scripts/check-sec01-auth.mjs` (SEC-01/08), `scripts/check-session-access.mjs`
+  (SEC-03), `scripts/check-invite-code.mjs` (SEC-05),
+  `scripts/check-upload-guards.mjs` (SEC-06),
+  `scripts/check-security-config.mjs` (SEC-04/07/08/09/11).
+- Toàn bộ `scripts/check-*.mjs`: 30/37 PASS; 7 FAIL là các script cũ đã
+  fail từ bản gốc __10 (check-class-phien1/2/3/6, check-parser-phien6/8,
+  check-preview-phien3) — không tăng thêm, không hồi quy BUG-01..15.
+- `npx tsc --noEmit` sạch; `pnpm build` thành công.

@@ -72,8 +72,29 @@ export function detectKind(buffer: Buffer, filename: string): FileKind | null {
   return null
 }
 
+// SEC-06: timeout cho toàn bộ bước phân tích file (docx/PDF/WMF đều qua
+// đây). Promise.race chỉ NGỪNG CHỜ phía route — tác vụ nền đồng bộ của
+// thư viện không bị huỷ thật; kết hợp với giới hạn kích thước/zip ở trên
+// và rate limit upload ở route để chặn DoS.
+export const EXTRACT_TIMEOUT_MS = 20_000
+
 /** Trích xuất và parse nội dung file. sourceText cung dong voi errors[].line. */
 export async function extractAndParse(buffer: Buffer, filename: string): Promise<ExtractResult> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error("Hết thời gian xử lý file (quá 20 giây), vui lòng thử file nhẹ hơn")),
+      EXTRACT_TIMEOUT_MS,
+    )
+  })
+  try {
+    return await Promise.race([extractAndParseInner(buffer, filename), timeout])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
+async function extractAndParseInner(buffer: Buffer, filename: string): Promise<ExtractResult> {
   const kind = detectKind(buffer, filename)
   if (!kind) {
     throw new Error("Loại file không hỗ trợ. Chỉ chấp nhận .txt, .docx, .pdf")

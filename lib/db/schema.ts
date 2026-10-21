@@ -83,7 +83,8 @@ export const classes = pgTable("classes", {
   teacherId: text("teacherId")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
-  inviteCode: varchar("inviteCode", { length: 6 }).notNull().unique(),
+  // SEC-05: mã mời mới dài 8 ký tự (trước đây 6) — cột nới lên 32 để chứa cả hai.
+  inviteCode: varchar("inviteCode", { length: 32 }).notNull().unique(),
   schoolYear: text("schoolYear").notNull(),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
@@ -504,3 +505,11 @@ export const liveAnswers = pgTable(
     pk: primaryKey({ columns: [t.sessionId, t.questionId, t.studentId, t.round] }),
   }),
 )
+
+// SEC-08: bộ đếm rate limit dùng chung (joinClass, upload, chấm điểm).
+// Tạo bằng CREATE TABLE IF NOT EXISTS trong ensureSchema (đúng mô hình repo).
+export const rateLimits = pgTable("rate_limits", {
+  key: text("key").primaryKey(),
+  count: integer("count").notNull().default(0),
+  windowStart: timestamp("windowStart").notNull().defaultNow(),
+})

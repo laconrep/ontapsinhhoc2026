@@ -9,6 +9,7 @@ import {
   submitLiveAnswer,
   reportFullscreen,
 } from "@/app/actions/live-quiz"
+import { safeErrorMessage } from "@/lib/api-error"
 
 export const dynamic = "force-dynamic"
 
@@ -20,8 +21,9 @@ function fromUnknown(e: unknown, fallback = "Có lỗi xảy ra") {
   if (e && typeof e === "object" && "digest" in e) {
     return jsonError("Phiên đăng nhập hết hạn", 401)
   }
-  const message = e instanceof Error && e.message ? e.message : fallback
-  return jsonError(message, 400)
+  // SEC-09: chỉ trả message nghiệp vụ đã biết; lỗi lạ (SQL/thư viện)
+  // được log phía server và trả thông báo chung.
+  return jsonError(safeErrorMessage(e, fallback), 400)
 }
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

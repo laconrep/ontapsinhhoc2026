@@ -5,7 +5,8 @@ import { and, desc, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { db } from "@/lib/db"
 import { classes, classStudents, sessions, sessionEvents, user } from "@/lib/db/schema"
-import { requireRole } from "@/lib/auth-helpers"
+import { getCurrentUser, requireRole } from "@/lib/auth-helpers"
+import { assertClassAccess, assertSessionAccess } from "@/lib/session-access"
 import { publish, type RealtimeEvent } from "@/lib/realtime"
 import type { LiveSession } from "@/types"
 
@@ -79,8 +80,11 @@ export async function endSession(sessionId: string): Promise<void> {
   revalidatePath(`/teacher/classes/${rows[0].classId}`)
 }
 
-/** Lấy phiên (kiểm tra quyền: GV sở hữu hoặc HS thuộc lớp). */
+/** Lấy phiên (SEC-03: bắt buộc đăng nhập + GV sở hữu hoặc HS thuộc lớp). */
 export async function getSession(sessionId: string) {
+  const user = await getCurrentUser()
+  if (!user) throw new Error("Chưa đăng nhập")
+  await assertSessionAccess(sessionId, user)
   const rows = await db
     .select({
       id: sessions.id,
@@ -98,8 +102,11 @@ export async function getSession(sessionId: string) {
   return rows[0]
 }
 
-/** Phiên đang active của một lớp (nếu có). */
+/** Phiên đang active của một lớp (SEC-03: GV sở hữu lớp hoặc HS thuộc lớp). */
 export async function getActiveSessionForClass(classId: string): Promise<LiveSession | null> {
+  const user = await getCurrentUser()
+  if (!user) throw new Error("Chưa đăng nhập")
+  await assertClassAccess(classId, user)
   const rows = await db
     .select({
       id: sessions.id,
@@ -169,8 +176,11 @@ export async function sendSignal(
   })
 }
 
-/** Lịch sử sự kiện của phiên (để board tải khi mở). */
+/** Lịch sử sự kiện của phiên (SEC-03: chỉ chủ phiên/thành viên lớp mới đọc được). */
 export async function getSessionEvents(sessionId: string): Promise<RealtimeEvent[]> {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) throw new Error("Chưa đăng nhập")
+  await assertSessionAccess(sessionId, currentUser)
   const rows = await db
     .select({
       id: sessionEvents.id,

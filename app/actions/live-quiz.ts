@@ -17,6 +17,7 @@ import {
   liveAnswers,
 } from "@/lib/db/schema"
 import { requireRole, getCurrentUser } from "@/lib/auth-helpers"
+import { assertSessionAccess } from "@/lib/session-access"
 import type { DraftSessionDto, QuizLessonOption } from "@/types"
 import { gradeLive } from "@/lib/scoring"
 import { publish } from "@/lib/realtime"
@@ -456,6 +457,9 @@ export async function deleteDraftSession(sessionId: string): Promise<void> {
 export async function getLiveQuizSnapshot(sessionId: string) {
   const user = await getCurrentUser()
   if (!user) throw new Error("Chưa đăng nhập")
+  // SEC-03: chỉ chủ phiên hoặc học sinh thuộc lớp của phiên mới xem được
+  // snapshot (trước đây bất kỳ tài khoản đăng nhập nào cũng đọc được).
+  await assertSessionAccess(sessionId, user)
   const state = await ensureLiveState(sessionId)
   const [s] = await db
     .select({ classId: sessions.classId, className: classes.name, teacherId: sessions.teacherId, status: sessions.status })

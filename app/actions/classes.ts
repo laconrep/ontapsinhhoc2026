@@ -1,21 +1,14 @@
 "use server"
 
 import { db } from "@/lib/db/index"
+import { generateInviteCode } from "@/lib/invite-code"
 import { classes, classStudents, user } from "@/lib/db/schema"
 import { requireRole } from "@/lib/auth-helpers"
 import { createClassSchema, updateClassSchema } from "@/lib/validation"
 import { and, desc, eq, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 
-/** Sinh mã mời 6 ký tự (không gồm ký tự dễ nhầm: 0,O,1,I). */
-function generateInviteCode() {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-  let code = ""
-  for (let i = 0; i < 6; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)]
-  }
-  return code
-}
+/** SEC-05: bộ sinh mã mời (crypto, 8 ký tự) nằm ở lib/invite-code.ts. */
 
 async function uniqueInviteCode(): Promise<string> {
   for (let attempt = 0; attempt < 10; attempt++) {
@@ -117,6 +110,11 @@ export async function deleteClass(classId: string) {
   if (!deleted) throw new Error("Không tìm thấy lớp học")
   revalidatePath("/teacher/classes")
   return { success: true }
+}
+
+/** SEC-05: xoay mã mời (tên gọi theo spec) — cùng hành vi regenerateInviteCode. */
+export async function rotateInviteCode(classId: string) {
+  return regenerateInviteCode(classId)
 }
 
 /** Tạo lại mã mời cho lớp. */

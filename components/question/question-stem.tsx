@@ -1,38 +1,59 @@
 "use client"
 
+import DOMPurify from "dompurify"
 import { cn } from "@/lib/utils"
-import { equationHeightEmFromSrc, isSvgDataUri } from "@/lib/equation-size"
+import {
+  SANITIZE_ALLOWED_TAGS,
+  isAllowedImgSrc,
+  isAllowedSpanValue,
+  decorateImgTag,
+} from "@/lib/sanitize-shared"
 
+/**
+ * SEC-02 (lớp hiển thị): lọc lại bodyHtml bằng DOMPurify với CÙNG allowlist
+ * như phía server (lib/sanitize-shared.ts). Dữ liệu ghi vào DB đã được lọc
+ * ở lib/sanitize.ts; đây là phòng thủ nhiều lớp cho dữ liệu cũ/chưa quét lại.
+ * DOMPurify cần window — khi SSR (chưa có window) trả chuỗi rỗng, React
+ * hydrate ở client sẽ render bản đã lọc.
+ */
 function sanitizeStemHtml(raw: string): string {
-  let s = raw.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
-  s = s.replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
-  s = s.replace(/<img\b[^>]*>/gi, (tag) => {
-    const src = tag.match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1] ?? ""
-    if (!/^data:image\/[a-zA-Z0-9.+-]+;base64,/i.test(src) && !src.startsWith("/")) return ""
-    const alt = (tag.match(/\balt\s*=\s*["']([^"']*)["']/i)?.[1] ?? "").replace(/[<>"']/g, "")
-    let cls = tag.match(/\bclass\s*=\s*["'](eq-inline|eq-figure)["']/i)?.[1] ?? ""
-    if (!cls && isSvgDataUri(src)) cls = "eq-inline"
-    const stored = tag.match(/\bstyle\s*=\s*["']height:([\d.]+)em;width:auto["']/i)?.[1]
-    const recomputed = cls === "eq-inline" ? equationHeightEmFromSrc(src) : null
-    const h = recomputed != null ? String(recomputed) : stored ?? (cls === "eq-inline" ? "4.5" : undefined)
-    const extra =
-      (cls ? ` class="${cls}"` : "") +
-      (cls === "eq-inline" && h ? ` style="--eq-h:${h}em;height:${h}em;width:auto"` : "")
-    return `<img src="${src}" alt="${alt}"${extra}>`
+  if (typeof window === "undefined") return ""
+  const clean = DOMPurify.sanitize(raw, {
+    ALLOWED_TAGS: [...SANITIZE_ALLOWED_TAGS],
+    ALLOWED_ATTR: ["src", "alt", "class", "colspan", "rowspan"],
+    ALLOW_DATA_ATTR: false,
+    FORBID_ATTR: ["style"],
   })
-  s = s.replace(/<(?!\/?(img|table|thead|tbody|tfoot|tr|th|td|caption|br|p|u)\b)[^>]+>/gi, "")
-  s = s.replace(/<(table|thead|tbody|tfoot|tr|th|td|caption|br|p|u)(\s[^>]*)?>/gi, (_, name: string, attrs?: string) => {
-    const tag = name.toLowerCase()
-    if (!attrs) return `<${tag}>`
-    if (tag !== "th" && tag !== "td") return `<${tag}>`
-    const span: string[] = []
-    const cs = attrs.match(/\bcolspan\s*=\s*["']?(\d+)/i)
-    const rs = attrs.match(/\browspan\s*=\s*["']?(\d+)/i)
-    if (cs) span.push(`colspan="${cs[1]}"`)
-    if (rs) span.push(`rowspan="${rs[1]}"`)
-    return span.length ? `<${tag} ${span.join(" ")}>` : `<${tag}>`
+  // Hậu xử lý bằng DOM API (không regex trên HTML thô): bỏ img có src
+  // không phải data URI ảnh hợp lệ, chuẩn hoá class eq-inline/eq-figure,
+  // gắn style chiều cao do app tự tính — giống hệt lib/sanitize.ts.
+  const tpl = document.createElement("template")
+  tpl.innerHTML = clean
+  tpl.content.querySelectorAll("img").forEach((img) => {
+    const decorated = decorateImgTag({
+      src: img.getAttribute("src") ?? "",
+      alt: img.getAttribute("alt") ?? "",
+      class: img.getAttribute("class") ?? "",
+    })
+    if (!decorated) {
+      img.remove()
+      return
+    }
+    const holder = document.createElement("template")
+    holder.innerHTML = decorated
+    img.replaceWith(holder.content.firstElementChild as Element)
   })
-  return s
+  tpl.content.querySelectorAll("th, td").forEach((cell) => {
+    for (const attr of ["colspan", "rowspan"] as const) {
+      const v = cell.getAttribute(attr)
+      if (v != null && !isAllowedSpanValue(v)) cell.removeAttribute(attr)
+    }
+  })
+  tpl.content.querySelectorAll("img").forEach((img) => {
+    // Phòng thủ: DOMPurify đã chặn, nhưng khẳng định lại bất biến đầu ra.
+    if (!isAllowedImgSrc(img.getAttribute("src") ?? "")) img.remove()
+  })
+  return tpl.innerHTML
 }
 
 export function QuestionStem({

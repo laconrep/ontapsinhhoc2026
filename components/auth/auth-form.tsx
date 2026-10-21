@@ -4,14 +4,12 @@ import type React from "react"
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Eye, EyeOff, GraduationCap, BookOpen } from "lucide-react"
+import { Eye, EyeOff } from "lucide-react"
 import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { cn } from "@/lib/utils"
 import { Logo } from "@/components/shared/logo"
-import type { UserRole } from "@/types"
 
 function passwordStrength(password: string): { score: number; label: string } {
   let score = 0
@@ -30,7 +28,6 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [role, setRole] = useState<UserRole>("student")
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string; name?: string }>({})
   const [loading, setLoading] = useState(false)
@@ -55,8 +52,10 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
 
     setLoading(true)
 
+    // SEC-01: đăng ký KHÔNG gửi role — tài khoản mới luôn là student;
+    // vai trò được chốt ở bước onboarding (giáo viên cần mã mời).
     const { error } = isSignUp
-      ? await authClient.signUp.email({ email, password, name, role })
+      ? await authClient.signUp.email({ email, password, name })
       : await authClient.signIn.email({ email, password })
 
     setLoading(false)
@@ -92,23 +91,6 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
           <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
             {isSignUp && (
               <>
-                <div className="flex flex-col gap-2">
-                  <Label>Bạn là</Label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <RoleOption
-                      active={role === "student"}
-                      onClick={() => setRole("student")}
-                      icon={<BookOpen className="h-5 w-5" />}
-                      label="Học sinh"
-                    />
-                    <RoleOption
-                      active={role === "teacher"}
-                      onClick={() => setRole("teacher")}
-                      icon={<GraduationCap className="h-5 w-5" />}
-                      label="Giáo viên"
-                    />
-                  </div>
-                </div>
                 <div className="flex flex-col gap-2">
                   <Label htmlFor="name">Họ và tên</Label>
                   <Input
@@ -229,31 +211,3 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
   )
 }
 
-function RoleOption({
-  active,
-  onClick,
-  icon,
-  label,
-}: {
-  active: boolean
-  onClick: () => void
-  icon: React.ReactNode
-  label: string
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={cn(
-        "flex flex-col items-center gap-2 rounded-xl border-2 p-4 text-sm font-medium transition-colors",
-        active
-          ? "border-primary bg-primary/5 text-primary"
-          : "border-border bg-background text-muted-foreground hover:border-primary/40",
-      )}
-    >
-      {icon}
-      {label}
-    </button>
-  )
-}

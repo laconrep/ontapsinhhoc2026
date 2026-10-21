@@ -3,6 +3,7 @@
 import { db, ensureSchema } from "@/lib/db"
 import { questions, questionOptions, knowledgePoints, lessons } from "@/lib/db/schema"
 import { requireRole } from "@/lib/auth-helpers"
+import { sanitizeBodyHtml } from "@/lib/sanitize"
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm"
 import { revalidatePath, unstable_noStore as noStore } from "next/cache"
 import { chapters } from "@/lib/db/schema"
@@ -306,7 +307,8 @@ export async function createQuestion(input: {
       order: Number(maxRow?.m ?? -1) + 1,
       type: input.type,
       content: input.content.trim(),
-      bodyHtml: input.bodyHtml ?? null,
+      // SEC-02: lọc HTML phía server lúc ghi (allowlist sanitize-html).
+      bodyHtml: sanitizeBodyHtml(input.bodyHtml),
       difficulty: input.difficulty ?? 1,
     })
     .returning({ id: questions.id })
@@ -317,7 +319,7 @@ export async function createQuestion(input: {
       input.options.map((o, i) => ({
         questionId: q.id,
         content: o.content.trim(),
-        bodyHtml: o.bodyHtml ?? null,
+        bodyHtml: sanitizeBodyHtml(o.bodyHtml),
         isCorrect: o.isCorrect,
         order: i,
       })),
@@ -354,7 +356,8 @@ export async function updateQuestion(input: {
     .update(questions)
     .set({
       content: input.content.trim(),
-      bodyHtml: input.bodyHtml === undefined ? undefined : input.bodyHtml,
+      // SEC-02: lọc HTML phía server lúc ghi.
+      bodyHtml: input.bodyHtml === undefined ? undefined : sanitizeBodyHtml(input.bodyHtml),
       // BUG-15: không gửi difficulty thì GIỮ NGUYÊN giá trị hiện tại
       // (trước đây reset về 1).
       difficulty: input.difficulty ?? q.difficulty ?? 1,
@@ -374,7 +377,7 @@ export async function updateQuestion(input: {
   for (let i = 0; i < input.options.length; i++) {
     const o = input.options[i]
     const content = o.content.trim()
-    const bodyHtml = o.bodyHtml ?? null
+    const bodyHtml = sanitizeBodyHtml(o.bodyHtml)
     if (o.id && existingIds.has(o.id)) {
       await db
         .update(questionOptions)

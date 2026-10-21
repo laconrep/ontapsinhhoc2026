@@ -2,7 +2,7 @@ import { db, ensureSchema } from "@/lib/db"
 import { chapters, lessons, knowledgePoints, questions, questionOptions } from "@/lib/db/schema"
 import { and, eq, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
-import { extractAndParse } from "@/lib/extract-file"
+import { extractAndParse, MAX_FILE_SIZE } from "@/lib/extract-file"
 import { prepareKpTermsForSave } from "@/lib/slot-render"
 import {
   validateDocument,
@@ -15,6 +15,7 @@ import {
   type ValidationError,
 } from "@/lib/worksheet-parser"
 import type { SessionUser } from "@/lib/auth-helpers"
+import { sanitizeBodyHtml } from "@/lib/sanitize"
 
 export type { ParseResult, ValidationError }
 
@@ -63,7 +64,10 @@ export function previewParseResult(result: ParseResult): ParseResult {
 export async function bufferFromFormData(formData: FormData): Promise<{ buffer: Buffer; filename: string }> {
   const file = formData.get("file")
   if (!(file instanceof File)) throw new Error("Không tìm thấy file tải lên")
+  // SEC-06: giới hạn cứng ngay khi đọc body vào bộ nhớ.
+  if (file.size > MAX_FILE_SIZE) throw new Error("File vượt quá 10MB")
   const buffer = Buffer.from(await file.arrayBuffer())
+  if (buffer.length > MAX_FILE_SIZE) throw new Error("File vượt quá 10MB")
   return { buffer, filename: file.name }
 }
 
@@ -190,7 +194,9 @@ async function persistParseResult(
               order: qOrder++,
               type: pQ.type,
               content: pQ.content,
-              bodyHtml: pQ.bodyHtml ?? null,
+              // SEC-02: bodyHtml (kể cả từ images/tables client gửi) phải
+              // qua sanitize phía server trước khi lưu.
+              bodyHtml: sanitizeBodyHtml(pQ.bodyHtml),
               difficulty: 1,
             })
             .returning({ id: questions.id })
@@ -214,7 +220,7 @@ async function persistParseResult(
               pQ.options.map((o, i) => ({
                 questionId: qRow.id,
                 content: o.content,
-                bodyHtml: o.bodyHtml ?? null,
+                bodyHtml: sanitizeBodyHtml(o.bodyHtml),
                 isCorrect: o.isCorrect,
                 order: i,
               })),
@@ -241,12 +247,27 @@ export async function saveWorksheetBuffer(
   return persistParseResult(user, parseResult, filename)
 }
 
+// SEC-02/SEC-06: giới hạn media do client gửi kèm text (images/tables là
+// HTML thô) — tối đa 200 phần tử mỗi mảng, mỗi phần tử tối đa 1MB ký tự,
+// và từng phần tử phải qua sanitize trước khi attach vào câu hỏi.
+export const MAX_MEDIA_ITEMS = 200
+export const MAX_MEDIA_ITEM_LENGTH = 1_000_000
+
 export function parseMediaArray(raw: FormDataEntryValue | null): string[] | undefined {
   if (typeof raw !== "string" || !raw) return undefined
   try {
     const parsed = JSON.parse(raw) as unknown
     if (!Array.isArray(parsed)) return undefined
-    return parsed.filter((x): x is string => typeof x === "string")
+    const items = parsed
+      .filter((x): x is string => typeof x === "string")
+      .slice(0, MAX_MEDIA_ITEMS)
+    const sanitized: string[] = []
+    for (const item of items) {
+      if (item.length > MAX_MEDIA_ITEM_LENGTH) continue
+      const clean = sanitizeBodyHtml(item)
+      if (clean) sanitized.push(clean)
+    }
+    return sanitized
   } catch {
     return undefined
   }

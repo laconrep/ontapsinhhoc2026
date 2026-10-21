@@ -194,6 +194,18 @@ export function ensureSchema(): Promise<void> {
            WHERE "dragFirstTry" IS NULL AND "dragStatus"='correct' AND "dragAttempts"=1
         `),
       )
+      // SEC-08: bảng rate_limits (xem lib/rate-limit.ts).
+      .then(() =>
+        pool.query(`
+          CREATE TABLE IF NOT EXISTS rate_limits (
+            "key" text PRIMARY KEY,
+            "count" integer NOT NULL DEFAULT 0,
+            "windowStart" timestamp NOT NULL DEFAULT now()
+          )
+        `),
+      )
+      // SEC-05: nới cột mã mời lớp 6 -> 32 ký tự cho mã mới 8 ký tự.
+      .then(() => pool.query(`ALTER TABLE classes ALTER COLUMN "inviteCode" TYPE varchar(32)`))
       .then(() => undefined)
       .catch((e) => {
         schemaReady = null
