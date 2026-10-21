@@ -869,9 +869,8 @@ mục 10 giữ nguyên, TRỪ thay đổi được ghi rõ ở 11.5 (BUG-05 yêu
   `bodyHtml` lúc tạo đề; mở lại ưu tiên `snap.stem`, fallback DB cho
   snapshot cũ. Chấm vẫn theo snapshot như phiên 4.
 - BUG-12: phần "server tin client" đã gộp vào BUG-01 (11.1). Phần
-  "reset tiến độ khi sửa KP": **CHỜ QUYẾT ĐỊNH** chính sách của chủ
-  sản phẩm (reset hay giữ `fillStatus` khi GV đổi ô/đáp án của KP đã
-  có học sinh mastered) — hiện GIỮ NGUYÊN tiến độ, chưa cài đặt reset.
+  "reset tiến độ khi sửa KP": chính sách đã CHỐT ngày 21/10/2026
+  (chọn RESET khi nội dung chấm thay đổi) và đã cài đặt — xem mục 13.2.
 - BUG-13: Tab 2 `onKeyDown` bỏ qua sự kiện khi
   `e.nativeEvent.isComposing` (đang gõ Telex/VNI).
 - BUG-15: `validateOptions` (app/actions/questions.ts) chặn option
@@ -879,10 +878,11 @@ mục 10 giữ nguyên, TRỪ thay đổi được ghi rõ ở 11.5 (BUG-05 yêu
   nguyên `difficulty` hiện tại khi client không gửi. Transaction của
   import ở BUG-02; `--dry-run` backfill ở BUG-04.
 
-### 11.11 BUG-14 — KHÔNG triển khai
+### 11.11 BUG-14 — ĐÃ DUYỆT, cài đặt ở mục 13.1
 
-Bảng alias thuật ngữ (gene/gen, ADN/DNA...) chờ chủ sản phẩm duyệt
-danh sách alias. Không cài đặt gì ở phiên này.
+Bảng alias thuật ngữ: chủ sản phẩm đã duyệt đúng 4 cặp (gene/gen,
+ADN/DNA, ARN/RNA, mARN/mRNA) ngày 21/10/2026 và đã cài đặt áp dụng
+vào chấm điểm — xem mục 13.1.
 
 ### 11.12 Vá bảo mật Next.js
 
@@ -914,14 +914,14 @@ Quyết định cho từng mục SEC (chi tiết triển khai: `FIX-SEC-2026-10-
 - `completeOnboarding(role, inviteCode?)` (`app/actions/onboarding.ts`):
   whitelist vai trò {"student","teacher"}; chỉ chạy khi `isOnboarded = false`;
   gọi lại sau khi đã onboard bị từ chối (hết đường tự đổi vai trò).
-- Cấp quyền giáo viên: **[CHỜ QUYẾT ĐỊNH] cơ chế chính thức** (admin duyệt /
-  mã mời dùng một lần / whitelist email — cần cột duyệt riêng như
-  `teacherApprovedAt` khi chốt). **Cơ chế TẠM THỜI đang chạy:** onboarding
-  chọn "teacher" phải nhập mã mời khớp env `TEACHER_INVITE_CODE` (so sánh
-  `timingSafeEqual` trong `lib/teacher-invite.ts`; env chưa đặt hoặc ngắn
-  hơn 8 ký tự thì fail-closed — không ai tự cấp được quyền giáo viên).
+- Cấp quyền giáo viên: **[ĐÃ CHỐT 21/10/2026] mã mời qua env là cơ chế
+  CHÍNH THỨC** (không xây thêm admin duyệt / mã mời dùng một lần /
+  whitelist email). Onboarding chọn "teacher" phải nhập mã mời khớp env
+  `TEACHER_INVITE_CODE` (so sánh `timingSafeEqual` trong
+  `lib/teacher-invite.ts`; env chưa đặt hoặc ngắn hơn 8 ký tự thì
+  fail-closed — không ai tự cấp được quyền giáo viên).
   Hệ quả cần biết: giáo viên mới CHƯA có mã mời sẽ chỉ tạo được tài khoản
-  học sinh cho tới khi cơ chế chính thức được chốt và làm xong.
+  học sinh; muốn thành giáo viên phải có mã mời do đơn vị quản lý env cấp.
 - Rà soát dữ liệu: `scripts/audit-teachers.mjs` (chỉ đọc) liệt kê mọi
   tài khoản `role='teacher'`; việc hạ quyền tài khoản không hợp lệ làm
   THỦ CÔNG sau khi sao lưu DB — script không tự hạ quyền ai.
@@ -1042,16 +1042,20 @@ Quyết định cho từng mục SEC (chi tiết triển khai: `FIX-SEC-2026-10-
   `app/api/sessions/[id]/live`, `app/api/worksheet/validate`,
   `app/api/worksheet/save`.
 
-### 12.10 SEC-10 — cấu hình DB [CHỜ QUYẾT ĐỊNH — KHÔNG triển khai]
+### 12.10 SEC-10 — cấu hình DB [ĐÃ QUYẾT ĐỊNH 21/10/2026 — GIỮ NGUYÊN ensureSchema]
 
-- Giữ nguyên `lib/db/index.ts` cho mục này. Điều kiện tiên quyết bắt
-  buộc nếu sau này làm: phải có hệ thống migration chạy lúc triển khai
-  THAY THẾ các thay đổi schema trong `ensureSchema()` TRƯỚC, rồi mới
-  tước quyền DDL của user ứng dụng — làm ngược thứ tự sẽ khiến
-  `ensureSchema()` lỗi và app hỏng các luồng ghi. Repo hiện vận hành
-  theo mô hình "DB cấp sẵn bên ngoài, mọi thay đổi schema qua
-  ensureSchema, không có migration" nên mục này cần chủ sản phẩm chốt
-  quy trình triển khai trước.
+- Quyết định của chủ sản phẩm (21/10/2026): giữ nguyên mô hình hiện
+  tại — `lib/db/index.ts` và `ensureSchema()` không thay đổi, KHÔNG
+  chuyển sang migration, KHÔNG hạ quyền DDL của user ứng dụng. Rủi ro
+  đã biết và được chấp nhận: user DB của ứng dụng giữ quyền DDL.
+- Ghi chú cho lúc triển khai production: vẫn nên đặt
+  `sslmode=require` (hoặc cấu hình `ssl` tương đương) trong chuỗi kết
+  nối production để mã hoá đường truyền app ↔ DB; việc này không phụ
+  thuộc quyết định trên.
+- Nếu sau này đổi ý: điều kiện tiên quyết bắt buộc là phải có hệ
+  thống migration chạy lúc triển khai THAY THẾ các thay đổi schema
+  trong `ensureSchema()` TRƯỚC, rồi mới tước quyền DDL — làm ngược
+  thứ tự sẽ khiến `ensureSchema()` lỗi và app hỏng các luồng ghi.
 
 ### 12.11 SEC-11 — giới hạn kết nối SSE [ĐÃ SỬA]
 
@@ -1076,4 +1080,101 @@ Quyết định cho từng mục SEC (chi tiết triển khai: `FIX-SEC-2026-10-
 - Toàn bộ `scripts/check-*.mjs`: 30/37 PASS; 7 FAIL là các script cũ đã
   fail từ bản gốc __10 (check-class-phien1/2/3/6, check-parser-phien6/8,
   check-preview-phien3) — không tăng thêm, không hồi quy BUG-01..15.
+- `npx tsc --noEmit` sạch; `pnpm build` thành công.
+
+## 13. Chốt quyết định BUG-14, BUG-12 và cơ chế cấp quyền GV (2026-10-21)
+
+Chủ sản phẩm chốt ngày 21/10/2026 ba việc còn treo từ batch 2 và đợt
+SEC (chi tiết triển khai: `FIX-BUG1214-2026-10-21.md`):
+
+### 13.1 BUG-14 — ÁP DỤNG bảng alias thuật ngữ vào chấm điểm
+
+- Danh sách alias ĐÃ DUYỆT — chỉ đúng 4 cặp này, muốn thêm cặp phải
+  được duyệt riêng, không tự suy cặp tương tự:
+  `gene` ≡ `gen`, `ADN` ≡ `DNA`, `ARN` ≡ `RNA`, `mARN` ≡ `mRNA`.
+- Cài đặt tại `lib/scoring.ts`: hằng `TERM_ALIASES` (khoá theo dạng
+  SAU `normalizeAnswer`, tức đã thường hoá: adn/dna, arn/rna,
+  marn/mrna) + hàm `canonicalizeTermAliases` thay mỗi TỪ NGUYÊN VẸN
+  thuộc bảng bằng dạng đại diện của nhóm rồi mới so bằng.
+- Điểm áp dụng (một cơ chế dùng chung cho mọi đường chấm văn bản tự
+  do): `accepts` — dùng cho điền khuyết Tab 2 và kéo thả Tab 3 (cả
+  hai đều chấm qua `gradeSlots`, kể cả nhóm hoán đổi qua
+  `maxMatching`); và `gradeSA` — câu trả lời ngắn Tab 4 và live quiz
+  (qua `gradeLive`). Không còn đường chấm văn bản tự do nào khác.
+  Riêng Tab 3: chip do hệ thống cấp sẵn từ chính term của KP nên học
+  sinh không gõ tự do, nhưng vì dùng chung `accepts` nên hành vi vẫn
+  thống nhất, không cần cơ chế riêng.
+- An toàn: "từ nguyên vẹn" = dãy chữ/số tối đa giữa hai ranh giới
+  không-phải-chữ/số, nên `gen` trong `genetics`/`genome`/`gen1`
+  KHÔNG được tính. `canonicalizeTermAliases` là identity khi chuỗi
+  không chứa alias, nên mọi chốt cũ giữ nguyên: không bóc dấu
+  (nucleotit ≠ nuclêôtit), `1/2 ≠ 0.5`, `1 500 ≠ 1500`; cặp ngoài
+  danh sách đã duyệt (protein/prôtêin, enzim/enzyme) vẫn khác nhau.
+- Mở rộng sau này: thêm cặp vào `TERM_ALIASES` trong
+  `lib/scoring.ts` (đúng một nguồn duy nhất) sau khi được duyệt, rồi
+  chạy lại `scripts/check-alias.mjs`.
+
+### 13.2 BUG-12 — RESET tiến độ khi sửa KP làm thay đổi nội dung chấm
+
+- Chính sách ĐÃ CHỐT: giáo viên sửa KP mà nội dung chấm thay đổi thì
+  tiến độ của MỌI học sinh đối với KP đó được reset để làm lại phần
+  đã đổi; sửa không đụng nội dung chấm thì giữ nguyên tiến độ.
+- "Nội dung chấm" đo bằng `kpGradingSignature(terms)` trong
+  `lib/scoring.ts`: với mỗi ô là tập đáp án chấp nhận đã
+  `normalizeAnswer` (`text` + `extraAccepted` + `synonyms`, khử
+  trùng lặp, sắp xếp); các ô được gom đúng theo phân hoạch nhóm
+  hoán đổi của `gradeSlots` (cùng `swapGroupId` = một nhóm, còn lại
+  mỗi ô một nhóm theo `slotIndex`) và sắp xếp ở mọi cấp. Hệ quả:
+  đổi thứ tự term trong mảng hoặc đặt lại tên `swapGroupId` KHÔNG
+  đổi chữ ký; đổi text/đáp án một ô, thêm/bớt ô, chuyển ô vào/ra
+  nhóm hoán đổi, thêm term trùng nhãn trong nhóm ĐỀU đổi chữ ký;
+  sửa định dạng mà `normalizeAnswer` đã gộp (hoa/thường, khoảng
+  trắng, vị trí dấu thanh, ký hiệu) KHÔNG đổi chữ ký. Thân bài
+  ngoài các ô trống không nằm trong chữ ký (sửa chính tả thân bài
+  không reset). Các tương đương chỉ suy ra lúc chấm (alias ở 13.1,
+  số thập phân `0,5 = 0.5`) không được gấp vào chữ ký: sửa riêng
+  các trường hợp đó vẫn reset — chấp nhận theo hướng an toàn (học
+  sinh làm lại còn hơn giữ tiến độ chấm theo nội dung cũ).
+- Cài đặt tại `updateKnowledgePoint` (`app/actions/content.ts` —
+  đường sửa KP duy nhất; `createKnowledgePoint` tạo KP mới nên
+  không có tiến độ để reset): so chữ ký của terms đang lưu với
+  terms sau `prepareKpTermsForSave`; nếu khác, trong CÙNG
+  transaction với lần cập nhật KP:
+  - `student_progress` của KP: đặt lại theo đúng tiền lệ
+    `resetLessonProgress` — GIỮ `selfAssessment` (Tab 1 ở cấp bài
+    đã khoá; xoá nó sẽ khiến học sinh kẹt, không vào lại được
+    Tab 2/3), chỉ xoá `fillStatus`/`dragStatus`, `fillAttempts`/
+    `dragAttempts` về 0, `fillRevealed`/`dragRevealed` về false,
+    `fillFirstTry`/`dragFirstTry` về null, `overallStatus` tính
+    lại từ `selfAssessment`. Các hàm đọc tiến độ đều coi hàng
+    thiếu/trường null là chưa học nên học sinh được làm lại Tab
+    2/3 của KP với nội dung mới.
+  - `spaced_repetition` của KP: XOÁ hàng — lịch ôn theo nội dung
+    cũ không còn ý nghĩa; lần nộp quiz sau sẽ seed lại từ đầu
+    (interval 1, repetitions 0) nhờ `onConflictDoNothing` sẵn có.
+  - Log `console.info` kèm số hàng progress đã reset và số hàng
+    spaced_repetition đã xoá.
+- Ngoài phạm vi: đường import worksheet tạo KP mới (id mới); tiến
+  độ gắn với KP cũ bị cascade xoá theo KP như hành vi trước đây,
+  không thuộc chính sách này.
+
+### 13.3 SEC-01 — cơ chế cấp quyền giáo viên ĐÃ CHỐT
+
+Mã mời qua env `TEACHER_INVITE_CODE` (đã cài ở 12.1) là cơ chế cấp
+quyền giáo viên CHÍNH THỨC kể từ 21/10/2026 — trạng thái ở 12.1 đã
+cập nhật tương ứng. Không xây thêm admin duyệt, mã mời dùng một
+lần, hay whitelist email.
+
+### 13.4 Nghiệm thu đợt chốt quyết định
+
+- Test mới: `scripts/check-alias.mjs` (BUG-14: 4 cặp hai chiều qua
+  cả gradeSA và gradeSlots, alias trong câu nhiều từ và trong nhóm
+  hoán đổi; các trường hợp không được bằng: chuỗi con
+  gen/genetics/genome, nucleotit/nuclêôtit, 1/2 vs 0.5,
+  protein/prôtêin), `scripts/check-kp-reset.mjs` (BUG-12: tính chất
+  chữ ký + đối chiếu nguồn updateKnowledgePoint).
+- Toàn bộ `scripts/check-*.mjs`: 32/39 PASS (trước đợt này 30/37;
+  tăng đúng 2 script mới); 7 FAIL vẫn là các script cũ đã fail từ
+  bản gốc __10 (check-class-phien1/2/3/6, check-parser-phien6/8,
+  check-preview-phien3) — không tăng thêm, không hồi quy.
 - `npx tsc --noEmit` sạch; `pnpm build` thành công.

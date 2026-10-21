@@ -1,9 +1,17 @@
 "use server"
 
 import { db, ensureSchema } from "@/lib/db"
-import { chapters, lessons, knowledgePoints, questions } from "@/lib/db/schema"
+import {
+  chapters,
+  lessons,
+  knowledgePoints,
+  questions,
+  spacedRepetition,
+  studentProgress,
+} from "@/lib/db/schema"
 import { requireRole } from "@/lib/auth-helpers"
 import { prepareKpTermsForSave } from "@/lib/slot-render"
+import { kpGradingSignature } from "@/lib/scoring"
 import { and, asc, eq, sql } from "drizzle-orm"
 import { revalidatePath, unstable_noStore as noStore } from "next/cache"
 import type { ChapterDto, LessonDto, KnowledgePointDto, UnderlinedTerm } from "@/types"
@@ -221,21 +229,65 @@ export async function updateKnowledgePoint(
   const user = await requireRole("teacher")
   // ownership via lesson join
   const [kp] = await db
-    .select({ lessonId: knowledgePoints.lessonId })
+    .select({
+      lessonId: knowledgePoints.lessonId,
+      underlinedTerms: knowledgePoints.underlinedTerms,
+    })
     .from(knowledgePoints)
     .innerJoin(lessons, eq(lessons.id, knowledgePoints.lessonId))
     .where(and(eq(knowledgePoints.id, id), eq(lessons.teacherId, user.id)))
   if (!kp) throw new Error("Không tìm thấy điểm kiến thức")
   // BUG-01/BUG-12: như createKnowledgePoint — chuẩn hóa NFC + kiểm tra
   // offset phía server trước khi lưu.
-  // LƯU Ý (BUG-12): việc sửa KP có reset tiến độ học sinh hay không là
-  // quyết định chính sách CHƯA chốt — hiện giữ nguyên tiến độ. Xem
-  // sualogic.md mục 11.
   const prepared = prepareKpTermsForSave(content, underlinedTerms)
-  await db
-    .update(knowledgePoints)
-    .set({ content: prepared.content, underlinedTerms: prepared.terms })
-    .where(eq(knowledgePoints.id, id))
+  // BUG-12 (chính sách ĐÃ CHỐT 21/10/2026 — sualogic.md mục 13): nếu lần
+  // sửa này làm thay đổi nội dung chấm (chữ ký gồm term + đáp án chấp
+  // nhận của từng ô + phân hoạch nhóm hoán đổi, xem kpGradingSignature)
+  // thì reset tiến độ của MỌI học sinh đối với KP này để các em làm lại
+  // phần đã đổi. Cách reset bám theo tiền lệ resetLessonProgress: GIỮ
+  // selfAssessment (đánh giá Tab 1 ở cấp bài, đã khoá), chỉ xoá kết quả
+  // điền/kéo-thả và tính lại overallStatus; hàng spaced_repetition của
+  // KP bị xoá để lần nộp quiz sau seed lại từ đầu. Chữ ký không đổi
+  // (sửa thân bài ngoài ô trống, sửa định dạng...) thì giữ nguyên tiến độ.
+  const beforeTerms = (kp.underlinedTerms as UnderlinedTerm[] | null) ?? []
+  const gradingChanged = kpGradingSignature(beforeTerms) !== kpGradingSignature(prepared.terms)
+  await db.transaction(async (tx) => {
+    await tx
+      .update(knowledgePoints)
+      .set({ content: prepared.content, underlinedTerms: prepared.terms })
+      .where(eq(knowledgePoints.id, id))
+    if (gradingChanged) {
+      const resetRows = await tx
+        .update(studentProgress)
+        .set({
+          fillStatus: null,
+          dragStatus: null,
+          fillAttempts: 0,
+          dragAttempts: 0,
+          fillRevealed: false,
+          dragRevealed: false,
+          fillFirstTry: null,
+          dragFirstTry: null,
+          overallStatus: sql`CASE
+            WHEN ${studentProgress.selfAssessment} = 'known' THEN 'known'
+            WHEN ${studentProgress.selfAssessment} = 'unknown' THEN 'unknown'
+            ELSE 'not_started'
+          END`,
+          updatedAt: new Date(),
+        })
+        .where(eq(studentProgress.knowledgePointId, id))
+        .returning({ studentId: studentProgress.studentId })
+      const srRows = await tx
+        .delete(spacedRepetition)
+        .where(eq(spacedRepetition.knowledgePointId, id))
+        .returning({ id: spacedRepetition.id })
+      console.info("updateKnowledgePoint: reset tiến độ do nội dung chấm thay đổi", {
+        kpId: id,
+        progressRowsReset: resetRows.length,
+        spacedRepetitionRowsDeleted: srRows.length,
+      })
+    }
+  })
   revalidatePath(`/teacher/lessons/${kp.lessonId}`)
 }
 

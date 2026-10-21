@@ -113,6 +113,44 @@ export function normalizeAnswer(input: string): string {
     .trim()
 }
 
+// ============ BUG-14: bảng alias thuật ngữ (danh sách ĐÃ DUYỆT) ============
+// Các cặp thuật ngữ viết khác nhau nhưng chấm như nhau. Chủ sản phẩm đã
+// duyệt đúng 4 cặp này (quyết định 21/10/2026, sualogic.md mục 13); muốn
+// thêm cặp phải được duyệt riêng, KHÔNG tự suy ra cặp tương tự.
+// Khoá viết theo dạng SAU normalizeAnswer (đã thường hoá): gene/gen,
+// ADN/DNA -> adn/dna, ARN/RNA -> arn/rna, mARN/mRNA -> marn/mrna.
+// Giá trị của map là dạng đại diện chung của nhóm (phần tử đầu của cặp).
+
+export const TERM_ALIASES: ReadonlyArray<readonly [string, string]> = [
+  ["gene", "gen"],
+  ["adn", "dna"],
+  ["arn", "rna"],
+  ["marn", "mrna"],
+]
+
+const ALIAS_CANONICAL: ReadonlyMap<string, string> = new Map(
+  TERM_ALIASES.flatMap(([canonical, alias]) => [
+    [canonical, canonical],
+    [alias, canonical],
+  ]),
+)
+
+/**
+ * Canonical hoá một chuỗi ĐÃ qua normalizeAnswer theo bảng alias: thay
+ * mỗi TỪ NGUYÊN VẸN thuộc bảng bằng dạng đại diện của nhóm. "Từ nguyên
+ * vẹn" = dãy chữ/số tối đa giữa hai ranh giới không-phải-chữ/số, nên
+ * "gen" trong "genetics"/"genome"/"gen1" KHÔNG bị thay. Chuỗi không
+ * chứa alias nào được trả về nguyên vẹn (hàm là identity), nên các chốt
+ * cũ không đổi hành vi: vẫn không bóc dấu (nucleotit ≠ nuclêôtit),
+ * 1/2 ≠ 0.5, "1 500" ≠ 1500.
+ */
+export function canonicalizeTermAliases(normalized: string): string {
+  return normalized
+    .split(/([^\p{L}\p{N}]+)/u)
+    .map((part) => ALIAS_CANONICAL.get(part) ?? part)
+    .join("")
+}
+
 function parseAnswers(answers: unknown): Record<number, string> {
   const out: Record<number, string> = {}
   if (answers == null) return out
@@ -145,6 +183,12 @@ function accepts(term: UnderlinedTerm, value: string): boolean {
   const norm = normalizeAnswer(value)
   const candidates = [term.text, ...(term.extraAccepted ?? []), ...(term.synonyms ?? [])]
   if (candidates.some((c) => normalizeAnswer(c) === norm)) return true
+  // BUG-14: bảng alias thuật ngữ đã duyệt (gene = gen, ADN = DNA...) —
+  // canonical hoá cả hai vế theo từ nguyên vẹn rồi so lại. Xem mục 13.
+  const aliasNorm = canonicalizeTermAliases(norm)
+  if (candidates.some((c) => canonicalizeTermAliases(normalizeAnswer(c)) === aliasNorm)) {
+    return true
+  }
   // So sánh theo giá trị khi cả hai vế là số thuần (0,5 = 0.5 trong điền
   // khuyết). parsePureNumber chỉ nhận chữ số + một dấu , hoặc . nên các
   // chốt cũ vẫn giữ: 1/2 ≠ 0.5, "1 500" ≠ 1500. Xem sualogic.md mục 11 (BUG-05).
@@ -234,6 +278,44 @@ export function gradeSlots(
   return { results, allCorrect }
 }
 
+/**
+ * BUG-12: "chữ ký nội dung chấm" của một KP, dùng để phát hiện lần sửa
+ * KP nào làm thay đổi việc chấm (khi đó tiến độ học sinh của KP bị
+ * reset — xem app/actions/content.ts và sualogic.md mục 13).
+ *
+ * Chữ ký gồm, cho mỗi term: tập đáp án chấp nhận đã normalizeAnswer
+ * (text + extraAccepted + synonyms, sắp xếp, khử trùng lặp); các term
+ * được gom đúng theo cách gradeSlots gom (cùng swapGroupId = một nhóm
+ * hoán đổi, còn lại mỗi ô một nhóm theo slotIndex) rồi sắp xếp ở mọi
+ * cấp. Nhờ sắp xếp toàn bộ:
+ * - Đổi thứ tự term trong mảng, hay đặt lại tên swapGroupId mà giữ
+ *   nguyên phân hoạch nhóm, KHÔNG đổi chữ ký (không ảnh hưởng chấm).
+ * - Đổi text/đáp án của một ô, thêm/bớt ô, chuyển ô vào/ra nhóm hoán
+ *   đổi, hay một nhóm có thêm term trùng nhãn (BUG-04) ĐỀU đổi chữ ký.
+ * - Sửa định dạng mà normalizeAnswer đã gộp (hoa/thường, khoảng trắng,
+ *   vị trí dấu thanh, ký hiệu) KHÔNG đổi chữ ký.
+ * Phần thân bài ngoài các ô trống không nằm trong chữ ký: sửa chính tả
+ * ở thân bài không reset tiến độ.
+ */
+export function kpGradingSignature(terms: UnderlinedTerm[]): string {
+  const termSig = (t: UnderlinedTerm): string => {
+    const cands = [t.text, ...(t.extraAccepted ?? []), ...(t.synonyms ?? [])]
+      .map((c) => normalizeAnswer(c))
+      .filter((c) => c !== "")
+    return [...new Set(cands)].sort().join("")
+  }
+  const groups = new Map<string, UnderlinedTerm[]>()
+  for (const t of terms ?? []) {
+    const slotIndex = Number(t.slotIndex)
+    const key = t.swapGroupId ? `g:${t.swapGroupId}` : `s:${slotIndex}`
+    const arr = groups.get(key) ?? []
+    arr.push(t)
+    groups.set(key, arr)
+  }
+  const groupSigs = [...groups.values()].map((g) => g.map(termSig).sort().join(""))
+  return groupSigs.sort().join("")
+}
+
 export function gradeMC(chosenId: string | null, correctOptionId: string): boolean {
   if (chosenId == null || chosenId === "") return false
   return chosenId === correctOptionId
@@ -266,8 +348,13 @@ function parsePureNumber(raw: string): number | null {
 
 export function gradeSA(input: string, accepted: string[]): boolean {
   const norm = normalizeAnswer(input)
+  // BUG-14: cùng bảng alias như accepts (điền khuyết/kéo thả) để mọi
+  // đường chấm văn bản tự do thống nhất. Xem sualogic.md mục 13.
+  const aliasNorm = canonicalizeTermAliases(norm)
   for (const a of accepted ?? []) {
-    if (norm === normalizeAnswer(a)) return true
+    const acceptedNorm = normalizeAnswer(a)
+    if (norm === acceptedNorm) return true
+    if (aliasNorm === canonicalizeTermAliases(acceptedNorm)) return true
     const ni = parsePureNumber(input)
     const na = parsePureNumber(a)
     if (ni !== null && na !== null && ni === na) return true
