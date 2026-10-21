@@ -35,6 +35,8 @@ type DragDraft = {
   placement: Record<number, string | null>
   results: Record<number, SlotResult>
   graded: boolean
+  /** allCorrect do server trả ở lần chấm gần nhất; null = chưa chấm / đã sửa lại */
+  serverAllCorrect?: boolean | null
 }
 
 export function Tab3DragDrop({
@@ -233,6 +235,9 @@ function DragDropCard({
   const [placement, setPlacement] = useState<Record<number, string | null>>(restored?.placement ?? {})
   const [results, setResults] = useState<Record<number, SlotResult>>(restored?.results ?? {})
   const [graded, setGraded] = useState(restored?.graded ?? false)
+  const [serverAllCorrect, setServerAllCorrect] = useState<boolean | null>(
+    restored?.serverAllCorrect ?? null,
+  )
   const [pending, startTransition] = useTransition()
   const [selectedChipId, setSelectedChipId] = useState<string | null>(null)
 
@@ -266,7 +271,13 @@ function DragDropCard({
         }
         setResults(map)
         setGraded(true)
-        onDraftChange({ placement: finalPlacement, results: map, graded: true })
+        setServerAllCorrect(res.allCorrect)
+        onDraftChange({
+          placement: finalPlacement,
+          results: map,
+          graded: true,
+          serverAllCorrect: res.allCorrect,
+        })
         if (res.allCorrect) {
           toast.success("Chính xác!")
         } else {
@@ -287,7 +298,8 @@ function DragDropCard({
     next[slotIndex] = chipId
     setPlacement(next)
     setSelectedChipId(null)
-    onDraftChange({ placement: next, results, graded })
+    setServerAllCorrect(null)
+    onDraftChange({ placement: next, results, graded, serverAllCorrect: null })
   }
 
   const handleDragEnd = (e: DragEndEvent) => {
@@ -306,7 +318,8 @@ function DragDropCard({
     if (placement[slotIndex]) {
       setPlacement((prev) => {
         const next = { ...prev, [slotIndex]: null }
-        onDraftChange({ placement: next, results, graded })
+        setServerAllCorrect(null)
+        onDraftChange({ placement: next, results, graded, serverAllCorrect: null })
         return next
       })
     }
@@ -319,13 +332,14 @@ function DragDropCard({
     }
     setPlacement(next)
     setSelectedChipId(null)
+    setServerAllCorrect(null)
     const keepResults = Object.values(results).some((r) => r?.isCorrect)
     if (!keepResults) {
       setGraded(false)
       setResults({})
-      onDraftChange({ placement: next, results: {}, graded: false })
+      onDraftChange({ placement: next, results: {}, graded: false, serverAllCorrect: null })
     } else {
-      onDraftChange({ placement: next, results, graded })
+      onDraftChange({ placement: next, results, graded, serverAllCorrect: null })
     }
   }
 
@@ -335,14 +349,22 @@ function DragDropCard({
       for (const s of slots) {
         if (!results[s]?.isCorrect) next[s] = null
       }
-      onDraftChange({ placement: next, results: {}, graded: false })
+      onDraftChange({ placement: next, results: {}, graded: false, serverAllCorrect: null })
       return next
     })
     setGraded(false)
     setResults({})
+    setServerAllCorrect(null)
   }
 
-  const allCorrect = graded && slots.every((s) => results[s]?.isCorrect)
+  // Như Tab 2: ưu tiên allCorrect của server (chấm trên toàn bộ ô của KP),
+  // không tự tính chỉ theo các ô có trong parts. Xem sualogic.md mục 10.
+  const allCorrect =
+    graded &&
+    (serverAllCorrect != null
+      ? serverAllCorrect
+      : slots.every((s) => results[s]?.isCorrect) &&
+        Object.values(results).every((r) => r.isCorrect))
   const wrongSlots = slots.filter((s) => graded && results[s] && !results[s].isCorrect)
 
   return (

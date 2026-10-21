@@ -110,8 +110,24 @@ export function renderSlots(content: string, terms: UnderlinedTerm[]): SlotPart[
     const parts = cutByOffset(content, terms)
     if (parts) return parts
   }
-  console.warn("renderSlots legacy", { texts: terms.map((t) => t.text) })
-  return renderSlotsLegacy(content, terms)
+  const parts = renderSlotsLegacy(content, terms)
+  // Legacy có thể KHÔNG tìm thấy một term trong content (offset DB lệch) và
+  // âm thầm làm mất ô đó khỏi parts: client chỉ thấy các ô còn lại trong khi
+  // server vẫn chấm trên toàn bộ terms -> lệch kết quả (xem sualogic.md mục 10).
+  // Phân biệt hai mức: rơi xuống legacy nhưng tìm đủ ô (warn) và mất ô (error).
+  const present = new Set(
+    parts.filter((p) => p.type === "slot").map((p) => (p as { term: UnderlinedTerm }).term.slotIndex),
+  )
+  const missing = terms.filter((t) => !present.has(t.slotIndex)).map((t) => t.slotIndex)
+  if (missing.length > 0) {
+    console.error("renderSlots legacy missing slots", {
+      missing,
+      texts: terms.map((t) => t.text),
+    })
+  } else {
+    console.warn("renderSlots legacy", { texts: terms.map((t) => t.text) })
+  }
+  return parts
 }
 
 export function toClientSlotParts(parts: SlotPart[]): ClientSlotPart[] {

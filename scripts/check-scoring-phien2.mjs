@@ -178,10 +178,12 @@ function roundtrip(raw, label) {
 }
 
 {
+  // ĐÃ ĐỔI ở phiên bổ sung (sualogic.md mục 10): "và" CÓ dấu phải gộp nhóm
+  // như "va" — bản phiên 2 chốt ASCII là spec sai so với văn bản thật.
   const raw = '__"timin"__ và __"xitozin"__'
   const { underlinedTerms } = extractBlanks(raw)
-  assertEq(underlinedTerms[0].swapGroupId, null, "va accent khong gop nhom")
-  assertEq(underlinedTerms[1].swapGroupId, null, "va accent khong gop nhom 2")
+  assertEq(underlinedTerms[0].swapGroupId, "g1", "va co dau gop nhom")
+  assertEq(underlinedTerms[1].swapGroupId, "g1", "va co dau gop nhom 2")
 }
 
 console.log("phien 2 OK")

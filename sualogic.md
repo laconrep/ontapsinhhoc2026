@@ -679,3 +679,61 @@ Import ham tu `lib/*.ts` nhu `scripts/check-parser-phien8.mjs`. `process.exit(1)
 4. `git commit -m "wip(scoring): phien N - <tom tat>"`
 
 Khong commit `.env`, khong force push. Khong sua `suaui.md` / spec goc tru khi phien ghi ro.
+
+---
+
+## 10. Phiên bổ sung (sau phiên 8) — và/hoặc có dấu, vị trí dấu thanh, ký hiệu
+
+Ngày: 2026-10-20. Nguồn: báo cáo lỗi chấm sai từ dữ liệu thật, đã tái hiện
+bằng script trước khi sửa (43/43 ca khớp). Phiên này THAY ĐỔI hai ghi chú cũ:
+(1) ghi chú phiên 2 "Regex join dùng đúng spec ASCII va/hoac (không gồm
+và/hoặc)" — spec đó sai so với văn bản thật; (2) phạm vi `normalizeAnswer`
+ở mục 1.2/4 được mở rộng như liệt kê dưới đây. Các quyết định khác của
+mục 1 giữ nguyên, đặc biệt: KHÔNG bỏ dấu tiếng Việt, `0,5` vẫn xử lý ở
+`gradeSA`, `1/2` ≠ `0.5`, matching swap-group giữ nguyên.
+
+### 10.1 Nhóm hoán đổi: `và` / `hoặc` có dấu
+
+- `SWAP_GROUP_JOIN_RE` (lib/worksheet-parser.ts) nay là
+  `/^\s*(?:(?:[,\/\-–→]|và|hoặc|va|hoac)\s*)*$/i`: chuỗi nối chỉ gồm khoảng
+  trắng, dấu nối và từ nối, cho phép tổ hợp ", và " / " và, ".
+- Vẫn tách nhóm khi có chữ xen khác (" bổ sung với " — ca timin/xitozin
+  phiên 2 giữ nguyên) hoặc dấu ngắt câu `. ! ? ;`.
+- Test phiên 2 ở cuối file (timin và xitozin) đã cập nhật kỳ vọng: có dấu
+  thì gộp nhóm `g1`.
+- Dữ liệu đã import: `swapGroupId` lưu cứng trong `underlinedTerms`, sửa
+  code không tự sửa dữ liệu cũ. Chạy
+  `DATABASE_URL=... node scripts/backfill-swap-groups.mjs` để tính lại
+  nhóm từ content + offset đã lưu (KP thiếu/lệch offset -> CSV
+  needsReview, không đoán), hoặc import lại bài.
+
+### 10.2 `normalizeAnswer`: vị trí dấu thanh + ký hiệu (lib/scoring.ts)
+
+- Vị trí dấu thanh: thêm `canonicalizeTonePlacement` — tách NFD, di
+  chuyển DUY NHẤT dấu thanh (huyền/sắc/hỏi/ngã/nặng) giữa hai nguyên âm
+  của âm đôi oa/oe/uy: âm tiết mở -> nguyên âm thứ nhất (hoá->hóa,
+  thuỷ->thủy, khoẻ->khỏe), âm tiết đóng -> nguyên âm thứ hai (hoàn,
+  hoán, huỳnh; "hòan" cũng được đưa về "hoàn"). Ngoại lệ: "quý/quỵ"
+  (u thuộc âm đầu qu) không di chuyển. Dấu chất nguyên âm (â ă ê ô ơ ư)
+  không đổi nên `nucleotit` ≠ `nuclêôtit` như đã chốt.
+- Ký hiệu: `->` -> `→` (trước bước đổi dash); chỉ số dưới/trên
+  (₀-₉, ⁰-⁹, ₋ ⁻ ₊ ⁺) -> ký tự thường; bỏ khoảng trắng quanh `-` và
+  `→` (`A - T` = `A-T`); bỏ khoảng trắng trước `%` (`50 %` = `50%`);
+  bóc ngoặc đơn khi bọc toàn bộ đáp án (`(DNA)` = `DNA`).
+
+### 10.3 Lệch client/server khi renderSlots rơi xuống legacy
+
+- `renderSlots` (lib/slot-render.ts): legacy tìm thiếu ô -> `console.error
+  "renderSlots legacy missing slots"` kèm danh sách slotIndex bị mất;
+  legacy tìm đủ ô vẫn `console.warn` như cũ.
+- Tab 2 (tab2-fill-in.tsx) và Tab 3 (tab3-drag-drop.tsx): nút qua câu
+  dùng `allCorrect` do server trả (lưu vào state + draft), không tự tính
+  chỉ theo các ô có trong parts. Draft cũ không có field này thì xét mọi
+  kết quả server đã trả.
+
+### 10.4 Nghiệm thu
+
+- Test mới: `node --experimental-strip-types scripts/check-scoring-bo-sung.mjs`
+  in `bo sung OK`.
+- Toàn bộ scripts/check-*.mjs cũ vẫn PASS (trừ kỳ vọng phiên 2 đã cập
+  nhật ở 10.1). `pnpm exec tsc --noEmit` cần chạy ở máy có node_modules.

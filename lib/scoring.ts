@@ -1,19 +1,110 @@
 import type { UnderlinedTerm } from "@/types"
 
+// ============ Chuẩn hoá vị trí dấu thanh (kiểu cũ -> kiểu mới) ============
+// Hai kiểu gõ chỉ khác VỊ TRÍ dấu thanh trên các âm đôi oa / oe / uy:
+//   kiểu cũ: hoá, thuỷ, khoẻ (dấu trên nguyên âm thứ hai)
+//   kiểu mới: hóa, thủy, khỏe (dấu trên nguyên âm thứ nhất — khi âm đôi ở cuối âm tiết)
+// Âm tiết đóng (có phụ âm cuối) thì cả hai kiểu đều đặt dấu trên nguyên âm
+// thứ hai: hoàn, hoán, huỳnh — hàm này cũng đưa "hòan" sai kiểu về "hoàn".
+// Chỉ di chuyển dấu thanh (huyền/sắc/hỏi/ngã/nặng); dấu chất nguyên âm
+// (mũ, trăng, móc: â ă ê ô ơ ư) giữ nguyên, nên quyết định đã chốt trong
+// sualogic.md vẫn giữ: nucleotit ≠ nuclêôtit. Xem sualogic.md mục 10.
+
+const TONE_MARKS = new Set(["\u0300", "\u0301", "\u0309", "\u0303", "\u0323"])
+const QUALITY_MARKS = new Set(["\u0302", "\u0306", "\u031B"])
+const VOWEL_BASES = new Set(["a", "e", "i", "o", "u", "y"])
+
+interface CharCluster {
+  base: string
+  marks: string[]
+}
+
+function moveToneInWord(word: string): string {
+  const clusters: CharCluster[] = []
+  for (const ch of word.normalize("NFD")) {
+    if (/\p{M}/u.test(ch) && clusters.length > 0) {
+      clusters[clusters.length - 1].marks.push(ch)
+    } else {
+      clusters.push({ base: ch, marks: [] })
+    }
+  }
+  const toneIdx = clusters.findIndex((c) => c.marks.some((m) => TONE_MARKS.has(m)))
+  if (toneIdx < 0) return word
+  const tone = clusters[toneIdx].marks.find((m) => TONE_MARKS.has(m))
+  if (!tone) return word
+
+  const isPlain = (c: CharCluster, v: string) =>
+    c.base === v && c.marks.every((m) => !QUALITY_MARKS.has(m))
+
+  for (let i = 0; i + 1 < clusters.length; i++) {
+    const a = clusters[i]
+    const b = clusters[i + 1]
+    const pair =
+      (isPlain(a, "o") && isPlain(b, "a")) ||
+      (isPlain(a, "o") && isPlain(b, "e")) ||
+      (isPlain(a, "u") && isPlain(b, "y"))
+    if (!pair) continue
+    // "quý", "quỵ": u thuộc âm đầu "qu", nguyên âm chính là y — không di chuyển.
+    if (a.base === "u" && i > 0 && clusters[i - 1].base === "q") continue
+    if (toneIdx !== i && toneIdx !== i + 1) continue
+    const rest = clusters.slice(i + 2)
+    let target = -1
+    if (rest.length === 0) target = i // âm tiết mở: kiểu mới đặt trên nguyên âm đầu
+    else if (rest.every((c) => !VOWEL_BASES.has(c.base))) target = i + 1 // âm tiết đóng: nguyên âm thứ hai
+    else continue // nguyên âm đôi + glide (oai, oay...): hai kiểu như nhau
+    if (target === toneIdx) return word
+    clusters[toneIdx].marks = clusters[toneIdx].marks.filter((m) => m !== tone)
+    clusters[target].marks.push(tone)
+    return clusters.map((c) => c.base + c.marks.join("")).join("").normalize("NFC")
+  }
+  return word
+}
+
+/** Đưa mọi từ trong chuỗi về một kiểu đặt dấu thanh duy nhất (kiểu mới). */
+export function canonicalizeTonePlacement(text: string): string {
+  return text
+    .split(/([^\p{L}]+)/u)
+    .map((part) => (/^\p{L}+$/u.test(part) ? moveToneInWord(part) : part))
+    .join("")
+}
+
+// Chỉ số dưới/trên -> chữ số thường: CO₂ -> CO2, H₂O -> H2O.
+const SUBSCRIPT_DIGITS = "₀₁₂₃₄₅₆₇₈₉"
+const SUPERSCRIPT_DIGITS = "⁰¹²³⁴⁵⁶⁷⁸⁹"
+
 export function normalizeAnswer(input: string): string {
-  return (input ?? "")
+  let s = (input ?? "")
     .normalize("NFC")
-    .replace(/[\u200B-\u200D\uFEFF]/g, "")
-    .replace(/[\u00A0\u202F\u2007]/g, " ")
-    .replace(/[\u2018\u2019\u02B9\u2032\u00B4\u0060]/g, "'")
-    .replace(/[\u2010\u2011\u2012\u2013\u2014\u2212]/g, "-")
-    .replace(/[\u201C\u201D\u00AB\u00BB]/g, '"')
+    .replace(/[​-‍﻿]/g, "")
+    .replace(/[   ]/g, " ")
+    .replace(/[‘’ʹ′´`]/g, "'")
+    // Mũi tên: "->" gõ ASCII và "→" phải là một. Làm trước bước đổi dash.
+    .replace(/->/g, "→")
+    .replace(/[‐‑‒–—−]/g, "-")
+    .replace(/[“”«»]/g, '"')
+    .replace(/[₀₁₂₃₄₅₆₇₈₉]/g, (ch) => String(SUBSCRIPT_DIGITS.indexOf(ch)))
+    .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g, (ch) => String(SUPERSCRIPT_DIGITS.indexOf(ch)))
+    .replace(/₋/g, "-")
+    .replace(/⁻/g, "-")
+    .replace(/₊/g, "+")
+    .replace(/⁺/g, "+")
     .replace(/\s+/g, " ")
     .trim()
+    .toLowerCase()
+  // Vị trí dấu thanh: hoá = hóa, thuỷ = thủy (không bỏ dấu — xem ghi chú trên).
+  s = canonicalizeTonePlacement(s)
+  // Khoảng trắng quanh dấu nối/mũi tên và trước % không mang nghĩa: A - T = A-T, 50 % = 50%.
+  s = s
+    .replace(/\s*([-→])\s*/g, "$1")
+    .replace(/\s+%/g, "%")
+    .replace(/\s+/g, " ")
+    .trim()
+  return s
     .replace(/^"(.+)"$/, "$1")
     .replace(/^[\s.,;:!?…]+|[\s.,;:!?…]+$/g, "")
+    .replace(/^\((.+)\)$/, "$1") // (DNA) = DNA — chỉ bóc khi ngoặc bọc toàn bộ đáp án
+    .replace(/^[\s.,;:!?…]+|[\s.,;:!?…]+$/g, "")
     .trim()
-    .toLowerCase()
 }
 
 function parseAnswers(answers: unknown): Record<number, string> {

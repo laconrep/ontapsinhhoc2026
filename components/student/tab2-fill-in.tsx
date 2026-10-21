@@ -21,6 +21,8 @@ type FillDraft = {
   answers: Record<number, string>
   results: Record<number, SlotResult>
   graded: boolean
+  /** allCorrect do server trả ở lần chấm gần nhất; null = chưa chấm / đã sửa lại */
+  serverAllCorrect?: boolean | null
 }
 
 export function Tab2FillIn({
@@ -211,6 +213,9 @@ function FillInCard({
   const [answers, setAnswers] = useState<Record<number, string>>(restored?.answers ?? {})
   const [results, setResults] = useState<Record<number, SlotResult>>(restored?.results ?? {})
   const [graded, setGraded] = useState(restored?.graded ?? false)
+  const [serverAllCorrect, setServerAllCorrect] = useState<boolean | null>(
+    restored?.serverAllCorrect ?? null,
+  )
   const [pending, startTransition] = useTransition()
   const inputsRef = useRef<Record<number, HTMLInputElement | null>>({})
 
@@ -221,7 +226,7 @@ function FillInCard({
   const setAnswer = (slotIndex: number, value: string) => {
     setAnswers((prev) => {
       const next = { ...prev, [slotIndex]: value }
-      onDraftChange({ answers: next, results, graded })
+      onDraftChange({ answers: next, results, graded, serverAllCorrect })
       return next
     })
   }
@@ -248,7 +253,8 @@ function FillInCard({
         }
         setResults(map)
         setGraded(true)
-        onDraftChange({ answers, results: map, graded: true })
+        setServerAllCorrect(res.allCorrect)
+        onDraftChange({ answers, results: map, graded: true, serverAllCorrect: res.allCorrect })
         if (res.allCorrect) {
           toast.success("Chính xác!")
         } else {
@@ -266,11 +272,12 @@ function FillInCard({
       for (const s of slots) {
         if (!results[s]?.isCorrect) next[s] = ""
       }
-      onDraftChange({ answers: next, results: {}, graded: false })
+      onDraftChange({ answers: next, results: {}, graded: false, serverAllCorrect: null })
       return next
     })
     setGraded(false)
     setResults({})
+    setServerAllCorrect(null)
   }
 
   const focusNext = (slotIndex: number) => {
@@ -280,7 +287,16 @@ function FillInCard({
     else if (allFilled) handleSubmit()
   }
 
-  const allCorrect = graded && slots.every((s) => results[s]?.isCorrect)
+  // Ưu tiên allCorrect của server: server chấm trên TOÀN BỘ ô của KP, client
+  // chỉ nhìn thấy các ô có trong parts (một ô bị mất khỏi parts vẫn bị server
+  // chấm sai). Draft cũ chưa có serverAllCorrect thì xét mọi kết quả server
+  // đã trả, không chỉ các ô đang hiển thị. Xem sualogic.md mục 10.
+  const allCorrect =
+    graded &&
+    (serverAllCorrect != null
+      ? serverAllCorrect
+      : slots.every((s) => results[s]?.isCorrect) &&
+        Object.values(results).every((r) => r.isCorrect))
   const wrongSlots = slots.filter((s) => graded && results[s] && !results[s].isCorrect)
 
   return (

@@ -76,7 +76,11 @@ function peelBlankText(raw: string): { core: string; prefix: string; suffix: str
   return { core: m[2], prefix: m[1], suffix: m[3] }
 }
 
-const SWAP_GROUP_JOIN_RE = /^\s*([,\/\-–→]|va|hoac)?\s*$/i
+// Chuỗi nối giữa hai ô hoán đổi cùng nhóm: chỉ gồm khoảng trắng, dấu nối
+// (, / - – →) và/hoặc từ nối "và"/"hoặc" (có dấu hoặc không dấu), cho phép
+// tổ hợp như ", và " hay " và, ". Văn bản xen khác (vd " bổ sung với ")
+// hoặc dấu ngắt câu (. ! ? ;) sẽ tách nhóm. Xem sualogic.md mục 10.
+const SWAP_GROUP_JOIN_RE = /^\s*(?:(?:[,\/\-–→]|và|hoặc|va|hoac)\s*)*$/i
 const MAX_SWAP_GROUP_SIZE = 8
 
 /**
