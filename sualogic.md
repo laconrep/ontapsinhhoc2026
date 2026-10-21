@@ -1178,3 +1178,26 @@ lần, hay whitelist email.
   bản gốc __10 (check-class-phien1/2/3/6, check-parser-phien6/8,
   check-preview-phien3) — không tăng thêm, không hồi quy.
 - `npx tsc --noEmit` sạch; `pnpm build` thành công.
+
+## 14. Giao bài hai chiều + tạo bài từ tab Lớp học (2026-10-21)
+
+Theo yêu cầu của người dùng (2026-10-21):
+
+- **Tab Bài giảng — nút "Giao bài" trên từng bài giảng**: mở popup chọn môn học
+  (lọc danh sách lớp theo `classes.subject`), tick nhiều lớp, giao đồng loạt
+  một bài cho nhiều lớp. Dữ liệu qua `getAssignableClasses(lessonId)` (kèm cờ
+  `alreadyAssigned`, lớp đã có bài hiển thị "Đã giao" và không chọn lại được)
+  và `assignLessonToClasses(lessonId, classIds, dueAt?, note?)` trong
+  `app/actions/assignments.ts`. Đây là chiều ngược của `assignLessons` và giữ
+  NGUYÊN luật cũ: bài phải `status = "ready"` (nút bị disable với bài chưa
+  ready), lớp phải thuộc GV, trùng thì `onConflictDoNothing`.
+- **Tab Lớp học → "Bài tập đã giao" — nút "Tạo bài giảng"** (nút "Giao bài
+  giảng" giữ nguyên): form gồm chọn chương (`getChapterOptions` trong
+  `app/actions/content.ts`) + tên bài; tạo xong **TỰ GIAO luôn cho lớp đang
+  mở** qua `createLessonAndAssignToClass(classId, chapterId, title)`.
+  QUYẾT ĐỊNH CHỦ ĐÍCH: luồng này KHÔNG áp luật ready-only — bài vừa tạo đang
+  là `draft` vẫn được giao ngay (người dùng chốt 2026-10-21). Bài ghi vào bảng
+  `lessons` chung nên xuất hiện đồng thời ở tab Bài giảng.
+  Lưu ý hệ quả: `getAssignedLessonsForStudent` không lọc theo status, nên học
+  sinh thấy bài draft này trong danh sách đã giao ngay khi tạo — GV cần bổ
+  sung nội dung sớm (đây là hành vi đã được thông báo khi chốt phương án).

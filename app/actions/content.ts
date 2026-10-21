@@ -92,6 +92,17 @@ export async function deleteChapter(id: string): Promise<void> {
 
 // ---------- Lessons ----------
 
+/** Danh sách chương (id + tên) cho các form chọn chương (vd tạo bài từ tab Lớp học). */
+export async function getChapterOptions(): Promise<{ id: string; title: string }[]> {
+  const user = await requireRole("teacher")
+  const rows = await db
+    .select({ id: chapters.id, title: chapters.title })
+    .from(chapters)
+    .where(eq(chapters.teacherId, user.id))
+    .orderBy(asc(chapters.order), asc(chapters.createdAt))
+  return rows
+}
+
 export async function createLesson(chapterId: string, title: string): Promise<{ id: string }> {
   const user = await requireRole("teacher")
   if (!title.trim()) throw new Error("Tên bài giảng không được để trống")

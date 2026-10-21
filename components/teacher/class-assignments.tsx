@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
   assignLessons,
+  createLessonAndAssignToClass,
   getAssignableLessons,
   removeAssignment,
   updateAssignment,
 } from "@/app/actions/assignments"
+import { getChapterOptions } from "@/app/actions/content"
 import type { ClassAssignmentDto } from "@/types"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -32,7 +34,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { EmptyState } from "@/components/shared/empty-state"
 import { formatDateTime } from "@/lib/format-date"
-import { BookOpen, MoreHorizontal, Plus } from "lucide-react"
+import { BookOpen, BookPlus, MoreHorizontal, Plus } from "lucide-react"
 
 type AssignableLesson = { id: string; title: string; chapterTitle: string }
 
@@ -75,6 +77,43 @@ export function ClassAssignments({
   const [editDueAt, setEditDueAt] = useState("")
   const [editNote, setEditNote] = useState("")
   const [revokeTarget, setRevokeTarget] = useState<ClassAssignmentDto | null>(null)
+  // Dialog "Tạo bài giảng": tạo bài mới và tự giao cho lớp đang mở.
+  const [createOpen, setCreateOpen] = useState(false)
+  const [chapters, setChapters] = useState<{ id: string; title: string }[]>([])
+  const [loadingChapters, setLoadingChapters] = useState(false)
+  const [newChapterId, setNewChapterId] = useState("")
+  const [newTitle, setNewTitle] = useState("")
+
+  function openCreate() {
+    setCreateOpen(true)
+    setNewTitle("")
+    setNewChapterId("")
+    setLoadingChapters(true)
+    getChapterOptions()
+      .then((rows) => {
+        setChapters(rows)
+        if (rows.length > 0) setNewChapterId(rows[0].id)
+      })
+      .catch((err) => toast.error(err instanceof Error ? err.message : "Không tải được danh sách chương"))
+      .finally(() => setLoadingChapters(false))
+  }
+
+  function handleCreate() {
+    if (!newChapterId || !newTitle.trim()) {
+      toast.error("Hãy chọn chương và nhập tên bài giảng")
+      return
+    }
+    startTransition(async () => {
+      try {
+        await createLessonAndAssignToClass(classId, newChapterId, newTitle)
+        toast.success("Đã tạo bài giảng và giao cho lớp này")
+        setCreateOpen(false)
+        router.refresh()
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Có lỗi xảy ra")
+      }
+    })
+  }
 
   const grouped = useMemo(() => {
     const map = new Map<string, AssignableLesson[]>()
@@ -166,10 +205,16 @@ export function ClassAssignments({
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <h2 className="font-heading text-lg font-bold text-foreground">Bài tập đã giao</h2>
-        <Button size="sm" onClick={openAssign}>
-          <Plus className="h-4 w-4" />
-          Giao bài giảng
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={openCreate}>
+            <BookPlus className="h-4 w-4" />
+            Tạo bài giảng
+          </Button>
+          <Button size="sm" onClick={openAssign}>
+            <Plus className="h-4 w-4" />
+            Giao bài giảng
+          </Button>
+        </div>
       </div>
 
       {initial.length === 0 ? (
@@ -270,6 +315,66 @@ export function ClassAssignments({
             </Button>
             <Button onClick={handleAssign} disabled={pending || selected.size === 0}>
               Giao {selected.size ? `(${selected.size})` : ""}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Tạo bài giảng mới</DialogTitle>
+            <DialogDescription>
+              Bài tạo ở đây sẽ đồng thời xuất hiện trong tab Bài giảng và được giao ngay cho lớp
+              này.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="create-chapter">Chương</Label>
+              <select
+                id="create-chapter"
+                value={newChapterId}
+                onChange={(e) => setNewChapterId(e.target.value)}
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                disabled={loadingChapters || chapters.length === 0}
+              >
+                {chapters.map((ch) => (
+                  <option key={ch.id} value={ch.id}>
+                    {ch.title}
+                  </option>
+                ))}
+              </select>
+              {!loadingChapters && chapters.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Chưa có chương nào. Hãy tạo chương ở tab Bài giảng trước.
+                </p>
+              ) : null}
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="create-title">Tên bài giảng</Label>
+              <Input
+                id="create-title"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                placeholder="VD: ADN và ARN"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.nativeEvent.isComposing && e.keyCode !== 229)
+                    handleCreate()
+                }}
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+              Huỷ
+            </Button>
+            <Button
+              onClick={handleCreate}
+              disabled={pending || chapters.length === 0 || !newTitle.trim()}
+            >
+              Tạo và giao bài
             </Button>
           </DialogFooter>
         </DialogContent>

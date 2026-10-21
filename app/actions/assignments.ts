@@ -1,6 +1,6 @@
 "use server"
 
-import { and, asc, desc, eq, inArray } from "drizzle-orm"
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { db, ensureSchema } from "@/lib/db"
 import {
@@ -278,4 +278,159 @@ export async function getAssignedLessonsForStudent(): Promise<AssignedLessonDto[
     })
   }
   return out
+}
+
+export type AssignableClass = {
+  id: string
+  name: string
+  subject: string
+  schoolYear: string
+  studentCount: number
+  alreadyAssigned: boolean
+}
+
+/**
+ * Danh sách lớp của GV cho popup "Giao bài" ở tab Bài giảng, kèm cờ
+ * alreadyAssigned để popup hiển thị lớp nào đã có bài này rồi.
+ */
+export async function getAssignableClasses(lessonId: string): Promise<AssignableClass[]> {
+  const teacher = await requireRole("teacher")
+  await ensureSchema()
+
+  const [lesson] = await db
+    .select({ id: lessons.id })
+    .from(lessons)
+    .where(and(eq(lessons.id, lessonId), eq(lessons.teacherId, teacher.id)))
+    .limit(1)
+  if (!lesson) throw new Error("Không tìm thấy bài giảng")
+
+  const rows = await db
+    .select({
+      id: classes.id,
+      name: classes.name,
+      subject: classes.subject,
+      schoolYear: classes.schoolYear,
+      studentCount: sql<number>`count(${classStudents.studentId})::int`,
+    })
+    .from(classes)
+    .leftJoin(classStudents, eq(classStudents.classId, classes.id))
+    .where(eq(classes.teacherId, teacher.id))
+    .groupBy(classes.id)
+    .orderBy(desc(classes.createdAt))
+
+  const assigned = await db
+    .select({ classId: classAssignments.classId })
+    .from(classAssignments)
+    .where(eq(classAssignments.lessonId, lessonId))
+  const assignedSet = new Set(assigned.map((a) => a.classId))
+
+  return rows.map((r) => ({ ...r, alreadyAssigned: assignedSet.has(r.id) }))
+}
+
+/**
+ * Giao MỘT bài cho NHIỀU lớp — chiều ngược của assignLessons, cùng luật:
+ * bài phải thuộc GV và ở trạng thái ready; lớp phải thuộc GV; lớp đã có
+ * bài thì bỏ qua (onConflictDoNothing), không tạo trùng.
+ */
+export async function assignLessonToClasses(
+  lessonId: string,
+  classIds: string[],
+  dueAt?: string | null,
+  note?: string | null,
+): Promise<{ assigned: number; skipped: number }> {
+  const teacher = await requireRole("teacher")
+  await ensureSchema()
+
+  const [lesson] = await db
+    .select({ id: lessons.id, status: lessons.status })
+    .from(lessons)
+    .where(and(eq(lessons.id, lessonId), eq(lessons.teacherId, teacher.id)))
+    .limit(1)
+  if (!lesson) throw new Error("Không tìm thấy bài giảng")
+  if (lesson.status !== "ready") throw new Error("Bài giảng chưa ở trạng thái sẵn sàng để giao")
+
+  const uniqueIds = [...new Set(classIds.filter(Boolean))]
+  if (uniqueIds.length === 0) return { assigned: 0, skipped: 0 }
+
+  const owned = await db
+    .select({ id: classes.id })
+    .from(classes)
+    .where(and(eq(classes.teacherId, teacher.id), inArray(classes.id, uniqueIds)))
+  const ownedIds = owned.map((c) => c.id)
+  const skippedNotOwned = uniqueIds.length - ownedIds.length
+  if (ownedIds.length === 0) return { assigned: 0, skipped: uniqueIds.length }
+
+  const due = dueAt ? new Date(dueAt) : null
+  const dueValue = due && !Number.isNaN(due.getTime()) ? due : null
+  const noteValue = note?.trim() ? note.trim() : null
+
+  const inserted = await db
+    .insert(classAssignments)
+    .values(
+      ownedIds.map((classId) => ({
+        classId,
+        lessonId,
+        teacherId: teacher.id,
+        dueAt: dueValue,
+        note: noteValue,
+      })),
+    )
+    .onConflictDoNothing({ target: [classAssignments.classId, classAssignments.lessonId] })
+    .returning({ id: classAssignments.id })
+
+  for (const classId of ownedIds) revalidatePath(`/teacher/classes/${classId}`)
+  revalidatePath("/student/learn")
+  revalidatePath("/student")
+  return {
+    assigned: inserted.length,
+    skipped: skippedNotOwned + (ownedIds.length - inserted.length),
+  }
+}
+
+/**
+ * Tạo bài giảng MỚI từ tab Lớp học và TỰ GIAO luôn cho lớp đang mở
+ * (quyết định của người dùng 2026-10-21). Khác assignLessons ở chỗ:
+ * luồng này chủ đích KHÔNG lọc status "ready" — bài vừa tạo (draft,
+ * chưa có nội dung) vẫn được giao ngay cho lớp. Bài được ghi vào bảng
+ * lessons chung nên đồng thời xuất hiện ở tab Bài giảng. Phần tạo bài
+ * bám sát createLesson trong app/actions/content.ts.
+ */
+export async function createLessonAndAssignToClass(
+  classId: string,
+  chapterId: string,
+  title: string,
+): Promise<{ lessonId: string }> {
+  const teacher = await requireRole("teacher")
+  await ensureSchema()
+  await assertTeacherOwnsClass(classId, teacher.id)
+  if (!title.trim()) throw new Error("Tên bài giảng không được để trống")
+
+  const chap = await db
+    .select({ id: chapters.id })
+    .from(chapters)
+    .where(and(eq(chapters.id, chapterId), eq(chapters.teacherId, teacher.id)))
+  if (chap.length === 0) throw new Error("Không tìm thấy chương")
+
+  const countRes = await db
+    .select({ c: sql<number>`count(*)` })
+    .from(lessons)
+    .where(eq(lessons.chapterId, chapterId))
+  const order = Number(countRes[0]?.c ?? 0)
+
+  const [row] = await db
+    .insert(lessons)
+    .values({ title: title.trim(), chapterId, teacherId: teacher.id, order, status: "draft" })
+    .returning({ id: lessons.id })
+
+  await db.insert(classAssignments).values({
+    classId,
+    lessonId: row.id,
+    teacherId: teacher.id,
+  })
+
+  revalidatePath("/teacher/lessons")
+  revalidatePath(`/teacher/classes/${classId}`)
+  revalidatePath("/student/learn")
+  revalidatePath("/student")
+  return { lessonId: row.id }
 }
