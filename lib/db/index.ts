@@ -136,17 +136,26 @@ export function ensureSchema(): Promise<void> {
           END $$;
         `),
       )
+      // Hai index unique của quiz_answers bọc catch riêng: nếu dữ liệu
+      // production đã có dòng trùng (attemptId, questionId) thì CREATE
+      // UNIQUE INDEX lỗi 23505 — chỉ log, không được làm sập cả chuỗi
+      // (đây là nguyên nhân sự cố /teacher ngày 2026-10-21: index
+      // mc_sa không tạo được vì quiz_answers trùng dòng).
       .then(() =>
-        pool.query(`
+        pool
+          .query(`
           CREATE UNIQUE INDEX IF NOT EXISTS quiz_answers_mc_sa_uidx
             ON quiz_answers ("attemptId","questionId") WHERE "optionId" IS NULL
-        `),
+        `)
+          .catch((e) => console.error("[ensureSchema] quiz_answers_mc_sa_uidx failed:", e)),
       )
       .then(() =>
-        pool.query(`
+        pool
+          .query(`
           CREATE UNIQUE INDEX IF NOT EXISTS quiz_answers_tf_uidx
             ON quiz_answers ("attemptId","questionId","optionId") WHERE "optionId" IS NOT NULL
-        `),
+        `)
+          .catch((e) => console.error("[ensureSchema] quiz_answers_tf_uidx failed:", e)),
       )
       .then(() =>
         pool.query(`
@@ -220,8 +229,14 @@ export function ensureSchema(): Promise<void> {
       )
       .then(() => undefined)
       .catch((e) => {
+        // 2026-10-21 (sự cố production): KHÔNG ném lỗi ra caller nữa.
+        // ensureSchema là DDL best-effort chạy lúc khởi động — một lệnh
+        // vấp dữ liệu production (index unique gặp dòng trùng, thiếu
+        // quyền DDL...) không được phép làm sập mọi trang gọi
+        // ensureSchema (vd getQuestionBank trên /teacher). Log rõ để
+        // xử lý gốc rễ sau; schemaReady reset để lần gọi sau thử lại.
+        console.error("[ensureSchema] failed (app continues):", e)
         schemaReady = null
-        throw e
       })
   }
   return schemaReady
