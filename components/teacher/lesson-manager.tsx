@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
+import { noteActionSuccess, reloadIfStaleAction } from "@/lib/stale-action"
 import {
   BookOpen,
   ChevronDown,
@@ -103,10 +104,16 @@ export function LessonManager({ initialChapters }: { initialChapters: ChapterDto
     setAssignNote("")
     setAssignLoading(true)
     getAssignableClasses(lesson.id)
-      .then((rows) => setAssignClasses(rows))
-      .catch((e) =>
-        toast.error(e instanceof Error ? e.message : "Không tải được danh sách lớp"),
-      )
+      .then((rows) => {
+        noteActionSuccess()
+        setAssignClasses(rows)
+      })
+      .catch((e) => {
+        // Tab mở từ bản triển khai cũ -> tự tải lại trang lấy bản mới.
+        if (!reloadIfStaleAction(e)) {
+          toast.error(e instanceof Error ? e.message : "Không tải được danh sách lớp")
+        }
+      })
       .finally(() => setAssignLoading(false))
   }
 
@@ -129,6 +136,7 @@ export function LessonManager({ initialChapters }: { initialChapters: ChapterDto
           assignDue || null,
           assignNote || null,
         )
+        noteActionSuccess()
         toast.success(
           res.assigned > 0
             ? `Đã giao bài cho ${res.assigned} lớp${res.skipped ? `, bỏ qua ${res.skipped} lớp` : ""}`
@@ -136,7 +144,9 @@ export function LessonManager({ initialChapters }: { initialChapters: ChapterDto
         )
         setAssignTarget(null)
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Có lỗi xảy ra")
+        if (!reloadIfStaleAction(e)) {
+          toast.error(e instanceof Error ? e.message : "Có lỗi xảy ra")
+        }
       }
     })
   }

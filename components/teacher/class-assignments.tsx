@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { noteActionSuccess, reloadIfStaleAction } from "@/lib/stale-action"
 import {
   assignLessons,
   getAssignableLessons,
@@ -158,11 +159,14 @@ export function ClassAssignments({
     startTransition(async () => {
       try {
         const res = await assignLessons(classId, ids, dueAt || null, note || null)
+        noteActionSuccess()
         toast.success(`Đã giao ${res.assigned} bài${res.skipped ? `, bỏ qua ${res.skipped}` : ""}`)
         setAssignOpen(false)
         router.refresh()
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Có lỗi xảy ra")
+        if (!reloadIfStaleAction(err)) {
+          toast.error(err instanceof Error ? err.message : "Có lỗi xảy ra")
+        }
       }
     })
   }
