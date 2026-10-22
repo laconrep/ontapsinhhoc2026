@@ -5,9 +5,10 @@
 // Đa luồng: nhiều worker nhận các việc khác nhau song song; nhận việc là
 // một UPDATE nguyên tử theo (id, status='pending').
 
-import { and, asc, eq } from "drizzle-orm"
+import { and, asc, eq, inArray } from "drizzle-orm"
 import { db, ensureSchema } from "@/lib/db"
-import { aiJobs, aiTeacherAssignments, aiUsageLogs } from "@/lib/db/schema"
+import { aiJobs, aiTeacherAssignments, aiUsageLogs, knowledgePoints, lessons } from "@/lib/db/schema"
+import type { UnderlinedTerm } from "@/types"
 import { extractAndParse } from "@/lib/extract-file"
 import {
   attachBodyHtml,
@@ -275,6 +276,28 @@ export async function submitJobResult(
       if (line != null) meta.filledAnswerLines.push(line)
     }
   }
+  // §16: bản đồ từ nhiễu theo vị trí bài/KP (thứ tự phẳng hoá giống
+  // thứ tự persistParseResult tạo bài) để gắn vào KP sau khi GV lưu.
+  meta.distractors = []
+  {
+    let lessonIdx = 0
+    for (const c of result.chapters)
+      for (const l of c.lessons) {
+        l.knowledgePoints.forEach((kp, kpIdx) => {
+          for (const u of kp.underlines) {
+            if (u.distractors && u.distractors.length > 0) {
+              meta.distractors!.push({
+                lessonIdx,
+                kpIdx,
+                term: u.text,
+                distractors: u.distractors,
+              })
+            }
+          }
+        })
+        lessonIdx++
+      }
+  }
 
   await db
     .update(aiJobs)
@@ -296,4 +319,73 @@ export async function getJobForWorker(jobId: string) {
   await ensureSchema()
   const [job] = await db.select().from(aiJobs).where(eq(aiJobs.id, jobId)).limit(1)
   return job ?? null
+}
+
+/** §16: gắn từ nhiễu kéo thả của một job AI vào các KP của những bài
+ * VỪA được lưu từ kết quả của job đó. Gọi từ client ngay sau khi lưu
+ * thành công (giống chuỗi assignLessons): bài được tạo theo đúng thứ
+ * tự phẳng hoá trong meta.distractors; KP khớp theo thứ tự trong bài,
+ * cụm khớp theo text nguyên văn — GV đã sửa chữ trong bản xem trước
+ * thì mục không khớp bị bỏ qua lặng lẽ. */
+export async function applyDistractorsToLessons(
+  jobId: string,
+  teacherId: string,
+  lessonIds: string[],
+): Promise<{ updatedTerms: number }> {
+  await ensureSchema()
+  const [job] = await db.select().from(aiJobs).where(eq(aiJobs.id, jobId)).limit(1)
+  if (!job || job.teacherId !== teacherId) throw new Error("Không tìm thấy việc AI")
+  const meta = (job.resultMeta ?? null) as AiResultMeta | null
+  const entries = meta?.distractors ?? []
+  if (entries.length === 0 || lessonIds.length === 0) return { updatedTerms: 0 }
+
+  const owned = await db
+    .select({ id: lessons.id })
+    .from(lessons)
+    .where(and(inArray(lessons.id, lessonIds), eq(lessons.teacherId, teacherId)))
+  const ownedIds = new Set(owned.map((l) => l.id))
+
+  let updatedTerms = 0
+  const normText = (s: string) => s.normalize("NFC").trim()
+  for (const entry of entries) {
+    const lessonId = lessonIds[entry.lessonIdx]
+    if (!lessonId || !ownedIds.has(lessonId)) continue
+    const kps = await db
+      .select()
+      .from(knowledgePoints)
+      .where(eq(knowledgePoints.lessonId, lessonId))
+      .orderBy(asc(knowledgePoints.order))
+    const kp = kps[entry.kpIdx]
+    if (!kp) continue
+    const terms = (kp.underlinedTerms as UnderlinedTerm[]) ?? []
+    const wanted = normText(entry.term)
+    const idx = terms.findIndex(
+      (t) => normText(t.text) === wanted && (!t.distractors || t.distractors.length === 0),
+    )
+    if (idx < 0) continue
+    const clean: string[] = []
+    const seen = new Set<string>()
+    for (const d of entry.distractors) {
+      const nd = normText(d)
+      if (!nd || seen.has(nd.toLowerCase()) || nd === terms[idx].text) continue
+      seen.add(nd.toLowerCase())
+      clean.push(nd)
+    }
+    if (clean.length === 0) continue
+    const next = terms.map((t, i) => (i === idx ? { ...t, distractors: clean } : t))
+    await db
+      .update(knowledgePoints)
+      .set({ underlinedTerms: next })
+      .where(eq(knowledgePoints.id, kp.id))
+    updatedTerms += 1
+  }
+  if (updatedTerms > 0) {
+    await logAi({
+      teacherId,
+      jobId,
+      action: "distractors_applied",
+      detail: { updatedTerms, lessonIds },
+    })
+  }
+  return { updatedTerms }
 }

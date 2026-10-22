@@ -72,7 +72,10 @@ function baseResult() {
             knowledgePoints: [
               {
                 content: "Gene la mot doan DNA mang thong tin di truyen.",
-                underlines: [{ text: "Gene" }, { text: "DNA" }],
+                underlines: [
+                  { text: "Gene", distractors: ["protein", "lipid", "nucleotide"] },
+                  { text: "DNA", distractors: ["protein", "duong", "lipid"] },
+                ],
                 questions: [
                   {
                     type: "MC",
@@ -175,13 +178,65 @@ function baseResult() {
   gen.chapters[0].lessons[0].knowledgePoints.push({
     content: "KP nay do AI sinh hoan toan moi.",
     generatedByAi: true,
-    underlines: [{ text: "AI" }],
+    underlines: [{ text: "AI", distractors: ["protein", "lipid", "nucleotide"] }],
     questions: [],
   })
   const r = renderAiResult(gen)
   const parsed = parseTextContent(r.text)
   const probs = verifyAiResult(SOURCE, gen, parsed)
   assert(probs.length === 0, "KP AI sinh phai qua verify: " + JSON.stringify(probs))
+}
+
+// 7. §16: thieu tu nhieu (< 3) cho mot cum -> verify phai bat.
+{
+  const bad = baseResult()
+  bad.chapters[0].lessons[0].knowledgePoints[0].underlines[0].distractors = ["protein"]
+  const r = renderAiResult(bad)
+  const parsed = parseTextContent(r.text)
+  const probs = verifyAiResult(SOURCE, bad, parsed)
+  assert(
+    probs.some((p) => p.includes("từ nhiễu") && p.includes("ít nhất 3")),
+    "verify phai bat thieu tu nhieu: " + JSON.stringify(probs),
+  )
+}
+
+// 8. §16: tu nhieu trung chinh tu dung -> se bi cham DUNG -> verify phai bat.
+{
+  const bad = baseResult()
+  bad.chapters[0].lessons[0].knowledgePoints[0].underlines[0].distractors = ["Gene", "protein", "lipid"]
+  const r = renderAiResult(bad)
+  const parsed = parseTextContent(r.text)
+  const probs = verifyAiResult(SOURCE, bad, parsed)
+  assert(
+    probs.some((p) => p.includes("sẽ bị chấm là ĐÚNG")),
+    "verify phai bat tu nhieu trung dap an: " + JSON.stringify(probs),
+  )
+}
+
+// 9. §16: tu nhieu la alias cua tu dung (gen = gene) -> verify phai bat.
+{
+  const bad = baseResult()
+  bad.chapters[0].lessons[0].knowledgePoints[0].underlines[0].distractors = ["gen", "protein", "lipid"]
+  const r = renderAiResult(bad)
+  const parsed = parseTextContent(r.text)
+  const probs = verifyAiResult(SOURCE, bad, parsed)
+  assert(
+    probs.some((p) => p.includes("sẽ bị chấm là ĐÚNG")),
+    "verify phai bat tu nhieu alias: " + JSON.stringify(probs),
+  )
+}
+
+// 10. §16: tu nhieu khong co nguyen van trong tai lieu -> verify phai bat.
+{
+  const bad = baseResult()
+  bad.chapters[0].lessons[0].knowledgePoints[0].underlines[0].distractors = ["xyz123", "protein", "lipid"]
+  const r = renderAiResult(bad)
+  const parsed = parseTextContent(r.text)
+  const probs = verifyAiResult(SOURCE, bad, parsed)
+  assert(
+    probs.some((p) => p.includes("không thấy nguyên văn")),
+    "verify phai bat tu nhieu ngoai tai lieu: " + JSON.stringify(probs),
+  )
 }
 
 console.log("check-ai-pipeline: OK")

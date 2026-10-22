@@ -11,7 +11,11 @@ import {
   type ParseResult,
   type ParsedQuestion,
 } from "@/lib/worksheet-parser"
+import { accepts } from "@/lib/scoring"
 import type { AiResult } from "./types"
+
+/** §16: mỗi cụm gạch chân phải có ÍT NHẤT chừng này từ nhiễu kéo thả. */
+export const MIN_AI_DISTRACTORS = 3
 
 function norm(s: string): string {
   return s.normalize("NFC").replace(/\s+/g, " ").trim()
@@ -104,6 +108,52 @@ export function verifyAiResult(
       )
     })
   }
+
+  // 5) §16: từ nhiễu kéo thả cho TỪNG cụm gạch chân — ít nhất
+  //    MIN_AI_DISTRACTORS từ, lấy nguyên văn từ tài liệu (phần trắc
+  //    nghiệm), không lặp, và TUYỆT ĐỐI không được là đáp án mà lõi
+  //    chấm sẽ chấp nhận cho bất kỳ chỗ trống nào trong cùng KP
+  //    (trùng từ đúng, alias gene/gen, số tương đương...).
+  for (const chapter of result.chapters)
+    for (const lesson of chapter.lessons)
+      for (const kp of lesson.knowledgePoints) {
+        const kpTerms = kp.underlines.map((u) => ({
+          text: u.text,
+          slotIndex: 0,
+          allowSwap: Boolean(u.swap),
+          swapGroupId: null,
+          extraAccepted: [] as string[],
+        }))
+        for (const u of kp.underlines) {
+          const label = `Cụm "${u.text}" (KP "${kp.content.slice(0, 40)}...")`
+          const ds = u.distractors ?? []
+          if (ds.length < MIN_AI_DISTRACTORS) {
+            problems.push(
+              `${label}: cần ít nhất ${MIN_AI_DISTRACTORS} từ nhiễu kéo thả lấy từ phần trắc nghiệm, hiện có ${ds.length}`,
+            )
+          }
+          const seen = new Set<string>()
+          for (const d of ds) {
+            const nd = norm(d).toLowerCase()
+            if (!nd) {
+              problems.push(`${label}: có từ nhiễu rỗng`)
+              continue
+            }
+            if (seen.has(nd)) problems.push(`${label}: từ nhiễu "${d}" bị lặp`)
+            seen.add(nd)
+            if (!inSource(d)) {
+              problems.push(
+                `${label}: từ nhiễu "${d}" không thấy nguyên văn trong tài liệu gốc — phải lấy từ phần trắc nghiệm của tài liệu`,
+              )
+            }
+            if (kpTerms.some((t) => accepts(t, d))) {
+              problems.push(
+                `${label}: từ nhiễu "${d}" sẽ bị chấm là ĐÚNG cho một chỗ trống trong cùng KP — chọn từ gần nghĩa nhưng không điền đúng được`,
+              )
+            }
+          }
+        }
+      }
 
   return problems
 }

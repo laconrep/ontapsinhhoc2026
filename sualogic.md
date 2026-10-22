@@ -1300,3 +1300,44 @@ tiết) · `set_progress` · `submit_result` (JSON cấu trúc → dựng + ki�
 tra + đối chiếu; trả `ok` hoặc `repairErrors`) · `get_textbook_excerpt`
 (chưa có sách → rỗng). Mọi tool call đều ghi `ai_usage_logs` kèm
 workerId (header `X-Worker-Id`, mặc định "muse-main").
+
+## 16. Tab 4 nộp từng câu + từ nhiễu kéo thả theo từng cụm (2026-10-22)
+
+Chốt của user (thay hai ánh xạ tạm ở §15): (1) Tab 4 chấm TỪNG CÂU —
+học sinh bấm nút **"Nộp câu hỏi"** để nộp/khóa từng câu: chấm ngay,
+báo đúng/sai tại chỗ, nút hướng dẫn giải sáng lên; **đã nộp thì không
+sửa được nữa trong lượt làm đó** (khóa phía máy chủ, không chỉ giao
+diện), xem lại câu đã nộp ở chế độ chỉ đọc. Học sinh dừng giữa chừng
+thì mở lại tiếp tục đúng vị trí (lượt làm mở giữ ở máy chủ; câu đã
+nộp khôi phục từ máy chủ, đáp án đang dở + vị trí từ bản nháp máy).
+Nộp bài cuối buổi khóa nốt các câu chưa nộp theo đáp án hiện tại.
+(2) AI tạo **pool kéo thả riêng cho từng cụm gạch chân**: từ đúng +
+**ít nhất 3 từ nhiễu** lấy nguyên văn từ phần trắc nghiệm của tài
+liệu, gần nghĩa với từ đúng nhưng không điền đúng được vào chỗ trống
+đó. Nạp không qua AI thì không có từ nhiễu riêng.
+
+Hiện thực: `submitQuizQuestion(quizId, questionId, answer)` — khóa
+dòng attempt FOR UPDATE, câu đã có dòng `quiz_answers` thì trả kết
+quả đã lưu (idempotent, chống ghi trùng/23505), chưa có thì chấm
+bằng `gradeOneFromSnapshot` (bản sao trung thực của vòng chấm trong
+submitQuiz, kể cả BUG-10) và ghi ngay. `submitQuiz` dựng lại kết quả
+các câu đã nộp từ `quiz_answers` (`detailFromStored`), chỉ chấm các
+câu còn lại — điểm/SR/kết quả cuối không đổi ngữ nghĩa.
+`getOpenQuizState(lessonId)` trả các câu đã nộp của lượt đang mở để
+client khôi phục. Client (tab4-quiz): nút "Nộp câu hỏi" + hộp xác
+nhận, `LockedQuestionView` chỉ đọc (đáp án của HS, đáp án đúng,
+hướng dẫn giải), ô số câu hiện ✓/✗ cho câu đã nộp.
+
+Từ nhiễu: `AiUnderline.distractors` (JSON của worker, KHÔNG qua
+đường text) → `verifyAiResult` mục 5 bắt buộc ≥3/cụm, nguyên văn
+trong tài liệu, không lặp, và không được `accepts()` cho bất kỳ cụm
+nào cùng KP (chặn cả alias + số tương đương) → `submitJobResult` ghi
+`resultMeta.distractors` (lessonIdx/kpIdx/term) → client gọi
+`applyAiDistractors(jobId, lessonIds)` ngay sau khi lưu (lỗi bước
+này không chặn lưu) → `applyDistractorsToLessons` gắn vào
+`knowledgePoints.underlinedTerms[].distractors` (khớp theo thứ tự
+bài/KP + text; GV sửa chữ thì bỏ qua mục đó). Tab 3
+(`getTab3Questions`): KP có từ nhiễu riêng thì pool = từ đúng + toàn
+bộ từ nhiễu của KP (vẫn qua `pickDistractors` để lọc theo
+acceptedNormsOf), không có thì giữ cách cũ (mượn 3 từ KP khác).
+Chấm Tab 2/3 không đổi.

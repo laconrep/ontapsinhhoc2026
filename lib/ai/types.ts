@@ -10,6 +10,10 @@ export interface AiUnderline {
   text: string
   /** true = cụm có thể hoán đổi vị trí (nhóm swap, viết __"từ"__ khi dựng). */
   swap?: boolean
+  /** §16: từ gây nhiễu kéo thả cho CHÍNH cụm này — ÍT NHẤT 3 từ, lấy
+   * nguyên văn từ phần trắc nghiệm của tài liệu, gần nghĩa với từ đúng
+   * nhưng không điền đúng được vào chỗ trống này. */
+  distractors?: string[]
 }
 
 export interface AiOption {
@@ -66,6 +70,16 @@ export interface AiResult {
 }
 
 /** Siêu dữ liệu lưu kèm việc khi bản dựng đạt — dùng cho bản xem trước. */
+/** §16: một mục từ nhiễu trong siêu dữ liệu job — vị trí theo thứ tự
+ * bài/KP như khi persistParseResult tạo bài (lessonIdx = thứ tự bài đã
+ * phẳng hoá qua các chương, kpIdx = thứ tự KP trong bài). */
+export interface AiDistractorEntry {
+  lessonIdx: number
+  kpIdx: number
+  term: string
+  distractors: string[]
+}
+
 export interface AiResultMeta {
   /** Dòng (line) trong resultText của các KP do AI sinh. */
   generatedKpLines: number[]
@@ -74,4 +88,6 @@ export interface AiResultMeta {
   unmatchedSolutions: { text: string; reason?: string }[]
   workerId: string
   repairRounds: number
+  /** §16: từ nhiễu kéo thả theo từng cụm — gắn vào KP sau khi GV lưu. */
+  distractors?: AiDistractorEntry[]
 }

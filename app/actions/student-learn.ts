@@ -39,7 +39,14 @@ import {
 } from "@/lib/slot-render"
 import { selectQuizQuestions } from "@/lib/quiz-selection"
 import { hitRateLimit } from "@/lib/rate-limit"
-import type { KnowledgePointDto, UnderlinedTerm, QuizResultDto, StudyStage } from "@/types"
+import type {
+  KnowledgePointDto,
+  UnderlinedTerm,
+  QuizAnswerDetail,
+  QuizQuestionSubmitResult,
+  QuizResultDto,
+  StudyStage,
+} from "@/types"
 
 const TAB1_LOCKED_MSG = "Bạn đã nộp bước Tự đánh giá"
 // SEC-08: giữ nguyên ngưỡng burst cũ (10 lần / 60 giây / học sinh / KP)
@@ -718,7 +725,16 @@ export async function getTab3Questions(lessonId: string): Promise<{
     .map((kp) => {
       const terms = (kp.underlinedTerms as UnderlinedTerm[]) ?? []
       const rng = seededRng(`${student.id}:${kp.id}:drag`)
-      const picked = pickDistractors(distractorPool, terms, rng, 3)
+      // §16: ưu tiên từ nhiễu AI đã chọn riêng cho TỪNG cụm của KP này
+      // (lấy từ phần trắc nghiệm của tài liệu, gần nghĩa với từ đúng);
+      // KP không có (nạp không qua AI) thì giữ cách cũ: mượn 3 từ của
+      // các KP khác cùng bài. Lọc trùng với đáp án được chấp nhận của
+      // KP bằng chính pickDistractors (acceptedNormsOf) để an toàn.
+      const curated = terms.flatMap((t) => t.distractors ?? [])
+      const picked =
+        curated.length > 0
+          ? pickDistractors(curated, terms, rng, curated.length)
+          : pickDistractors(distractorPool, terms, rng, 3)
       const chips = buildDragChips(kp.id, terms, picked, rng)
       return {
         id: `drag-${kp.id}`,
@@ -1065,6 +1081,186 @@ export async function startQuiz(lessonId: string): Promise<{
  * Nộp bài Tab 4: chấm theo slot, lưu quiz_answers, seed spaced_repetition.
  * answers: MC/SA → string; TF → Record<optionId, 'D'|'S'>
  */
+// --- §16: Tab 4 chấm TỪNG CÂU -------------------------------------------
+// Học sinh nộp ("khóa") từng câu bằng nút "Nộp câu hỏi": chấm ngay câu
+// đó, ghi quiz_answers ngay, và KHÔNG sửa được nữa (kể cả sau khi xem
+// hướng dẫn giải). submitQuiz cuối buổi chỉ chấm nốt các câu chưa nộp
+// và hoàn tất lượt làm. Hai helper dưới đây là bản sao trung thực của
+// logic chấm trong submitQuiz (kể cả ghi chú BUG-10) để hai đường chấm
+// không bao giờ lệch nhau.
+
+type QuizPaperSnapshot = {
+  type?: string
+  stem?: string
+  bodyHtml?: string | null
+  options?: { id: string; content: string; bodyHtml?: string | null; isCorrect: boolean }[]
+} | null
+
+type StoredAnswerRow = {
+  optionId: string | null
+  studentAnswer: string | null
+  isCorrect: boolean | null
+}
+
+function gradeOneFromSnapshot(
+  questionId: string,
+  snap: QuizPaperSnapshot,
+  raw: string | Record<string, "D" | "S"> | undefined,
+  solution: string | null,
+): {
+  rows: { questionId: string; optionId: string | null; studentAnswer: string | null; isCorrect: boolean }[]
+  detail: QuizAnswerDetail
+  correctCount: number
+  tfChoices?: Record<string, "D" | "S">
+} {
+  const type = snap?.type ?? "MC"
+  const opts = snap?.options ?? []
+  if (type === "MC") {
+    const chosenId = typeof raw === "string" ? raw : null
+    const validChosen = chosenId && opts.some((o) => o.id === chosenId) ? chosenId : null
+    const correctOpt = opts.find((o) => o.isCorrect)
+    const isCorrect = gradeMC(validChosen, correctOpt?.id ?? "")
+    return {
+      rows: [{ questionId, optionId: null, studentAnswer: validChosen, isCorrect }],
+      detail: {
+        questionId,
+        questionType: "MC",
+        studentAnswer: opts.find((o) => o.id === validChosen)?.content ?? "",
+        isCorrect,
+        correctAnswer: correctOpt?.content ?? "",
+        solution,
+      },
+      correctCount: isCorrect ? 1 : 0,
+    }
+  }
+  if (type === "SA") {
+    const val = typeof raw === "string" ? raw : ""
+    // BUG-10: chấm bằng đáp án ĐẦY ĐỦ; chỉ cắt 200 ký tự khi LƯU.
+    const truncated = val.length > 200 ? val.slice(0, 200) : val
+    const accepted = opts.filter((o) => o.isCorrect).map((o) => o.content)
+    const isCorrect = val.length > 0 ? gradeSA(val, accepted) : false
+    return {
+      rows: [
+        {
+          questionId,
+          optionId: null,
+          studentAnswer: truncated.length > 0 ? truncated : null,
+          isCorrect,
+        },
+      ],
+      detail: {
+        questionId,
+        questionType: "SA",
+        studentAnswer: truncated,
+        isCorrect,
+        correctAnswer: accepted[0] ?? "",
+        solution,
+      },
+      correctCount: isCorrect ? 1 : 0,
+    }
+  }
+  const map = (typeof raw === "object" && raw != null ? raw : {}) as Record<
+    string,
+    "D" | "S" | null | undefined
+  >
+  const graded = gradeTF(map, opts)
+  const rows: { questionId: string; optionId: string | null; studentAnswer: string | null; isCorrect: boolean }[] = []
+  const perYy: { content: string; value: string; isCorrect: boolean; correct: boolean }[] = []
+  const tfChoices: Record<string, "D" | "S"> = {}
+  let correctCount = 0
+  for (const p of graded.perOption) {
+    const opt = opts.find((o) => o.id === p.optionId)
+    if (p.isCorrect) correctCount += 1
+    const studentValue = p.answered ? (map[p.optionId] as string) : null
+    rows.push({ questionId, optionId: p.optionId, studentAnswer: studentValue, isCorrect: p.isCorrect })
+    perYy.push({
+      content: opt?.content ?? "",
+      value: studentValue ?? "",
+      isCorrect: p.isCorrect,
+      correct: Boolean(opt?.isCorrect),
+    })
+    if (studentValue === "D" || studentValue === "S") tfChoices[p.optionId] = studentValue
+  }
+  return {
+    rows,
+    detail: {
+      questionId,
+      questionType: "TF",
+      studentAnswer: JSON.stringify(perYy),
+      isCorrect: perYy.length > 0 && perYy.every((p) => p.isCorrect),
+      correctAnswer: "",
+      solution,
+    },
+    correctCount,
+    tfChoices,
+  }
+}
+
+/** Dựng lại kết quả của một câu ĐÃ nộp từ các dòng quiz_answers đã lưu. */
+function detailFromStored(
+  questionId: string,
+  snap: QuizPaperSnapshot,
+  rows: StoredAnswerRow[],
+  solution: string | null,
+): { detail: QuizAnswerDetail; correctCount: number; tfChoices?: Record<string, "D" | "S"> } {
+  const type = snap?.type ?? "MC"
+  const opts = snap?.options ?? []
+  if (type === "TF") {
+    const perYy: { content: string; value: string; isCorrect: boolean; correct: boolean }[] = []
+    const tfChoices: Record<string, "D" | "S"> = {}
+    let correctCount = 0
+    for (const opt of opts) {
+      const stored = rows.find((r) => r.optionId === opt.id)
+      const value = stored?.studentAnswer ?? ""
+      const isCorrect = stored?.isCorrect ?? false
+      if (isCorrect) correctCount += 1
+      perYy.push({ content: opt.content, value, isCorrect, correct: Boolean(opt.isCorrect) })
+      if (value === "D" || value === "S") tfChoices[opt.id] = value
+    }
+    return {
+      detail: {
+        questionId,
+        questionType: "TF",
+        studentAnswer: JSON.stringify(perYy),
+        isCorrect: perYy.length > 0 && perYy.every((p) => p.isCorrect),
+        correctAnswer: "",
+        solution,
+      },
+      correctCount,
+      tfChoices,
+    }
+  }
+  const row = rows[0]
+  const isCorrect = row?.isCorrect ?? false
+  if (type === "SA") {
+    const accepted = opts.filter((o) => o.isCorrect).map((o) => o.content)
+    return {
+      detail: {
+        questionId,
+        questionType: "SA",
+        studentAnswer: row?.studentAnswer ?? "",
+        isCorrect,
+        correctAnswer: accepted[0] ?? "",
+        solution,
+      },
+      correctCount: isCorrect ? 1 : 0,
+    }
+  }
+  const chosenId = row?.studentAnswer ?? null
+  const correctOpt = opts.find((o) => o.isCorrect)
+  return {
+    detail: {
+      questionId,
+      questionType: "MC",
+      studentAnswer: opts.find((o) => o.id === chosenId)?.content ?? "",
+      isCorrect,
+      correctAnswer: correctOpt?.content ?? "",
+      solution,
+    },
+    correctCount: isCorrect ? 1 : 0,
+  }
+}
+
 export async function submitQuiz(
   quizId: string,
   answers: Record<string, string | Record<string, "D" | "S">>,
@@ -1120,11 +1316,38 @@ export async function submitQuiz(
     // §15.3: lời giải chỉ xuất hiện trong kết quả SAU khi nộp bài.
     const solByQ = new Map(liveQs.map((q) => [q.id, q.solution]))
 
+    // §16: các câu học sinh ĐÃ nộp riêng lẻ (nút "Nộp câu hỏi") đã có
+    // dòng trong quiz_answers — dựng lại kết quả từ đó, KHÔNG chấm lại
+    // và KHÔNG ghi trùng (tránh lỗi unique của quiz_answers).
+    const storedRows = await tx
+      .select()
+      .from(quizAnswers)
+      .where(eq(quizAnswers.attemptId, quizId))
+    const storedByQ = new Map<string, typeof storedRows>()
+    for (const r of storedRows) {
+      const list = storedByQ.get(r.questionId) ?? []
+      list.push(r)
+      storedByQ.set(r.questionId, list)
+    }
+
     for (const row of paper) {
       const snap = row.snapshot
       const type = snap?.type ?? "MC"
       const opts = snap?.options ?? []
       qRowsForSr.push({ knowledgePointId: kpByQ.get(row.questionId) ?? null })
+
+      const stored = storedByQ.get(row.questionId)
+      if (stored && stored.length > 0) {
+        const { detail, correctCount } = detailFromStored(
+          row.questionId,
+          snap as QuizPaperSnapshot,
+          stored,
+          solByQ.get(row.questionId) ?? null,
+        )
+        correctSlots += correctCount
+        details.push(detail)
+        continue
+      }
 
       if (type === "MC") {
         const raw = answers[row.questionId]
@@ -1259,6 +1482,144 @@ export async function submitQuiz(
       details,
     }
   })
+}
+
+/** §16: nộp (khóa) MỘT câu của Tab 4 — chấm ngay, ghi quiz_answers
+ * ngay, từ đó không sửa được nữa. Nộp lại cùng câu (double-click, hai
+ * thiết bị...) trả kết quả đã lưu, không ghi trùng: khóa dòng attempt
+ * FOR UPDATE + kiểm tra dòng đã có trong cùng một transaction. */
+export async function submitQuizQuestion(
+  quizId: string,
+  questionId: string,
+  answer: string | Record<string, "D" | "S">,
+): Promise<QuizQuestionSubmitResult> {
+  const student = await requireRole("student")
+  await ensureSchema()
+
+  return db.transaction(async (tx) => {
+    const [attempt] = await tx
+      .select({ id: quizAttempts.id, completedAt: quizAttempts.completedAt })
+      .from(quizAttempts)
+      .where(and(eq(quizAttempts.id, quizId), eq(quizAttempts.studentId, student.id)))
+      .limit(1)
+      .for("update")
+    if (!attempt) throw new Error("Không tìm thấy bài kiểm tra")
+    if (attempt.completedAt) throw new Error("Bài kiểm tra đã nộp xong")
+
+    const [paperRow] = await tx
+      .select()
+      .from(quizAttemptQuestions)
+      .where(
+        and(eq(quizAttemptQuestions.attemptId, quizId), eq(quizAttemptQuestions.questionId, questionId)),
+      )
+      .limit(1)
+    if (!paperRow) throw new Error("Câu hỏi không thuộc bài kiểm tra này")
+
+    const [liveQ] = await tx
+      .select({ solution: questions.solution })
+      .from(questions)
+      .where(eq(questions.id, questionId))
+      .limit(1)
+    const solution = liveQ?.solution ?? null
+    const snap = paperRow.snapshot as QuizPaperSnapshot
+
+    const existing = await tx
+      .select()
+      .from(quizAnswers)
+      .where(and(eq(quizAnswers.attemptId, quizId), eq(quizAnswers.questionId, questionId)))
+    if (existing.length > 0) {
+      const { detail, tfChoices } = detailFromStored(questionId, snap, existing, solution)
+      return { ...detail, tfChoices }
+    }
+
+    const { rows, detail, tfChoices } = gradeOneFromSnapshot(questionId, snap, answer, solution)
+    if (rows.length > 0) {
+      await tx.insert(quizAnswers).values(rows.map((r) => ({ attemptId: quizId, ...r })))
+    }
+    return { ...detail, tfChoices }
+  })
+}
+
+/** §16: trạng thái các câu ĐÃ nộp của lượt làm đang mở — để khôi phục
+ * khi học sinh mở lại bài (kể cả trên thiết bị khác): câu đã nộp hiện
+ * khóa kèm đúng/sai và hướng dẫn giải. */
+export async function getOpenQuizState(lessonId: string): Promise<{
+  quizId: string
+  submitted: QuizQuestionSubmitResult[]
+} | null> {
+  const student = await requireRole("student")
+  await ensureSchema()
+  await assertLessonAccess(student.id, lessonId)
+
+  const [submission] = await db
+    .select({ submittedAt: studentTab1Submissions.submittedAt })
+    .from(studentTab1Submissions)
+    .where(
+      and(eq(studentTab1Submissions.studentId, student.id), eq(studentTab1Submissions.lessonId, lessonId)),
+    )
+    .limit(1)
+
+  const openWhere = submission
+    ? and(
+        eq(quizAttempts.studentId, student.id),
+        eq(quizAttempts.lessonId, lessonId),
+        sql`${quizAttempts.completedAt} is null`,
+        sql`${quizAttempts.startedAt} > ${submission.submittedAt}`,
+      )
+    : and(
+        eq(quizAttempts.studentId, student.id),
+        eq(quizAttempts.lessonId, lessonId),
+        sql`${quizAttempts.completedAt} is null`,
+      )
+
+  const [openAttempt] = await db
+    .select()
+    .from(quizAttempts)
+    .where(openWhere)
+    .orderBy(sql`${quizAttempts.startedAt} desc`)
+    .limit(1)
+  if (!openAttempt) return null
+
+  const stored = await db
+    .select()
+    .from(quizAnswers)
+    .where(eq(quizAnswers.attemptId, openAttempt.id))
+  if (stored.length === 0) return { quizId: openAttempt.id, submitted: [] }
+
+  const paper = await db
+    .select()
+    .from(quizAttemptQuestions)
+    .where(eq(quizAttemptQuestions.attemptId, openAttempt.id))
+    .orderBy(asc(quizAttemptQuestions.position))
+  const paperIds = paper.map((p) => p.questionId)
+  const liveQs =
+    paperIds.length > 0
+      ? await db
+          .select({ id: questions.id, solution: questions.solution })
+          .from(questions)
+          .where(inArray(questions.id, paperIds))
+      : []
+  const solByQ = new Map(liveQs.map((q) => [q.id, q.solution]))
+  const storedByQ = new Map<string, typeof stored>()
+  for (const r of stored) {
+    const list = storedByQ.get(r.questionId) ?? []
+    list.push(r)
+    storedByQ.set(r.questionId, list)
+  }
+
+  const submitted: QuizQuestionSubmitResult[] = []
+  for (const row of paper) {
+    const rows = storedByQ.get(row.questionId)
+    if (!rows || rows.length === 0) continue
+    const { detail, tfChoices } = detailFromStored(
+      row.questionId,
+      row.snapshot as QuizPaperSnapshot,
+      rows,
+      solByQ.get(row.questionId) ?? null,
+    )
+    submitted.push({ ...detail, tfChoices })
+  }
+  return { quizId: openAttempt.id, submitted }
 }
 
 /** Lấy kết quả quiz gần nhất (để re-fetch khi HS quay lại Tab 4). */

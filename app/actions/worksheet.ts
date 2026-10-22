@@ -28,6 +28,17 @@ export async function validateWorksheet(formData: FormData): Promise<WorksheetPr
   }
 }
 
+/** §16: gắn từ nhiễu kéo thả của job AI vào các bài vừa lưu từ kết
+ * quả của job (client gọi ngay sau khi lưu thành công). */
+export async function applyAiDistractors(
+  jobId: string,
+  lessonIds: string[],
+): Promise<{ updatedTerms: number }> {
+  const user = await requireRole("teacher")
+  const { applyDistractorsToLessons } = await import("@/lib/ai/jobs")
+  return applyDistractorsToLessons(jobId, user.id, lessonIds)
+}
+
 /** BƯỚC 3: Lưu tài liệu — parse lại, ghi DB, đặt status='ready'. */
 export async function saveWorksheet(formData: FormData): Promise<SaveResult> {
   const user = await requireRole("teacher")

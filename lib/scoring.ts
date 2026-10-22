@@ -179,7 +179,7 @@ function parseAnswers(answers: unknown): Record<number, string> {
   return out
 }
 
-function accepts(term: UnderlinedTerm, value: string): boolean {
+export function accepts(term: UnderlinedTerm, value: string): boolean {
   const norm = normalizeAnswer(value)
   const candidates = [term.text, ...(term.extraAccepted ?? []), ...(term.synonyms ?? [])]
   if (candidates.some((c) => normalizeAnswer(c) === norm)) return true

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { assignLessons } from "@/app/actions/assignments"
+import { applyAiDistractors } from "@/app/actions/worksheet"
 import {
   Download,
   FileText,
@@ -106,6 +107,9 @@ export function WorksheetImporter({
   const [solutionAskOpen, setSolutionAskOpen] = useState(false)
   const [startingAi, setStartingAi] = useState(false)
   const aiReadyHandledRef = useRef<string | null>(null)
+  // §16: id job AI của bản xem trước hiện tại — giữ lại sau khi aiJob
+  // đã đóng, để gắn từ nhiễu vào bài ngay sau khi lưu.
+  const aiJobIdRef = useRef<string | null>(null)
 
   function pickFile(f: File | null) {
     if (!f) return
@@ -163,6 +167,7 @@ export function WorksheetImporter({
     setStartingAi(true)
     try {
       const res = await postWorksheet<{ jobId: string }>("/api/ai/jobs", file)
+      aiJobIdRef.current = res.jobId
       setAiJob({
         id: res.jobId,
         status: "pending",
@@ -334,6 +339,18 @@ export function WorksheetImporter({
         }
         const res = await postForm<SaveResult>("/api/worksheet/save", fd)
         savedRef.current = true
+        // §16: bản xem trước là kết quả AI -> gắn từ nhiễu kéo thả của
+        // job vào các KP vừa tạo (lỗi ở bước này không chặn việc lưu:
+        // Tab 3 tự quay về pool mặc định cho KP chưa có từ nhiễu).
+        if (previewIsAiResult && aiJobIdRef.current && res.lessonIds?.length) {
+          try {
+            await applyAiDistractors(aiJobIdRef.current, res.lessonIds)
+          } catch {
+            toast.warning(
+              "Đã lưu bài nhưng chưa gắn được từ nhiễu kéo thả của AI — Tab 3 tạm dùng pool mặc định",
+            )
+          }
+        }
         if (assignToClass && res.lessonIds?.length) {
           // Đi từ nút tắt trong tab Lớp học: lưu xong GIAO LUÔN các bài
           // vừa nạp cho lớp đó (bài nạp file đã ở trạng thái ready).

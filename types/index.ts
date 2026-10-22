@@ -71,6 +71,11 @@ export interface UnderlinedTerm {
   extraAccepted: string[]
   /** Từ đồng nghĩa được chấp nhận (tùy chọn, để quản lý linh hoạt) */
   synonyms?: string[]
+  /** §16: từ gây nhiễu kéo thả (Tab 3) do AI chọn riêng cho cụm này —
+   * lấy từ phần trắc nghiệm của tài liệu, gần nghĩa nhưng KHÔNG đúng
+   * cho chỗ trống này. Không qua được đường text của parser: AI đi
+   * kèm kết quả JSON và được gắn vào KP sau khi lưu (applyAiDistractors). */
+  distractors?: string[]
   start?: number
   end?: number
 }
@@ -134,6 +139,12 @@ export interface QuizAnswerDetail {
   correctAnswer: string
   /** §15.3: giải chi tiết của câu — chỉ đưa xuống SAU khi nộp bài. */
   solution?: string | null
+}
+
+/** §16: kết quả nộp TỪNG câu (Tab 4 chấm từng câu) — như QuizAnswerDetail,
+ * cộng lựa chọn Đ/S theo từng ý cho câu TF để client dựng lại view đã khóa. */
+export interface QuizQuestionSubmitResult extends QuizAnswerDetail {
+  tfChoices?: Record<string, "D" | "S">
 }
 export interface QuizAttemptDto {
   id: string
