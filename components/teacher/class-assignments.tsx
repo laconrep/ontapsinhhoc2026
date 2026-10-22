@@ -11,7 +11,8 @@ import {
 } from "@/app/actions/assignments"
 import { createLesson, getChapterOptions } from "@/app/actions/content"
 import type { ClassAssignmentDto } from "@/types"
-import { Button } from "@/components/ui/button"
+import Link from "next/link"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -33,7 +34,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { EmptyState } from "@/components/shared/empty-state"
 import { formatDateTime } from "@/lib/format-date"
-import { BookOpen, BookPlus, MoreHorizontal, Plus } from "lucide-react"
+import { BookOpen, BookPlus, FileUp, MoreHorizontal, Plus } from "lucide-react"
 
 type AssignableLesson = { id: string; title: string; chapterTitle: string }
 
@@ -76,8 +77,10 @@ export function ClassAssignments({
   const [editDueAt, setEditDueAt] = useState("")
   const [editNote, setEditNote] = useState("")
   const [revokeTarget, setRevokeTarget] = useState<ClassAssignmentDto | null>(null)
-  // Dialog "Tạo bài giảng": tạo bài thuần như ở tab Bài giảng (không tự giao).
+  // Dialog "Tạo bài giảng": nút tắt 2 cách tạo bài như tab Bài giảng
+  // (nạp từ file / tạo bài trống), tạo bài trống thì thuần như tab Bài giảng.
   const [createOpen, setCreateOpen] = useState(false)
+  const [createStep, setCreateStep] = useState<"choose" | "blank">("choose")
   const [chapters, setChapters] = useState<{ id: string; title: string }[]>([])
   const [loadingChapters, setLoadingChapters] = useState(false)
   const [newChapterId, setNewChapterId] = useState("")
@@ -85,6 +88,7 @@ export function ClassAssignments({
 
   function openCreate() {
     setCreateOpen(true)
+    setCreateStep("choose")
     setNewTitle("")
     setNewChapterId("")
     setLoadingChapters(true)
@@ -322,13 +326,58 @@ export function ClassAssignments({
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Tạo bài giảng mới</DialogTitle>
+            <DialogTitle>Tạo bài giảng</DialogTitle>
             <DialogDescription>
-              Giống như tạo bài ở tab Bài giảng: bài sẽ xuất hiện trong tab Bài giảng, chưa được
-              giao cho lớp này. Dùng nút Giao bài giảng khi bài đã sẵn sàng.
+              {createStep === "choose"
+                ? "Chọn cách tạo bài — giống hệt các cách tạo bài ở tab Bài giảng."
+                : "Bài trống sẽ ở trạng thái Nháp, soạn nội dung sau ở tab Bài giảng."}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3">
+          {createStep === "choose" ? (
+            <div className="grid gap-2">
+              <Link
+                href={`/teacher/lessons/import?assignToClass=${classId}`}
+                className={buttonVariants({
+                  variant: "outline",
+                  className: "h-auto items-start justify-start gap-3 whitespace-normal px-4 py-3",
+                })}
+                onClick={() => setCreateOpen(false)}
+              >
+                <FileUp className="mt-0.5 h-5 w-5 shrink-0" />
+                <span className="text-left">
+                  <span className="block font-medium">Nạp từ file</span>
+                  <span className="block text-xs text-muted-foreground">
+                    File worksheet .txt/.docx/.pdf. Hết lỗi mới lưu được; lưu xong bài sẵn
+                    sàng và được giao luôn cho lớp này.
+                  </span>
+                </span>
+              </Link>
+              <button
+                type="button"
+                onClick={() => setCreateStep("blank")}
+                className={buttonVariants({
+                  variant: "outline",
+                  className: "h-auto items-start justify-start gap-3 whitespace-normal px-4 py-3",
+                })}
+              >
+                <BookPlus className="mt-0.5 h-5 w-5 shrink-0" />
+                <span className="text-left">
+                  <span className="block font-medium">Tạo bài trống</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Chỉ cần chọn chương và đặt tên — như nút tạo bài ở tab Bài giảng, soạn
+                    nội dung sau.
+                  </span>
+                </span>
+              </button>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setCreateOpen(false)}>
+                  Huỷ
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-3">
             <div className="grid gap-1.5">
               <Label htmlFor="create-chapter">Chương</Label>
               <select
@@ -365,17 +414,22 @@ export function ClassAssignments({
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>
-              Huỷ
-            </Button>
-            <Button
-              onClick={handleCreate}
-              disabled={pending || chapters.length === 0 || !newTitle.trim()}
-            >
-              Tạo bài giảng
-            </Button>
-          </DialogFooter>
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => setCreateStep("choose")}>
+                  Quay lại
+                </Button>
+                <Button variant="outline" onClick={() => setCreateOpen(false)}>
+                  Huỷ
+                </Button>
+                <Button
+                  onClick={handleCreate}
+                  disabled={pending || chapters.length === 0 || !newTitle.trim()}
+                >
+                  Tạo bài giảng
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 

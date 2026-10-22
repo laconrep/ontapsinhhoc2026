@@ -1192,14 +1192,23 @@ Theo yêu cầu của người dùng (2026-10-21):
   NGUYÊN luật cũ: bài phải `status = "ready"` (nút bị disable với bài chưa
   ready), lớp phải thuộc GV, trùng thì `onConflictDoNothing`.
 - **Tab Lớp học → "Bài tập đã giao" — nút "Tạo bài giảng"** (nút "Giao bài
-  giảng" giữ nguyên): form gồm chọn chương (`getChapterOptions` trong
-  `app/actions/content.ts`) + tên bài. **HÀNH VI CHỐT (đổi ý ngày
-  2026-10-22): nút này tạo bài THUẦN, y như nút tạo bài ở tab Bài giảng**
-  — gọi thẳng `createLesson(chapterId, title)`, KHÔNG tự giao cho lớp.
-  Bản nháp ban đầu (cùng ngày) từng làm "tạo xong tự giao luôn cho lớp
-  đang mở" qua `createLessonAndAssignToClass` (chủ đích bỏ luật
-  ready-only); người dùng đổi quyết định sau khi rõ hệ quả là
-  `getAssignedLessonsForStudent` không lọc status nên học sinh sẽ thấy
-  bài draft trống ngay khi tạo. Hàm `createLessonAndAssignToClass` đã bị
-  xoá; bài tạo xong chỉ xuất hiện ở tab Bài giảng và được giao sau bằng
-  nút "Giao bài giảng" theo luật ready-only như bình thường.
+  giảng" giữ nguyên): là **NÚT TẮT** mở popup gồm ĐÚNG các cách tạo bài
+  của tab Bài giảng (chốt cuối ngày 2026-10-22 sau hai lần đổi ý — bản
+  đầu là form tạo bài có tự giao, bản hai là form tạo bài thuần):
+  1. **Nạp từ file**: liên kết tới `/teacher/lessons/import?assignToClass=<id lớp>`.
+     Trang import nhận ngữ cảnh lớp (chỉ lớp thuộc chính GV), hiện banner
+     báo trước; **lưu thành công thì các bài vừa nạp được giao luôn cho
+     lớp đó** (gọi `assignLessons` ngay sau khi route save trả
+     `lessonIds`; bài nạp file vốn `ready` nên không vướng luật
+     ready-only) và điều hướng về tab "Bài tập đã giao" của lớp. Bài vẫn
+     ghi vào kho chung nên đồng thời có ở tab Bài giảng.
+  2. **Tạo bài trống**: form chọn chương (`getChapterOptions` trong
+     `app/actions/content.ts`) + tên bài, gọi thẳng
+     `createLesson(chapterId, title)` — tạo THUẦN như tab Bài giảng,
+     không tự giao; giao sau bằng nút "Giao bài giảng" khi bài sẵn sàng.
+  Kèm theo (trong `worksheet-importer.tsx`, áp dụng cho cả trang import
+  thường): **popup nhắc khi rời trang mà chưa lưu** — khi đã có bản xem
+  trước (đã kiểm tra file) mà chưa lưu thành công, đóng tab/chuyển trang
+  sẽ bị chặn hỏi xác nhận (beforeunload + chặn click liên kết), tránh GV
+  quên bấm Lưu rồi thoát mất bài. Tắt nhắc sau khi lưu xong hoặc khi GV
+  chủ động bỏ file.

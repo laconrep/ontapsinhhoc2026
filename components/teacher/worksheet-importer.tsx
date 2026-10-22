@@ -1,8 +1,9 @@
 "use client"
 
-import { useRef, useState, useTransition } from "react"
+import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { assignLessons } from "@/app/actions/assignments"
 import {
   Download,
   FileText,
@@ -32,6 +33,7 @@ interface SaveResult {
   createdLessons: number
   createdKps: number
   createdQuestions: number
+  lessonIds: string[]
 }
 
 async function postForm<T>(url: string, fd: FormData): Promise<T> {
@@ -49,7 +51,11 @@ async function postWorksheet<T>(url: string, file: File): Promise<T> {
 
 const ACCEPT = ".txt,.docx,.pdf"
 
-export function WorksheetImporter() {
+export function WorksheetImporter({
+  assignToClass,
+}: {
+  assignToClass?: { id: string; name: string } | null
+}) {
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
@@ -71,6 +77,7 @@ export function WorksheetImporter() {
       toast.error("File vượt quá 10MB")
       return
     }
+    savedRef.current = false
     setFile(f)
     setPreview(null)
     setDraftText("")
@@ -78,6 +85,7 @@ export function WorksheetImporter() {
   }
 
   function reset() {
+    savedRef.current = true
     setFile(null)
     setPreview(null)
     setDraftText("")
@@ -109,6 +117,40 @@ export function WorksheetImporter() {
 
   const draftDirty = draftText !== originalSource
 
+  // Popup nhắc khi rời trang mà bài đã nạp/chỉnh sửa CHƯA được lưu (GV
+  // quên bấm Lưu rồi thoát tab sẽ mất toàn bộ nội dung đã nạp). Kích
+  // hoạt khi đã có bản xem trước mà chưa lưu thành công; tắt sau khi
+  // lưu xong hoặc khi GV chủ động bỏ file (reset).
+  const savedRef = useRef(false)
+  const hasUnsavedWork = preview !== null && !savedRef.current
+  useEffect(() => {
+    if (!hasUnsavedWork) return
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ""
+    }
+    const onClickCapture = (e: MouseEvent) => {
+      const anchor = (e.target as HTMLElement).closest?.("a")
+      if (!anchor) return
+      if (anchor.hasAttribute("download") || anchor.target === "_blank") return
+      const href = anchor.getAttribute("href")
+      if (!href || href.startsWith("#")) return
+      const ok = window.confirm(
+        "Bài giảng chưa được lưu vào hệ thống. Rời trang bây giờ sẽ mất nội dung đã nạp. Bạn có chắc muốn rời trang?",
+      )
+      if (!ok) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+    }
+    window.addEventListener("beforeunload", onBeforeUnload)
+    document.addEventListener("click", onClickCapture, true)
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload)
+      document.removeEventListener("click", onClickCapture, true)
+    }
+  }, [hasUnsavedWork])
+
   function doSave() {
     if (!file || !preview?.isValid) return
     startSave(async () => {
@@ -123,10 +165,27 @@ export function WorksheetImporter() {
           fd.append("file", file)
         }
         const res = await postForm<SaveResult>("/api/worksheet/save", fd)
-        toast.success(
-          `Đã lưu: ${res.createdLessons} bài, ${res.createdKps} kiến thức, ${res.createdQuestions} câu hỏi`,
-        )
-        router.push("/teacher/lessons")
+        savedRef.current = true
+        if (assignToClass && res.lessonIds?.length) {
+          // Đi từ nút tắt trong tab Lớp học: lưu xong GIAO LUÔN các bài
+          // vừa nạp cho lớp đó (bài nạp file đã ở trạng thái ready).
+          try {
+            const ar = await assignLessons(assignToClass.id, res.lessonIds)
+            toast.success(
+              `Đã lưu ${res.createdLessons} bài và giao ${ar.assigned} bài cho lớp ${assignToClass.name}`,
+            )
+          } catch {
+            toast.error(
+              "Đã lưu bài vào hệ thống nhưng chưa giao được cho lớp — hãy giao thủ công ở tab Lớp học",
+            )
+          }
+          router.push(`/teacher/classes/${assignToClass.id}?tab=assignments`)
+        } else {
+          toast.success(
+            `Đã lưu: ${res.createdLessons} bài, ${res.createdKps} kiến thức, ${res.createdQuestions} câu hỏi`,
+          )
+          router.push("/teacher/lessons")
+        }
         router.refresh()
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Lưu thất bại")
@@ -136,6 +195,13 @@ export function WorksheetImporter() {
 
   return (
     <div className={preview ? "w-full space-y-4" : "mx-auto max-w-3xl space-y-6"}>
+      {assignToClass ? (
+        <div className="rounded-lg border border-primary/40 bg-primary/5 px-4 py-3 text-sm">
+          Bạn đang tạo bài cho lớp <strong>{assignToClass.name}</strong>: sau khi lưu thành công,
+          bài sẽ <strong>được giao luôn cho lớp này</strong> và đồng thời xuất hiện ở tab Bài
+          giảng.
+        </div>
+      ) : null}
       {preview ? (
         <h1 className="font-heading text-lg font-bold text-foreground">Nạp câu hỏi từ file</h1>
       ) : (
