@@ -5,12 +5,11 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
   assignLessons,
-  createLessonAndAssignToClass,
   getAssignableLessons,
   removeAssignment,
   updateAssignment,
 } from "@/app/actions/assignments"
-import { getChapterOptions } from "@/app/actions/content"
+import { createLesson, getChapterOptions } from "@/app/actions/content"
 import type { ClassAssignmentDto } from "@/types"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -77,7 +76,7 @@ export function ClassAssignments({
   const [editDueAt, setEditDueAt] = useState("")
   const [editNote, setEditNote] = useState("")
   const [revokeTarget, setRevokeTarget] = useState<ClassAssignmentDto | null>(null)
-  // Dialog "Tạo bài giảng": tạo bài mới và tự giao cho lớp đang mở.
+  // Dialog "Tạo bài giảng": tạo bài thuần như ở tab Bài giảng (không tự giao).
   const [createOpen, setCreateOpen] = useState(false)
   const [chapters, setChapters] = useState<{ id: string; title: string }[]>([])
   const [loadingChapters, setLoadingChapters] = useState(false)
@@ -105,8 +104,8 @@ export function ClassAssignments({
     }
     startTransition(async () => {
       try {
-        await createLessonAndAssignToClass(classId, newChapterId, newTitle)
-        toast.success("Đã tạo bài giảng và giao cho lớp này")
+        await createLesson(newChapterId, newTitle)
+        toast.success("Đã tạo bài giảng — bài nằm ở tab Bài giảng, giao cho lớp khi đã sẵn sàng")
         setCreateOpen(false)
         router.refresh()
       } catch (err) {
@@ -325,8 +324,8 @@ export function ClassAssignments({
           <DialogHeader>
             <DialogTitle>Tạo bài giảng mới</DialogTitle>
             <DialogDescription>
-              Bài tạo ở đây sẽ đồng thời xuất hiện trong tab Bài giảng và được giao ngay cho lớp
-              này.
+              Giống như tạo bài ở tab Bài giảng: bài sẽ xuất hiện trong tab Bài giảng, chưa được
+              giao cho lớp này. Dùng nút Giao bài giảng khi bài đã sẵn sàng.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
@@ -374,7 +373,7 @@ export function ClassAssignments({
               onClick={handleCreate}
               disabled={pending || chapters.length === 0 || !newTitle.trim()}
             >
-              Tạo và giao bài
+              Tạo bài giảng
             </Button>
           </DialogFooter>
         </DialogContent>

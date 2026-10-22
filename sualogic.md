@@ -1193,11 +1193,13 @@ Theo yêu cầu của người dùng (2026-10-21):
   ready), lớp phải thuộc GV, trùng thì `onConflictDoNothing`.
 - **Tab Lớp học → "Bài tập đã giao" — nút "Tạo bài giảng"** (nút "Giao bài
   giảng" giữ nguyên): form gồm chọn chương (`getChapterOptions` trong
-  `app/actions/content.ts`) + tên bài; tạo xong **TỰ GIAO luôn cho lớp đang
-  mở** qua `createLessonAndAssignToClass(classId, chapterId, title)`.
-  QUYẾT ĐỊNH CHỦ ĐÍCH: luồng này KHÔNG áp luật ready-only — bài vừa tạo đang
-  là `draft` vẫn được giao ngay (người dùng chốt 2026-10-21). Bài ghi vào bảng
-  `lessons` chung nên xuất hiện đồng thời ở tab Bài giảng.
-  Lưu ý hệ quả: `getAssignedLessonsForStudent` không lọc theo status, nên học
-  sinh thấy bài draft này trong danh sách đã giao ngay khi tạo — GV cần bổ
-  sung nội dung sớm (đây là hành vi đã được thông báo khi chốt phương án).
+  `app/actions/content.ts`) + tên bài. **HÀNH VI CHỐT (đổi ý ngày
+  2026-10-22): nút này tạo bài THUẦN, y như nút tạo bài ở tab Bài giảng**
+  — gọi thẳng `createLesson(chapterId, title)`, KHÔNG tự giao cho lớp.
+  Bản nháp ban đầu (cùng ngày) từng làm "tạo xong tự giao luôn cho lớp
+  đang mở" qua `createLessonAndAssignToClass` (chủ đích bỏ luật
+  ready-only); người dùng đổi quyết định sau khi rõ hệ quả là
+  `getAssignedLessonsForStudent` không lọc status nên học sinh sẽ thấy
+  bài draft trống ngay khi tạo. Hàm `createLessonAndAssignToClass` đã bị
+  xoá; bài tạo xong chỉ xuất hiện ở tab Bài giảng và được giao sau bằng
+  nút "Giao bài giảng" theo luật ready-only như bình thường.
