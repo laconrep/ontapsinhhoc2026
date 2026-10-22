@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { startQuiz, submitQuiz, getLatestQuizResult } from "@/app/actions/student-learn"
-import { Award, Check, RotateCcw, X } from "lucide-react"
+import { Award, BookOpenText, Check, ChevronDown, RotateCcw, X } from "lucide-react"
 import type { QuizResultDto } from "@/types"
 import { QuestionStem } from "@/components/question/question-stem"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
@@ -468,6 +468,7 @@ function QuizResult({
                 </>
               )}
               {d.questionType === "TF" && <TFDetail raw={d.studentAnswer} />}
+              {d.solution ? <SolutionGuide solution={d.solution} /> : null}
             </div>
           ))}
         </div>
@@ -482,6 +483,31 @@ function QuizResult({
         <RotateCcw className="h-4 w-4" />
         {retrying ? "Đang chuẩn bị..." : "Làm lại bài kiểm tra"}
       </Button>
+    </div>
+  )
+}
+
+/** §15.3: hướng dẫn giải của một câu — chỉ tồn tại trong kết quả SAU
+ * khi nộp bài (đúng/sai đã hiện), mặc định thu gọn, bấm mới xem. */
+function SolutionGuide({ solution }: { solution: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-primary/40 bg-primary/5 px-2.5 py-1.5 text-xs font-medium text-primary hover:bg-primary/10"
+      >
+        <BookOpenText className="h-4 w-4" />
+        Hướng dẫn giải
+        <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
+      </button>
+      {open ? (
+        <div className="mt-1.5 rounded-md bg-background/70 p-2.5 text-sm whitespace-pre-wrap text-foreground">
+          {solution}
+        </div>
+      ) : null}
     </div>
   )
 }

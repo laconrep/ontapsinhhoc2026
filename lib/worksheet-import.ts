@@ -52,6 +52,7 @@ export function previewParseResult(result: ParseResult): ParseResult {
             content: q.content,
             options: q.options,
             correctAnswer: q.correctAnswer,
+            solution: q.solution,
             bodyHtml: q.bodyHtml,
             line: q.line,
           })),
@@ -194,6 +195,9 @@ async function persistParseResult(
               order: qOrder++,
               type: pQ.type,
               content: pQ.content,
+              // §15.3: giải chi tiết đi cùng câu (text thuần, render dạng
+              // text phía client nên không qua sanitize HTML).
+              solution: pQ.solution?.trim() ? pQ.solution.trim() : null,
               // SEC-02: bodyHtml (kể cả từ images/tables client gửi) phải
               // qua sanitize phía server trước khi lưu.
               bodyHtml: sanitizeBodyHtml(pQ.bodyHtml),

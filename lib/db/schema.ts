@@ -151,6 +151,9 @@ export const questions = pgTable("questions", {
   }),
   type: text("type", { enum: ["MC", "TF", "SA", "FILL", "DRAG"] }).notNull(),
   content: text("content").notNull(),
+  // Giải chi tiết của câu (tính năng AI §15.3 sualogic): text thuần, có
+  // thể do GV viết trong file (dòng "Giải chi tiết:") hoặc AI gắn/sinh.
+  solution: text("solution"),
   bodyHtml: text("bodyHtml"),
   difficulty: integer("difficulty").notNull().default(1),
   timeLimitSec: integer("timeLimitSec"),
@@ -512,4 +515,77 @@ export const rateLimits = pgTable("rate_limits", {
   key: text("key").primaryKey(),
   count: integer("count").notNull().default(0),
   windowStart: timestamp("windowStart").notNull().defaultNow(),
+})
+
+// AI-MCP (§15 sualogic): một tài liệu GV nạp bằng chế độ AI = một việc.
+// Worker (Muse của chủ hệ thống, sau này là farm) nhận việc qua cổng MCP;
+// trạng thái + tiến độ nằm ở đây để UI polling và để truy vết.
+export const aiJobs = pgTable(
+  "ai_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    teacherId: text("teacherId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    // Muse nào đang/đã xử lý việc (phân công farm sau này).
+    workerId: text("workerId"),
+    filename: text("filename").notNull(),
+    sourceText: text("sourceText").notNull(),
+    images: jsonb("images"),
+    tables: jsonb("tables"),
+    status: text("status", {
+      enum: ["pending", "detecting", "needs_solution_choice", "processing", "ready", "failed"],
+    })
+      .notNull()
+      .default("pending"),
+    // Worker quét được: tài liệu có sẵn phần giải chi tiết tách riêng?
+    hasSolutions: boolean("hasSolutions"),
+    // GV trả lời popup "có muốn AI giải chi tiết không" (null = chưa hỏi/chưa trả lời).
+    wantSolutions: boolean("wantSolutions"),
+    progress: integer("progress").notNull().default(0),
+    stage: text("stage"),
+    // Bản dựng đúng form worksheet do app render từ JSON của worker.
+    resultText: text("resultText"),
+    // Cờ truy vết: KP do AI sinh, câu AI điền đáp án, lời giải không gắn được...
+    resultMeta: jsonb("resultMeta"),
+    repairRound: integer("repairRound").notNull().default(0),
+    lastErrors: jsonb("lastErrors"),
+    error: text("error"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (t) => ({
+    byTeacher: index("ai_jobs_teacher_idx").on(t.teacherId),
+    byStatus: index("ai_jobs_status_idx").on(t.status),
+  }),
+)
+
+// AI-MCP: log MỌI lượt tương tác AI (tạo việc, worker gọi tool, nộp bản
+// dựng...) ngay từ đầu — nền cho gói/trần lượt dùng và tab quản trị sau này.
+export const aiUsageLogs = pgTable(
+  "ai_usage_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    teacherId: text("teacherId").references(() => user.id, { onDelete: "set null" }),
+    jobId: uuid("jobId").references(() => aiJobs.id, { onDelete: "set null" }),
+    workerId: text("workerId"),
+    action: text("action").notNull(),
+    detail: jsonb("detail"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (t) => ({
+    byTeacher: index("ai_usage_teacher_idx").on(t.teacherId),
+    byJob: index("ai_usage_job_idx").on(t.jobId),
+  }),
+)
+
+// AI-MCP: phân công giáo viên -> Muse phụ trách (farm 1 Muse : 3 GV).
+// Giai đoạn thử chỉ có một worker mặc định; bảng này chừa sẵn cho tầng
+// quản lý phân bổ sau này.
+export const aiTeacherAssignments = pgTable("ai_teacher_assignments", {
+  teacherId: text("teacherId")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  workerId: text("workerId").notNull(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })

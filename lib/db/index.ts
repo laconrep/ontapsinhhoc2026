@@ -227,6 +227,66 @@ export function ensureSchema(): Promise<void> {
           .query(`ALTER TABLE classes ALTER COLUMN "inviteCode" TYPE varchar(32)`)
           .catch((e) => console.error("[ensureSchema] inviteCode DDL failed:", e)),
       )
+      // AI-MCP (§15 sualogic): cột lời giải cho câu hỏi + 3 bảng việc AI.
+      // Bọc catch riêng như các DDL đợt SEC: lỗi DDL chỉ log, không sập app.
+      .then(() =>
+        pool
+          .query(`ALTER TABLE questions ADD COLUMN IF NOT EXISTS "solution" text`)
+          .catch((e) => console.error("[ensureSchema] questions.solution DDL failed:", e)),
+      )
+      .then(() =>
+        pool
+          .query(`
+          CREATE TABLE IF NOT EXISTS ai_jobs (
+            "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            "teacherId" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+            "workerId" text,
+            "filename" text NOT NULL,
+            "sourceText" text NOT NULL,
+            "images" jsonb,
+            "tables" jsonb,
+            "status" text NOT NULL DEFAULT 'pending',
+            "hasSolutions" boolean,
+            "wantSolutions" boolean,
+            "progress" integer NOT NULL DEFAULT 0,
+            "stage" text,
+            "resultText" text,
+            "resultMeta" jsonb,
+            "repairRound" integer NOT NULL DEFAULT 0,
+            "lastErrors" jsonb,
+            "error" text,
+            "createdAt" timestamp NOT NULL DEFAULT now(),
+            "updatedAt" timestamp NOT NULL DEFAULT now()
+          )
+        `)
+          .catch((e) => console.error("[ensureSchema] ai_jobs DDL failed:", e)),
+      )
+      .then(() =>
+        pool
+          .query(`
+          CREATE TABLE IF NOT EXISTS ai_usage_logs (
+            "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            "teacherId" text REFERENCES "user"("id") ON DELETE SET NULL,
+            "jobId" uuid REFERENCES ai_jobs("id") ON DELETE SET NULL,
+            "workerId" text,
+            "action" text NOT NULL,
+            "detail" jsonb,
+            "createdAt" timestamp NOT NULL DEFAULT now()
+          )
+        `)
+          .catch((e) => console.error("[ensureSchema] ai_usage_logs DDL failed:", e)),
+      )
+      .then(() =>
+        pool
+          .query(`
+          CREATE TABLE IF NOT EXISTS ai_teacher_assignments (
+            "teacherId" text PRIMARY KEY REFERENCES "user"("id") ON DELETE CASCADE,
+            "workerId" text NOT NULL,
+            "updatedAt" timestamp NOT NULL DEFAULT now()
+          )
+        `)
+          .catch((e) => console.error("[ensureSchema] ai_teacher_assignments DDL failed:", e)),
+      )
       .then(() => undefined)
       .catch((e) => {
         // 2026-10-21 (sự cố production): KHÔNG ném lỗi ra caller nữa.

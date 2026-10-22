@@ -1108,11 +1108,17 @@ export async function submitQuiz(
     const liveQs =
       paperIds.length > 0
         ? await tx
-            .select({ id: questions.id, knowledgePointId: questions.knowledgePointId })
+            .select({
+              id: questions.id,
+              knowledgePointId: questions.knowledgePointId,
+              solution: questions.solution,
+            })
             .from(questions)
             .where(inArray(questions.id, paperIds))
         : []
     const kpByQ = new Map(liveQs.map((q) => [q.id, q.knowledgePointId]))
+    // §15.3: lời giải chỉ xuất hiện trong kết quả SAU khi nộp bài.
+    const solByQ = new Map(liveQs.map((q) => [q.id, q.solution]))
 
     for (const row of paper) {
       const snap = row.snapshot
@@ -1141,6 +1147,7 @@ export async function submitQuiz(
           studentAnswer: opts.find((o) => o.id === validChosen)?.content ?? "",
           isCorrect,
           correctAnswer: correctOpt?.content ?? "",
+          solution: solByQ.get(row.questionId) ?? null,
         })
       } else if (type === "SA") {
         const raw = answers[row.questionId]
@@ -1165,6 +1172,7 @@ export async function submitQuiz(
           studentAnswer: truncated,
           isCorrect,
           correctAnswer: accepted[0] ?? "",
+          solution: solByQ.get(row.questionId) ?? null,
         })
       } else if (type === "TF") {
         const map = (typeof answers[row.questionId] === "object" && answers[row.questionId] != null
@@ -1196,6 +1204,7 @@ export async function submitQuiz(
           studentAnswer: JSON.stringify(perYy),
           isCorrect: perYy.length > 0 && perYy.every((p) => p.isCorrect),
           correctAnswer: "",
+          solution: solByQ.get(row.questionId) ?? null,
         })
       }
     }

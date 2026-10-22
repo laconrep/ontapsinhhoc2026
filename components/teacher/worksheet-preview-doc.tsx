@@ -1,9 +1,40 @@
 "use client"
 
+import { useState } from "react"
+import { BookOpenText, ChevronDown } from "lucide-react"
 import { QuestionStem } from "@/components/question/question-stem"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import type { ParseResult, ValidationError } from "@/lib/worksheet-parser"
+import type { AiResultMeta } from "@/lib/ai/types"
+
+/** §15.3: lời giải của một câu ở bản xem trước — mặc định THU GỌN sau
+ * nút "Hướng dẫn giải", bấm mới xổ ra để bản xem trước không quá dài. */
+function SolutionBlock({ solution }: { solution: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={(ev) => {
+          ev.stopPropagation()
+          setOpen((v) => !v)
+        }}
+        className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/5 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10"
+        aria-expanded={open}
+      >
+        <BookOpenText className="h-3.5 w-3.5" />
+        Hướng dẫn giải
+        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
+      </button>
+      {open ? (
+        <div className="mt-1.5 rounded-md bg-muted/50 p-2 text-sm whitespace-pre-wrap text-foreground">
+          {solution}
+        </div>
+      ) : null}
+    </div>
+  )
+}
 
 const TYPE_LABEL: Record<string, string> = { MC: "Trắc nghiệm", TF: "Đúng/Sai", SA: "Trả lời ngắn" }
 
@@ -128,6 +159,7 @@ export function PreviewDocument({
   highlightLine,
   errorLines,
   onSelectBlock,
+  aiMeta,
 }: {
   parseResult: ParseResult
   summary: { chapters: number; lessons: number; kps: number; questions: number }
@@ -136,7 +168,11 @@ export function PreviewDocument({
   highlightLine?: number
   errorLines?: Set<number>
   onSelectBlock?: (line: number) => void
+  /** §15.2 chốt 5: nhãn truy vết cho nội dung AI sinh/điền. */
+  aiMeta?: AiResultMeta | null
 }) {
+  const generatedKpLines = new Set(aiMeta?.generatedKpLines ?? [])
+  const filledAnswerLines = new Set(aiMeta?.filledAnswerLines ?? [])
   let qIndex = 0
   function blockTone(line: number) {
     const hasError = errorLines?.has(line)
@@ -177,6 +213,11 @@ export function PreviewDocument({
                         )}
                         onClick={() => onSelectBlock?.(kp.line)}
                       >
+                        {generatedKpLines.has(kp.line) ? (
+                          <Badge className="mb-1 bg-amber-500/15 text-amber-700 hover:bg-amber-500/15 dark:text-amber-400">
+                            AI sinh — cần kiểm tra
+                          </Badge>
+                        ) : null}
                         <p className="text-foreground">{highlightBlanks(kp.content, kp.underlinedTerms)}</p>
                         {kp.questions.length > 0 && (
                           <div className="mt-2 space-y-3">
@@ -203,6 +244,11 @@ export function PreviewDocument({
                                     <Badge variant="outline" className="text-xs">
                                       {TYPE_LABEL[q.type] ?? q.type}
                                     </Badge>
+                                    {filledAnswerLines.has(q.line) ? (
+                                      <Badge className="bg-amber-500/15 text-xs text-amber-700 hover:bg-amber-500/15 dark:text-amber-400">
+                                        AI điền đáp án
+                                      </Badge>
+                                    ) : null}
                                   </div>
                                   <QuestionStem
                                     content={q.content}
@@ -232,6 +278,7 @@ export function PreviewDocument({
                                       Đáp án: {q.correctAnswer}
                                     </p>
                                   ) : null}
+                                  {q.solution ? <SolutionBlock solution={q.solution} /> : null}
                                 </div>
                               )
                             })}

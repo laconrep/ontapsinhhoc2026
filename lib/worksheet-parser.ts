@@ -18,6 +18,8 @@ export interface ParsedQuestion {
   options: ParsedOption[]
   /** đáp án đúng dạng text (SA) */
   correctAnswer?: string
+  /** Giải chi tiết của câu (dòng "Giải chi tiết:" ngay sau câu) — §15.3. */
+  solution?: string
   /** HTML de (anh/bang); phien 3+ moi gan */
   bodyHtml?: string
   line: number
@@ -379,10 +381,22 @@ function parseDapAnLine(line: string): string | null {
   return m ? m[2].trim() : null
 }
 
+const SOLUTION_RE =
+  /^(giải\s*chi\s*tiết|giai\s*chi\s*tiet|hướng\s*dẫn\s*giải|huong\s*dan\s*giai)\s*:\s*(.*)$/i
+
+/** Dòng mở lời giải của câu hiện tại: "Giải chi tiết: ..." / "Hướng dẫn giải: ...". */
+function parseSolutionLine(line: string): string | null {
+  const m = line.match(SOLUTION_RE)
+  return m ? m[2].trim() : null
+}
+
 /** ĐÁP ÁN / HƯỚNG DẪN GIẢI = hết phần câu. `Đáp án:` (có dấu :) là đáp án SA, không cắt. */
 function isTailHeading(line: string): boolean {
   const bare = stripUnderline(line)
   if (DAP_AN_RE.test(bare)) return false
+  // "Hướng dẫn giải: <nội dung>" (có dấu : và nội dung ngay sau) là lời
+  // giải CỦA CÂU (§15.3), không phải tiêu đề phần cuối file.
+  if (SOLUTION_RE.test(bare)) return false
   if (/^(đáp\s*án|dap\s*an)(\s|$)/i.test(bare)) return true
   if (/^(hướng\s*dẫn\s*giải|huong\s*dan\s*giai)\b/i.test(bare)) return true
   return false
@@ -631,8 +645,12 @@ export function parseTextContent(text: string): ParseResult {
     optionBuffer = null
   }
 
+  let inSolution = false
+
   const closeQuestion = () => {
     flushChoiceBuffer()
+    inSolution = false
+    if (curQuestion?.solution != null) curQuestion.solution = curQuestion.solution.trim()
     if (curQuestion?.type === "SA" && !curQuestion.correctAnswer) {
       errors.push({ line: curQuestion.line, message: "Câu trả lời ngắn thiếu 'Đáp án:'" })
     }
@@ -668,6 +686,10 @@ export function parseTextContent(text: string): ParseResult {
     }
 
     if (!line) {
+      if (inSolution && curQuestion?.solution != null) {
+        curQuestion.solution += "\n"
+        return
+      }
       if (optionBuffer != null && (curQuestion?.type === "MC" || curQuestion?.type === "TF")) optionBuffer += "\n"
       return
     }
@@ -760,6 +782,21 @@ export function parseTextContent(text: string): ParseResult {
     }
 
     if (!sawStructure) return
+
+    // §15.3: dòng "Giải chi tiết:" mở lời giải cho câu hiện tại; các dòng
+    // thường tiếp theo (chưa gặp mốc cấu trúc nào) là phần tiếp của lời giải.
+    const solBody = parseSolutionLine(line)
+    if (solBody != null && curQuestion) {
+      flushChoiceBuffer()
+      curQuestion.solution = solBody
+      inSolution = true
+      return
+    }
+    if (inSolution && curQuestion?.solution != null) {
+      curQuestion.solution =
+        (curQuestion.solution ? curQuestion.solution + "\n" : "") + line
+      return
+    }
 
     const dapAnBody = parseDapAnLine(stripUnderline(line))
     if (dapAnBody != null && curQuestion?.type === "SA") {

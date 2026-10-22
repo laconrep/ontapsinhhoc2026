@@ -10,13 +10,46 @@ import {
   FileUp,
   Loader2,
   Save,
+  Sparkles,
   UploadCloud,
   X,
 } from "lucide-react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { ImportErrorFix, type RevalidatedPreview } from "@/components/teacher/import-error-fix"
-import type { ParseResult, ValidationError } from "@/lib/worksheet-parser"
+import {
+  attachBodyHtml,
+  attachOptionBodyHtml,
+  parseTextContent,
+  summarize,
+  validateDocument,
+  type ParseResult,
+  type ValidationError,
+} from "@/lib/worksheet-parser"
+import type { AiResultMeta } from "@/lib/ai/types"
+
+interface AiJobStatus {
+  id: string
+  status: "pending" | "detecting" | "needs_solution_choice" | "processing" | "ready" | "failed"
+  progress: number
+  stage: string | null
+  error: string | null
+}
+
+interface AiJobReadyPayload {
+  resultText: string
+  resultMeta: AiResultMeta | null
+  images: string[]
+  tables: string[]
+}
 
 interface WorksheetPreview {
   parseResult: ParseResult
@@ -65,6 +98,14 @@ export function WorksheetImporter({
   const [dragOver, setDragOver] = useState(false)
   const [isValidating, startValidate] = useTransition()
   const [isSaving, startSave] = useTransition()
+  // --- Chế độ AI (§15) ---
+  const [modeOpen, setModeOpen] = useState(false)
+  const [aiJob, setAiJob] = useState<AiJobStatus | null>(null)
+  const [aiMeta, setAiMeta] = useState<AiResultMeta | null>(null)
+  const [previewIsAiResult, setPreviewIsAiResult] = useState(false)
+  const [solutionAskOpen, setSolutionAskOpen] = useState(false)
+  const [startingAi, setStartingAi] = useState(false)
+  const aiReadyHandledRef = useRef<string | null>(null)
 
   function pickFile(f: File | null) {
     if (!f) return
@@ -82,6 +123,9 @@ export function WorksheetImporter({
     setPreview(null)
     setDraftText("")
     setOriginalSource("")
+    setAiJob(null)
+    setAiMeta(null)
+    setPreviewIsAiResult(false)
   }
 
   function reset() {
@@ -90,6 +134,9 @@ export function WorksheetImporter({
     setPreview(null)
     setDraftText("")
     setOriginalSource("")
+    setAiJob(null)
+    setAiMeta(null)
+    setPreviewIsAiResult(false)
     if (inputRef.current) inputRef.current.value = ""
   }
 
@@ -107,6 +154,127 @@ export function WorksheetImporter({
         toast.error(e instanceof Error ? e.message : "Không đọc được file")
       }
     })
+  }
+
+  // --- Luồng AI (§15): tạo việc -> chờ worker -> bản dựng về làm preview ---
+  async function startAiFlow() {
+    if (!file || startingAi) return
+    setModeOpen(false)
+    setStartingAi(true)
+    try {
+      const res = await postWorksheet<{ jobId: string }>("/api/ai/jobs", file)
+      setAiJob({
+        id: res.jobId,
+        status: "pending",
+        progress: 0,
+        stage: "Đang chờ AI nhận việc",
+        error: null,
+      })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Không tạo được việc AI")
+    } finally {
+      setStartingAi(false)
+    }
+  }
+
+  function applyAiReady(payload: AiJobReadyPayload) {
+    const parsed = parseTextContent(payload.resultText)
+    const images = payload.images ?? []
+    const tables = payload.tables ?? []
+    if (images.length > 0 || tables.length > 0) {
+      attachBodyHtml(parsed, images, tables)
+      attachOptionBodyHtml(parsed, images, tables)
+    }
+    const validation = validateDocument(parsed)
+    setPreview({
+      parseResult: parsed,
+      errors: validation.errors,
+      warnings: validation.warnings,
+      isValid: validation.isValid,
+      summary: summarize(parsed),
+      sourceText: payload.resultText,
+      images,
+      tables,
+    })
+    setDraftText(payload.resultText)
+    setOriginalSource(payload.resultText)
+    setPreviewIsAiResult(true)
+    setAiMeta(payload.resultMeta)
+    toast.success("AI đã xử lý xong — kiểm tra bản xem trước rồi lưu")
+  }
+
+  useEffect(() => {
+    if (!aiJob) return
+    if (aiJob.status === "ready" || aiJob.status === "failed") return
+    let cancelled = false
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/ai/jobs?id=${aiJob.id}`)
+        const data = (await res.json()) as {
+          status: AiJobStatus["status"]
+          progress: number
+          stage: string | null
+          error: string | null
+          resultText?: string
+          resultMeta?: AiResultMeta | null
+          images?: string[]
+          tables?: string[]
+        }
+        if (cancelled) return
+        if (data.status === "ready" && data.resultText) {
+          if (aiReadyHandledRef.current !== aiJob.id) {
+            aiReadyHandledRef.current = aiJob.id
+            applyAiReady({
+              resultText: data.resultText,
+              resultMeta: data.resultMeta ?? null,
+              images: data.images ?? [],
+              tables: data.tables ?? [],
+            })
+          }
+          setAiJob(null)
+          return
+        }
+        setAiJob({
+          id: aiJob.id,
+          status: data.status,
+          progress: data.progress ?? 0,
+          stage: data.stage,
+          error: data.error,
+        })
+        if (data.status === "needs_solution_choice") setSolutionAskOpen(true)
+      } catch {
+        // Mạng chập chờn: giữ nguyên trạng thái, lần poll sau thử lại.
+      }
+    }
+    void tick()
+    const t = setInterval(tick, 2500)
+    return () => {
+      cancelled = true
+      clearInterval(t)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiJob?.id, aiJob?.status])
+
+  async function answerSolutions(want: boolean) {
+    if (!aiJob) return
+    setSolutionAskOpen(false)
+    try {
+      const res = await fetch("/api/ai/jobs/answer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId: aiJob.id, wantSolutions: want }),
+      })
+      if (!res.ok) throw new Error("Không ghi được câu trả lời")
+      setAiJob({ ...aiJob, status: "pending", stage: "Đang chờ AI xử lý tiếp" })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Không ghi được câu trả lời")
+      setSolutionAskOpen(true)
+    }
+  }
+
+  function abandonAiJob() {
+    setAiJob(null)
+    setSolutionAskOpen(false)
   }
 
   function handleRevalidated(payload: RevalidatedPreview) {
@@ -156,7 +324,7 @@ export function WorksheetImporter({
     startSave(async () => {
       try {
         const fd = new FormData()
-        if (draftDirty) {
+        if (draftDirty || previewIsAiResult) {
           fd.append("text", draftText)
           fd.append("filename", file.name)
           fd.append("images", JSON.stringify(preview.images ?? []))
@@ -316,8 +484,16 @@ export function WorksheetImporter({
               <Button variant="ghost" size="sm" onClick={reset} aria-label="Bỏ file">
                 <X className="h-4 w-4" />
               </Button>
-              <Button onClick={doValidate} disabled={!file || isValidating} size={preview ? "sm" : "default"}>
-                {isValidating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
+              <Button
+                onClick={() => setModeOpen(true)}
+                disabled={!file || isValidating || startingAi || aiJob != null}
+                size={preview ? "sm" : "default"}
+              >
+                {isValidating || startingAi ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <FileUp className="h-4 w-4" />
+                )}
                 Kiểm tra tài liệu
               </Button>
               <Button
@@ -342,6 +518,48 @@ export function WorksheetImporter({
         </CardContent>
       </Card>
 
+      {aiJob ? (
+        <Card className="border-primary/40">
+          <CardContent className="flex items-center gap-4 pt-4">
+            <ProgressRing value={aiJob.status === "failed" ? 100 : aiJob.progress} failed={aiJob.status === "failed"} />
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-foreground">
+                {aiJob.status === "failed"
+                  ? "AI xử lý không thành công"
+                  : aiJob.status === "needs_solution_choice"
+                    ? "AI đang chờ bạn trả lời"
+                    : "AI đang xử lý tài liệu"}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {aiJob.status === "failed"
+                  ? (aiJob.error ?? "Đã xảy ra lỗi khi AI xử lý")
+                  : (aiJob.stage ?? "Đang chờ AI...")}
+              </p>
+              {aiJob.status === "failed" ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      abandonAiJob()
+                      doValidate()
+                    }}
+                  >
+                    Kiểm tra không dùng AI
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={abandonAiJob}>
+                    Đóng
+                  </Button>
+                </div>
+              ) : (
+                <Button size="sm" variant="ghost" onClick={abandonAiJob} className="mt-1">
+                  Huỷ theo dõi việc này
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
       {preview?.warnings && preview.warnings.length > 0 && (
         <Card className="border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40">
           <CardContent className="space-y-1 pt-4 text-sm text-amber-800 dark:text-amber-300">
@@ -363,10 +581,91 @@ export function WorksheetImporter({
           summary={preview.summary}
           images={preview.images}
           tables={preview.tables}
+          aiMeta={aiMeta}
           onSourceChange={setDraftText}
           onRevalidated={handleRevalidated}
         />
       )}
+
+      <Dialog open={modeOpen} onOpenChange={setModeOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Bạn có sử dụng AI không?</DialogTitle>
+            <DialogDescription>
+              Sử dụng AI: AI đọc toàn bộ tài liệu, đề xuất gạch chân, gắn hoặc viết giải chi tiết
+              cho từng câu, rồi trả về đúng form để kiểm tra và xem trước như thường. Không sử
+              dụng AI: kiểm tra trực tiếp theo cú pháp mẫu như hiện tại.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setModeOpen(false)
+                doValidate()
+              }}
+            >
+              Không sử dụng AI
+            </Button>
+            <Button onClick={startAiFlow} disabled={startingAi}>
+              {startingAi ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              Sử dụng AI
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={solutionAskOpen} onOpenChange={(open) => !open && setSolutionAskOpen(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Bạn có muốn AI giải chi tiết không?</DialogTitle>
+            <DialogDescription>
+              Tài liệu này không có phần giải chi tiết. AI có thể tự viết lời giải cho từng câu
+              trắc nghiệm — học sinh sẽ thấy lời giải ở nút "Hướng dẫn giải" sau khi nộp bài.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => answerSolutions(false)}>
+              Không
+            </Button>
+            <Button onClick={() => answerSolutions(true)}>Có, AI giải chi tiết</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+/** §15.1: vòng tròn tiến độ % trong lúc AI xử lý tài liệu. */
+function ProgressRing({ value, failed }: { value: number; failed?: boolean }) {
+  const r = 34
+  const c = 2 * Math.PI * r
+  const v = Math.max(0, Math.min(100, value))
+  return (
+    <div
+      className="relative h-20 w-20 shrink-0"
+      role="progressbar"
+      aria-valuenow={v}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-label="Tiến độ xử lý AI"
+    >
+      <svg viewBox="0 0 80 80" className="h-20 w-20 -rotate-90">
+        <circle cx="40" cy="40" r={r} className="fill-none stroke-muted" strokeWidth="8" />
+        <circle
+          cx="40"
+          cy="40"
+          r={r}
+          className={`fill-none transition-all duration-500 ${failed ? "stroke-destructive" : "stroke-primary"}`}
+          strokeWidth="8"
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={c - (c * v) / 100}
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center text-sm font-semibold text-foreground">
+        {v}%
+      </div>
     </div>
   )
 }

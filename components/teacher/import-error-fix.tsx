@@ -22,6 +22,7 @@ import {
   type ParseResult,
   type ValidationError,
 } from "@/lib/worksheet-parser"
+import type { AiResultMeta } from "@/lib/ai/types"
 
 export interface RevalidatedPreview {
   errors: ValidationError[]
@@ -38,6 +39,8 @@ interface ImportErrorFixProps {
   summary: { chapters: number; lessons: number; kps: number; questions: number }
   images?: string[]
   tables?: string[]
+  /** §15: siêu dữ liệu truy vết khi bản xem trước đến từ việc AI. */
+  aiMeta?: AiResultMeta | null
   onSourceChange?: (text: string) => void
   onRevalidated?: (payload: RevalidatedPreview) => void
 }
@@ -58,6 +61,7 @@ export function ImportErrorFix({
   summary,
   images = [],
   tables = [],
+  aiMeta,
   onSourceChange,
   onRevalidated,
 }: ImportErrorFixProps) {
@@ -149,6 +153,15 @@ export function ImportErrorFix({
     openBlock(e.line, e.message)
   }
 
+  // §15.4: không còn khung danh sách lỗi riêng — di chuyển giữa các lỗi
+  // bằng hai nút ở tiêu đề, lỗi được tô đỏ ngay trong bản xem trước.
+  function stepError(dir: 1 | -1) {
+    if (errors.length === 0) return
+    const cur = activeErrorIndex ?? (dir === 1 ? -1 : 0)
+    const next = (cur + dir + errors.length) % errors.length
+    selectError(next)
+  }
+
   function applyBlockEdit(edit: string) {
     const range = rangeRef.current
     if (!range) return
@@ -190,6 +203,12 @@ export function ImportErrorFix({
   const editorHasError =
     activeRange != null &&
     errors.some((e) => e.line != null && e.line >= activeRange.startLine && e.line <= activeRange.endLine)
+  const blockErrors =
+    activeRange != null
+      ? errors.filter(
+          (e) => e.line != null && e.line >= activeRange.startLine && e.line <= activeRange.endLine,
+        )
+      : []
 
   return (
     <Card className="w-full">
@@ -208,42 +227,42 @@ export function ImportErrorFix({
             </>
           )}
           {checking ? <Badge variant="secondary">Đang kiểm tra...</Badge> : null}
+          {errors.length > 0 ? (
+            <span className="ml-auto flex gap-1">
+              <Button type="button" size="sm" variant="outline" onClick={() => stepError(-1)}>
+                Lỗi trước
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => stepError(1)}>
+                Lỗi sau
+              </Button>
+            </span>
+          ) : null}
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-3 md:grid-cols-10">
-          <div
-            className={`min-h-[calc(100vh-8rem)] max-h-[calc(100vh-8rem)] overflow-auto rounded-lg border p-2 md:col-span-4 ${
-              errors.length > 0 ? "border-destructive/40 bg-destructive/5" : "border-primary/30 bg-primary/5"
-            }`}
-          >
-            {errors.length === 0 ? (
-              <p className="px-2 py-1.5 text-sm text-foreground">Hết lỗi, có thể lưu</p>
-            ) : (
-              <ul className="space-y-1 text-sm">
-                {errors.map((e, i) => (
-                  <li key={i}>
-                    <button
-                      type="button"
-                      onClick={() => selectError(i)}
-                      className={`flex w-full gap-2 rounded-md px-2 py-1.5 text-left text-destructive ${
-                        activeErrorIndex === i
-                          ? "bg-destructive/20 ring-1 ring-destructive/40"
-                          : "hover:bg-destructive/10"
-                      }`}
-                    >
-                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                      <span>
-                        {e.line ? <strong>Dòng {e.line}: </strong> : null}
-                        {e.message}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
+        {aiMeta?.unmatchedSolutions && aiMeta.unmatchedSolutions.length > 0 ? (
+          <div className="mb-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3">
+            <p className="text-sm font-medium text-destructive">
+              Có {aiMeta.unmatchedSolutions.length} lời giải trong tài liệu không gắn được vào câu
+              nào — kiểm tra lại trước khi lưu:
+            </p>
+            <ul className="mt-1 list-inside list-disc space-y-1 text-sm text-foreground">
+              {aiMeta.unmatchedSolutions.map((s, i) => (
+                <li key={i}>
+                  {s.text}
+                  {s.reason ? <span className="text-muted-foreground"> ({s.reason})</span> : null}
+                </li>
+              ))}
+            </ul>
           </div>
-          <div className="flex min-h-[calc(100vh-8rem)] max-h-[calc(100vh-8rem)] flex-col overflow-hidden rounded-lg border bg-background md:col-span-6">
+        ) : null}
+        {errors.length > 0 ? (
+          <p className="mb-2 text-xs text-muted-foreground">
+            Khối nào có lỗi đã được tô đỏ ngay trong bản xem trước — bấm vào khối để sửa trực tiếp,
+            sửa đúng thì khối hết đỏ.
+          </p>
+        ) : null}
+        <div className="flex min-h-[calc(100vh-8rem)] max-h-[calc(100vh-8rem)] flex-col overflow-hidden rounded-lg border bg-background">
             {activeRange ? (
               <div
                 className={`shrink-0 border-b p-3 ${
@@ -269,6 +288,16 @@ export function ImportErrorFix({
                 {tokenWarn ? (
                   <p className="mb-2 text-xs text-destructive">Token ảnh/bảng bị xóa — preview có thể mất hình.</p>
                 ) : null}
+                {blockErrors.length > 0 ? (
+                  <ul className="mb-2 space-y-0.5 text-sm text-destructive">
+                    {blockErrors.map((e, i) => (
+                      <li key={i} className="flex gap-1.5">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <span>{e.message}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
                 <textarea
                   ref={textareaRef}
                   value={blockEdit}
@@ -293,9 +322,9 @@ export function ImportErrorFix({
                 highlightLine={highlightLine}
                 errorLines={errorLines}
                 onSelectBlock={(line) => openBlock(line)}
+                aiMeta={aiMeta}
               />
             </div>
-          </div>
         </div>
       </CardContent>
     </Card>

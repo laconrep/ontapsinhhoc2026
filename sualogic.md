@@ -1212,3 +1212,91 @@ Theo yêu cầu của người dùng (2026-10-21):
   sẽ bị chặn hỏi xác nhận (beforeunload + chặn click liên kết), tránh GV
   quên bấm Lưu rồi thoát mất bài. Tắt nhắc sau khi lưu xong hoặc khi GV
   chủ động bỏ file.
+
+## 15. Tích hợp AI qua MCP (2026-10-22) — tiền xử lý tài liệu + giải chi tiết
+
+Quyết định nền (người dùng chốt 2026-10-22 sau thảo luận nhiều vòng):
+
+- **KHÔNG gọi API model.** Web app mở **cổng MCP** (HTTP, JSON-RPC, khóa
+  Bearer `AI_WORKER_TOKEN` ở env server); "bộ não" là **Muse của chủ hệ
+  thống** kết nối vào qua connector riêng, đóng vai worker xử lý nền.
+  Giai đoạn đầu chỉ chủ hệ thống + vài GV chạy thử. Mở rộng sau: farm
+  nhiều Muse (1 Muse : 3 tài khoản GV) + 1 Muse quản lý phân bổ —
+  kiến trúc việc/log dưới đây đã chừa sẵn workerId + bảng phân công.
+- **Đa luồng, không hàng đợi:** mỗi tài liệu là một *việc AI* độc lập;
+  nhiều worker/luồng nhận các việc khác nhau song song (nhận việc =
+  lật trạng thái nguyên tử kèm workerId). Tài liệu dài được worker chia
+  theo chương/KP thành luồng con, ghép lại trước vòng kiểm tra.
+- **Phân quyền gói (dùng thử/Pro/Trường học) LÀM SAU.** Mọi lượt xử lý
+  ghi log `ai_usage_logs` ngay từ đầu (ai, khi nào, việc gì, kết quả) để
+  sau này tính gói/trần lượt dùng. Cổng kiểm tra quyền tương lai gắn ở
+  đúng điểm tạo việc AI.
+
+### 15.1. Việc AI (bảng `ai_jobs`) và luồng trạng thái
+
+`pending` (vừa tạo) → `detecting` (worker đang đọc/quét) →
+`needs_solution_choice` (không thấy phần giải chi tiết, chờ GV trả lời
+popup) → `processing` (đang xử lý, có `progress` 0–100 theo tỉ lệ câu đã
+xong) → `ready` (đã có bản dựng hợp lệ, GV xem trước/lưu như luồng
+thường) hoặc `failed` (kèm lý do; GV luôn quay lại được chế độ không AI).
+
+GV chọn file → popup BẮT BUỘC "Bạn có sử dụng AI không" (Sử dụng AI /
+Không sử dụng AI). Không AI = validate như cũ. Có AI = trích text như
+validate rồi tạo việc. Worker quét: tài liệu CÓ phần giải chi tiết tách
+riêng → tự gắn; KHÔNG có → việc sang `needs_solution_choice`, UI hiện
+popup "Bạn có muốn AI giải chi tiết không" (Có/Không).
+
+### 15.2. Sáu chốt chặn chống lỗi (đã duyệt)
+
+1. Worker trả **nội dung có cấu trúc** (JSON); code phía app
+   (`lib/ai/render.ts`) tự dựng văn bản đúng form worksheet — worker
+   KHÔNG tự gõ định dạng thô.
+2. Bản dựng chạy qua `validateDocument` ngay phía server: lỗi thì trả
+   danh sách lỗi về worker để sửa, tối đa 3 vòng (`submitResult` trả
+   `repairErrors`); quá vòng → `failed` kèm lỗi cuối.
+3. **Đối chiếu giữ nguyên bằng máy** (`lib/ai/verify.ts`): câu trắc
+   nghiệm + nội dung KP của bản gốc phải xuất hiện y nguyên trong bản
+   dựng (chuẩn hoá khoảng trắng/dấu gạch chân). AI chỉ được: thêm gạch
+   chân, sinh KP (khai báo `generated`), điền đáp án cho câu vốn THIẾU
+   đáp án (khai báo `filledAnswers`), gắn/sinh giải chi tiết. Câu hỏi
+   mới tự chế = lỗi sửa.
+4. Gạch chân phải khớp nguyên văn trong KP; mỗi câu MC đúng 1 đáp án
+   gạch chân (validator hiện có đã ép) — bản dựng sai thì vòng sửa xử lý.
+5. KP do AI sinh + đáp án do AI điền được **đánh dấu trong bản xem
+   trước** (nhãn "AI sinh"/"AI điền đáp án" theo dòng); lời giải không
+   gắn được câu nào thì liệt kê riêng, tô đỏ. File gốc + bản dựng lưu
+   trong việc để truy vết.
+6. Sách giáo khoa là **tham chiếu cắm sau** (tool `get_textbook_excerpt`
+   trả rỗng cho tới khi có kho sách); lỗi AI không chặn luồng nạp thường.
+
+### 15.3. Giải chi tiết từng câu (tính năng AI số 2)
+
+- Cú pháp trong form worksheet: dòng `Giải chi tiết: ...` (hoặc
+  `Hướng dẫn giải: ...`) NGAY SAU câu hỏi/đáp án của nó; parser đưa vào
+  `ParsedQuestion.solution` → cột `questions.solution`. Tiêu đề trần
+  `HƯỚNG DẪN GIẢI` ở cuối file vẫn là mốc hết phần câu như cũ.
+- Ghép lời giải sẵn có theo **NGHĨA là chính** (đọc nội dung câu hỏi và
+  lời giải, khớp kiến thức/dữ kiện/kết luận); **trùng số câu là tiêu chí
+  phụ** khi 2 lời giải cùng khớp nghĩa 1 câu. Không khớp rõ → không gắn.
+- GV xem trước: mỗi câu có lời giải thì có nút "Hướng dẫn giải" **thu
+  gọn**, bấm mới xổ.
+- Học sinh (Tab 4): nút "Hướng dẫn giải" của một câu chỉ **sáng sau khi
+  đã nộp bài và thấy đúng/sai của câu đó** — đặt ở phần Chi tiết kết quả
+  (Tab 4 nộp cả bài một lần, đúng/sai hiện ở màn hình kết quả). Bài
+  không có lời giải thì không có nút. **Live quiz: không bao giờ có.**
+
+### 15.4. Gộp khung xem trước (áp cả 2 chế độ nạp)
+
+Bỏ khung danh sách lỗi riêng: chỉ còn **một bản xem trước**; khối nào có
+lỗi thì tô đỏ tại chỗ, GV bấm vào khối để sửa trực tiếp (trình sửa hiện
+kèm thông báo lỗi của đúng khối đó); sửa đúng thì khối hết đỏ. Số lỗi
+tổng vẫn hiện ở tiêu đề. Luật chặn lưu khi còn lỗi giữ nguyên.
+
+### 15.5. MCP tools (route `/api/mcp`, Bearer `AI_WORKER_TOKEN`)
+
+`list_pending_jobs` · `get_job` (text gốc + cờ muốn giải chi tiết + lỗi
+sửa của vòng trước) · `report_detection` (có/không có phần giải chi
+tiết) · `set_progress` · `submit_result` (JSON cấu trúc → dựng + kiểm
+tra + đối chiếu; trả `ok` hoặc `repairErrors`) · `get_textbook_excerpt`
+(chưa có sách → rỗng). Mọi tool call đều ghi `ai_usage_logs` kèm
+workerId (header `X-Worker-Id`, mặc định "muse-main").

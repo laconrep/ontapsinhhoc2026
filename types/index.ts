@@ -132,6 +132,8 @@ export interface QuizAnswerDetail {
   studentAnswer: string
   isCorrect: boolean
   correctAnswer: string
+  /** §15.3: giải chi tiết của câu — chỉ đưa xuống SAU khi nộp bài. */
+  solution?: string | null
 }
 export interface QuizAttemptDto {
   id: string
