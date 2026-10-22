@@ -45,10 +45,22 @@ export function verifyAiResult(
 ): string[] {
   const problems: string[] = []
   const originalParse = parseTextContent(sourceText)
-  const sourceNorm = norm(stripUnderline(sourceText))
+  // Chuẩn hoá so sánh: ngoài khoảng trắng/NFC, triệt tiêu hai thứ mà
+  // PARSER tự thay đổi khi đọc tài liệu — (1) token hình/bảng
+  // @@IMG/@@TBL bị tách sang bodyHtml và xoá khỏi nội dung câu;
+  // (2) dấu sau chữ cái phương án bị chuẩn hoá ("a." -> "a)").
+  // Áp cùng một chuẩn hoá cho CẢ hai vế nên phần chữ còn lại vẫn
+  // phải khớp nguyên văn tuyệt đối.
+  const canon = (s: string): string =>
+    norm(s)
+      .replace(/@@(IMG|TBL)\d+@@/g, " ")
+      .replace(/(^|\s)([a-dA-D])[.)](?=\s|$)/g, "$1")
+      .replace(/\s+/g, " ")
+      .trim()
+  const sourceNorm = canon(stripUnderline(sourceText))
 
   const inSource = (text: string): boolean => {
-    const n = norm(text)
+    const n = canon(text)
     return n.length > 0 && sourceNorm.includes(n)
   }
 

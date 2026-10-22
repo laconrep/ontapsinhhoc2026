@@ -239,4 +239,57 @@ function baseResult() {
   )
 }
 
+// 11. Câu TF (parser đổi "a." -> "a)") + thân câu có @@IMG@@ ở giữa:
+//     verify phải sạch (parser tự thay đổi thì không tính là sửa chữ).
+{
+  const SOURCE2 =
+    `{Chuong 1}\n[Bai 1]\n- Gene la mot doan DNA mang thong tin di truyen.\n##\ncau: Xet cac phat bieu:\n__a. Gene nam tren DNA__\nb. Gene la protein\n#\ncau: Quan sat hinh:\n\n@@IMG0@@\n\nChon phat bieu dung?\n__A. Hinh mo ta phien ma__\nB. Hinh mo ta dich ma\n` + "\n"
+  const res2 = {
+    chapters: [
+      {
+        title: "Chuong 1",
+        lessons: [
+          {
+            title: "Bai 1",
+            knowledgePoints: [
+              {
+                content: "Gene la mot doan DNA mang thong tin di truyen.",
+                underlines: [
+                  { text: "Gene", distractors: ["protein", "phien ma", "dich ma"] },
+                  { text: "DNA", distractors: ["protein", "phien ma", "dich ma"] },
+                ],
+                questions: [
+                  {
+                    type: "TF",
+                    content: "Xet cac phat bieu:",
+                    options: [
+                      { content: "a. Gene nam tren DNA", isCorrect: true },
+                      { content: "b. Gene la protein", isCorrect: false },
+                    ],
+                  },
+                  {
+                    type: "MC",
+                    content: "Quan sat hinh:\n\n@@IMG0@@\n\nChon phat bieu dung?",
+                    options: [
+                      { content: "A. Hinh mo ta phien ma", isCorrect: true },
+                      { content: "B. Hinh mo ta dich ma", isCorrect: false },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    filledAnswers: [],
+    unmatchedSolutions: [],
+  }
+  const r = renderAiResult(res2)
+  assert(r.text, "render TF/phieu phai co text: " + JSON.stringify(r.problems))
+  const parsed = parseTextContent(r.text)
+  const probs = verifyAiResult(SOURCE2, res2, parsed)
+  assert(probs.length === 0, "verify TF + IMG giua than phai sach: " + JSON.stringify(probs))
+}
+
 console.log("check-ai-pipeline: OK")
