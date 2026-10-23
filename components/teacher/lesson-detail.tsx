@@ -599,7 +599,10 @@ export function LessonDetail({
                 dồn, chống trùng) thay vì thêm tay từng điểm kiến thức. */}
             <Link
               href={`/teacher/lessons/import?intoLesson=${lesson.id}`}
-              className={buttonVariants({ variant: "outline", size: "sm" }) + " mt-2"}
+              className={cn(
+                buttonVariants({ variant: "outline", size: "sm" }),
+                "mt-2 border-green-600 bg-green-600 font-medium text-white hover:bg-green-700 hover:text-white",
+              )}
             >
               <Upload className="h-4 w-4" />
               Nạp từ file
