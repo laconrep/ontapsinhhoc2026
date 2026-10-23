@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth-helpers"
 import { bufferFromFormData } from "@/lib/worksheet-import"
-import { createAiJob, getAiJobForTeacher } from "@/lib/ai/jobs"
+import { createAiJob, getAiJobForTeacher, listAiJobsForTeacher } from "@/lib/ai/jobs"
 import { hitRateLimit } from "@/lib/rate-limit"
 import { safeErrorMessage } from "@/lib/api-error"
 
@@ -43,7 +43,12 @@ export async function GET(req: Request) {
   if (user.role !== "teacher") return NextResponse.json({ error: "Chỉ giáo viên" }, { status: 403 })
 
   const id = new URL(req.url).searchParams.get("id")
-  if (!id) return NextResponse.json({ error: "Thiếu id việc" }, { status: 400 })
+  // §17: không có id -> danh sách việc gần đây của chính GV (cho khối
+  // "việc AI trước đó" ở trang nạp bài: mở lại xem trước / theo dõi tiếp).
+  if (!id) {
+    const jobs = await listAiJobsForTeacher(user.id)
+    return NextResponse.json({ jobs })
+  }
   const job = await getAiJobForTeacher(user.id, id)
   if (!job) return NextResponse.json({ error: "Không tìm thấy việc" }, { status: 404 })
 

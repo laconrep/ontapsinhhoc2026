@@ -255,11 +255,19 @@ export function ensureSchema(): Promise<void> {
             "repairRound" integer NOT NULL DEFAULT 0,
             "lastErrors" jsonb,
             "error" text,
+            "consumedAt" timestamp,
             "createdAt" timestamp NOT NULL DEFAULT now(),
             "updatedAt" timestamp NOT NULL DEFAULT now()
           )
         `)
           .catch((e) => console.error("[ensureSchema] ai_jobs DDL failed:", e)),
+      )
+      // §17: DB đã tạo từ trước chưa có cột consumedAt (CREATE ở trên là
+      // IF NOT EXISTS nên không tự bổ sung) — ALTER riêng, bọc catch riêng.
+      .then(() =>
+        pool
+          .query(`ALTER TABLE ai_jobs ADD COLUMN IF NOT EXISTS "consumedAt" timestamp`)
+          .catch((e) => console.error("[ensureSchema] ai_jobs.consumedAt DDL failed:", e)),
       )
       .then(() =>
         pool

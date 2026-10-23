@@ -7,8 +7,10 @@ import { assignLessons } from "@/app/actions/assignments"
 import { applyAiDistractors } from "@/app/actions/worksheet"
 import {
   Download,
+  Eye,
   FileText,
   FileUp,
+  History,
   Loader2,
   Save,
   Sparkles,
@@ -50,6 +52,19 @@ interface AiJobReadyPayload {
   resultMeta: AiResultMeta | null
   images: string[]
   tables: string[]
+}
+
+// §17: một dòng trong danh sách việc AI gần đây của GV (API list chỉ
+// trả cột nhẹ; bản dựng đầy đủ tải riêng khi bấm "Mở xem trước").
+interface AiJobListItem {
+  id: string
+  filename: string
+  status: AiJobStatus["status"]
+  progress: number
+  stage: string | null
+  error: string | null
+  consumedAt: string | null
+  createdAt: string
 }
 
 interface WorksheetPreview {
@@ -106,6 +121,10 @@ export function WorksheetImporter({
   const [previewIsAiResult, setPreviewIsAiResult] = useState(false)
   const [solutionAskOpen, setSolutionAskOpen] = useState(false)
   const [startingAi, setStartingAi] = useState(false)
+  // §17: việc AI gần đây của GV — kết quả đã xử lý xong nằm ở máy chủ,
+  // đóng tab không mất; mở lại trang là mở lại được bản xem trước.
+  const [myAiJobs, setMyAiJobs] = useState<AiJobListItem[]>([])
+  const [resumingJobId, setResumingJobId] = useState<string | null>(null)
   const aiReadyHandledRef = useRef<string | null>(null)
   // §16: id job AI của bản xem trước hiện tại — giữ lại sau khi aiJob
   // đã đóng, để gắn từ nhiễu vào bài ngay sau khi lưu.
@@ -175,6 +194,7 @@ export function WorksheetImporter({
         stage: "Đang chờ AI nhận việc",
         error: null,
       })
+      void refreshMyAiJobs()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Không tạo được việc AI")
     } finally {
@@ -282,6 +302,96 @@ export function WorksheetImporter({
     setSolutionAskOpen(false)
   }
 
+  // --- §17: mở lại việc AI của các phiên trước -------------------------
+  async function refreshMyAiJobs() {
+    try {
+      const res = await fetch("/api/ai/jobs")
+      if (!res.ok) return
+      const data = (await res.json()) as { jobs?: AiJobListItem[] }
+      setMyAiJobs(data.jobs ?? [])
+    } catch {
+      // Danh sách phụ trợ: lỗi mạng thì bỏ qua, luồng chính không phụ thuộc.
+    }
+  }
+
+  useEffect(() => {
+    void refreshMyAiJobs()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  /** Gắn lại vòng polling cho một việc còn đang chạy dở. */
+  function trackJob(item: AiJobListItem) {
+    aiJobIdRef.current = item.id
+    setAiJob({
+      id: item.id,
+      status: item.status,
+      progress: item.progress ?? 0,
+      stage: item.stage,
+      error: item.error,
+    })
+  }
+
+  /** Mở lại bản xem trước của một việc đã xử lý xong nhưng chưa lưu. */
+  async function resumeReadyJob(item: AiJobListItem) {
+    if (resumingJobId) return
+    setResumingJobId(item.id)
+    try {
+      const res = await fetch(`/api/ai/jobs?id=${item.id}`)
+      const data = (await res.json()) as {
+        status?: AiJobStatus["status"]
+        progress?: number
+        stage?: string | null
+        error?: string | null
+        resultText?: string
+        resultMeta?: AiResultMeta | null
+        images?: string[]
+        tables?: string[]
+      }
+      if (!res.ok) throw new Error("Không tải được việc")
+      if (data.status === "ready" && data.resultText) {
+        // Dựng lại "file" từ bản dựng để luồng Lưu chạy như phiên gốc.
+        savedRef.current = false
+        setFile(new File([data.resultText], item.filename, { type: "text/plain" }))
+        aiJobIdRef.current = item.id
+        aiReadyHandledRef.current = item.id
+        applyAiReady({
+          resultText: data.resultText,
+          resultMeta: data.resultMeta ?? null,
+          images: data.images ?? [],
+          tables: data.tables ?? [],
+        })
+      } else if (data.status) {
+        // Trạng thái vừa đổi (vd việc chưa thật xong): theo dõi tiếp.
+        trackJob({
+          ...item,
+          status: data.status,
+          progress: data.progress ?? item.progress,
+          stage: data.stage ?? item.stage,
+          error: data.error ?? item.error,
+        })
+      }
+    } catch {
+      toast.error("Không mở lại được bản xem trước — thử tải lại trang")
+    } finally {
+      setResumingJobId(null)
+    }
+  }
+
+  /** Ẩn một việc khỏi danh sách chờ (đánh dấu đã xong ở máy chủ). */
+  async function dismissJob(item: AiJobListItem) {
+    try {
+      const res = await fetch("/api/ai/jobs/consume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId: item.id }),
+      })
+      if (!res.ok) throw new Error("Không ẩn được việc")
+      setMyAiJobs((prev) => prev.filter((j) => j.id !== item.id))
+    } catch {
+      toast.error("Không ẩn được việc — thử lại sau")
+    }
+  }
+
   function handleRevalidated(payload: RevalidatedPreview) {
     const wasInvalid = preview && !preview.isValid
     setPreview((prev) => (prev ? { ...prev, ...payload } : prev))
@@ -349,6 +459,19 @@ export function WorksheetImporter({
             toast.warning(
               "Đã lưu bài nhưng chưa gắn được từ nhiễu kéo thả của AI — Tab 3 tạm dùng pool mặc định",
             )
+          }
+        }
+        // §17: đã lưu xong -> đánh dấu việc AI đã dùng, để việc không
+        // còn hiện trong danh sách chờ mở lại ở lần vào trang sau.
+        if (previewIsAiResult && aiJobIdRef.current) {
+          try {
+            await fetch("/api/ai/jobs/consume", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ jobId: aiJobIdRef.current }),
+            })
+          } catch {
+            // Không chặn luồng lưu: việc còn listed thì GV ẩn tay được.
           }
         }
         if (assignToClass && res.lessonIds?.length) {
@@ -576,6 +699,81 @@ export function WorksheetImporter({
           </CardContent>
         </Card>
       ) : null}
+
+      {!preview && !aiJob
+        ? (() => {
+            const waiting = myAiJobs.filter((j) => !j.consumedAt)
+            if (waiting.length === 0) return null
+            return (
+              <Card className="border-primary/40">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <History className="h-4 w-4" />
+                    Việc AI trước đó chưa lưu
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Kết quả AI đã xử lý được giữ ở hệ thống — đóng tab không bị mất. Mở lại bản xem
+                    trước để kiểm tra và lưu khi sẵn sàng.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {waiting.map((j) => (
+                    <div
+                      key={j.id}
+                      className="flex flex-wrap items-center gap-3 rounded-lg border bg-card px-4 py-3"
+                    >
+                      <FileText className="h-5 w-5 shrink-0 text-primary" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium text-foreground">{j.filename}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(j.createdAt).toLocaleString("vi-VN")} ·{" "}
+                          {j.status === "ready"
+                            ? "Đã xử lý xong — chưa lưu"
+                            : j.status === "failed"
+                              ? `Thất bại${j.error ? `: ${j.error}` : ""}`
+                              : j.status === "needs_solution_choice"
+                                ? "Đang chờ bạn trả lời câu hỏi của AI"
+                                : `Đang xử lý (${j.progress}%)`}
+                        </p>
+                      </div>
+                      {j.status === "ready" ? (
+                        <Button
+                          size="sm"
+                          onClick={() => void resumeReadyJob(j)}
+                          disabled={resumingJobId != null}
+                        >
+                          {resumingJobId === j.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                          Mở xem trước
+                        </Button>
+                      ) : j.status === "failed" ? null : (
+                        <Button size="sm" variant="outline" onClick={() => trackJob(j)}>
+                          Theo dõi tiếp
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => void dismissJob(j)}
+                        aria-label="Ẩn việc này"
+                        title={
+                          j.status === "ready"
+                            ? "Đánh dấu đã xong (đã lưu ở nơi khác hoặc không cần nữa)"
+                            : "Ẩn việc này"
+                        }
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )
+          })()
+        : null}
 
       {preview?.warnings && preview.warnings.length > 0 && (
         <Card className="border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40">

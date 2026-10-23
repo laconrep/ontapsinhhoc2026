@@ -1341,3 +1341,49 @@ bài/KP + text; GV sửa chữ thì bỏ qua mục đó). Tab 3
 bộ từ nhiễu của KP (vẫn qua `pickDistractors` để lọc theo
 acceptedNormsOf), không có thì giữ cách cũ (mượn 3 từ KP khác).
 Chấm Tab 2/3 không đổi.
+
+## 17. Mở lại bản xem trước AI chưa lưu (2026-10-23)
+
+Vấn đề (GV gặp thật với bài 2 tối 22/10): kết quả AI xử lý xong chỉ
+sống trong bản xem trước của phiên nạp bài đang mở. GV đóng tab /
+tải lại trang trước khi bấm "Lưu vào hệ thống" thì bài chưa từng
+được tạo, dù kết quả còn nguyên trong `ai_jobs` (resultText/
+resultMeta) — không có đường nào trong UI để lấy lại.
+
+Chốt hành vi: việc AI chưa lưu vẫn giữ nguyên kết quả ở máy chủ;
+GV vào lại trang nạp bài, bấm vào việc đó thì bảng xem trước xuất
+hiện lại y như phiên gốc. Sau khi lưu thành công, việc tự rời khỏi
+danh sách chờ (không mở lại/lưu trùng được nữa).
+
+- Schema: `ai_jobs.consumedAt` (timestamp, nullable). null = còn
+  chờ GV xử lý; có giá trị = GV đã xong việc với job (đã lưu bản
+  xem trước, hoặc chủ động ẩn). DDL: thêm vào CREATE TABLE +
+  ALTER ADD COLUMN IF NOT EXISTS riêng (bọc catch riêng, cùng
+  khuôn các đợt trước) vì bảng production đã tồn tại.
+- API (đều khóa theo teacherId của phiên đăng nhập):
+  - `GET /api/ai/jobs` không kèm `id` -> danh sách 15 việc gần nhất
+    của chính GV, chỉ cột nhẹ (id, filename, status, progress,
+    stage, error, consumedAt, createdAt) — KHÔNG kèm sourceText/
+    resultText. Có `id` giữ nguyên hành vi cũ (payload mở lại gồm
+    resultText/resultMeta/images/tables khi ready).
+  - `POST /api/ai/jobs/consume` {jobId} -> `markAiJobConsumed`:
+    chỉ việc của chính GV (không phải -> 404), idempotent, ghi
+    log `job_consumed`.
+- UI (worksheet-importer): khối "Việc AI trước đó chưa lưu" hiện
+  khi chưa có preview/aiJob đang theo dõi và còn việc chưa
+  consumed. Việc ready -> nút "Mở xem trước": tải payload theo id
+  rồi đi đúng đường `applyAiReady` của phiên gốc; dựng lại File từ
+  resultText + filename gốc để luồng Lưu (đường text) chạy không
+  đổi, `aiJobIdRef` trỏ về job đó nên sau lưu vẫn gắn từ nhiễu
+  §16 như thường. Việc đang chạy dở (pending/detecting/
+  processing/needs_solution_choice) -> "Theo dõi tiếp" = gắn lại
+  vòng polling theo id (kể cả popup hỏi giải chi tiết). Việc failed
+  hiện lỗi. Nút X = ẩn việc (consume). Sau khi lưu thành công một
+  preview AI, importer tự gọi consume trước khi chuyển trang
+  (lỗi consume không chặn luồng lưu).
+- Kiểm chứng: E2E `test-ai-resume-e2e.mjs` 15/15 (tạo việc ->
+  ready -> list thấy việc chưa consumed -> cách ly GV khác
+  (list/consume 404) -> lưu từ bản mở lại tạo đúng 1 bài ->
+  consume -> hết khỏi danh sách chờ -> consume lại vẫn 200 ->
+  việc pending cũng được list). E2E §15 26/26 và §16 29/29 giữ
+  nguyên; bộ check 33/40 (7 lỗi cũ không đổi); tsc/build sạch.

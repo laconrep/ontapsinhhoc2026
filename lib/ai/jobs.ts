@@ -5,7 +5,7 @@
 // Đa luồng: nhiều worker nhận các việc khác nhau song song; nhận việc là
 // một UPDATE nguyên tử theo (id, status='pending').
 
-import { and, asc, eq, inArray } from "drizzle-orm"
+import { and, asc, desc, eq, inArray } from "drizzle-orm"
 import { db, ensureSchema } from "@/lib/db"
 import { aiJobs, aiTeacherAssignments, aiUsageLogs, knowledgePoints, lessons } from "@/lib/db/schema"
 import type { UnderlinedTerm } from "@/types"
@@ -73,6 +73,49 @@ export async function getAiJobForTeacher(teacherId: string, jobId: string) {
     .where(and(eq(aiJobs.id, jobId), eq(aiJobs.teacherId, teacherId)))
     .limit(1)
   return job ?? null
+}
+
+/**
+ * §17: danh sách việc AI gần đây của GV cho trang nạp bài — để GV mở
+ * lại bản xem trước của việc đã xử lý xong nhưng chưa lưu (đóng tab
+ * không còn làm mất kết quả). Chỉ lấy cột nhẹ, không kèm sourceText/
+ * resultText; bản dựng đầy đủ lấy qua getAiJobForTeacher khi mở lại.
+ */
+export async function listAiJobsForTeacher(teacherId: string, limit = 15) {
+  await ensureSchema()
+  return db
+    .select({
+      id: aiJobs.id,
+      filename: aiJobs.filename,
+      status: aiJobs.status,
+      progress: aiJobs.progress,
+      stage: aiJobs.stage,
+      error: aiJobs.error,
+      consumedAt: aiJobs.consumedAt,
+      createdAt: aiJobs.createdAt,
+    })
+    .from(aiJobs)
+    .where(eq(aiJobs.teacherId, teacherId))
+    .orderBy(desc(aiJobs.createdAt))
+    .limit(limit)
+}
+
+/**
+ * §17: đánh dấu GV đã xong việc với một job — đã lưu bản xem trước
+ * vào hệ thống, hoặc chủ động ẩn job khỏi danh sách chờ. Idempotent:
+ * gọi lại trên job đã đánh dấu vẫn trả true.
+ */
+export async function markAiJobConsumed(teacherId: string, jobId: string): Promise<boolean> {
+  const job = await getAiJobForTeacher(teacherId, jobId)
+  if (!job) return false
+  if (!job.consumedAt) {
+    await db
+      .update(aiJobs)
+      .set({ consumedAt: new Date(), updatedAt: new Date() })
+      .where(eq(aiJobs.id, jobId))
+    await logAi({ teacherId, jobId, action: "job_consumed" })
+  }
+  return true
 }
 
 /** GV trả lời popup "có muốn AI giải chi tiết không". */

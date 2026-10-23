@@ -551,6 +551,10 @@ export const aiJobs = pgTable(
     repairRound: integer("repairRound").notNull().default(0),
     lastErrors: jsonb("lastErrors"),
     error: text("error"),
+    // §17: mốc GV đã "xong việc" với job này — đã lưu bản xem trước vào
+    // hệ thống hoặc chủ động ẩn khỏi danh sách chờ ở trang nạp bài.
+    // null = còn chờ GV mở lại xem trước (kết quả không bị mất khi đóng tab).
+    consumedAt: timestamp("consumedAt"),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
     updatedAt: timestamp("updatedAt").notNull().defaultNow(),
   },
