@@ -1482,3 +1482,13 @@ nguyên, check-import-batch2 đã cập nhật khẳng định tương đương)
   ready, chặn giao chéo, gỡ = xoá; AI titleGeneratedByAi ->
   meta [0] -> lưu draft). Hồi quy E2E §15/§16/§17 đạt trên cùng
   bản build; tsc/build sạch.
+
+### 18.7 Bổ sung cùng ngày: ẩn panel việc AI ở chế độ nạp cộng thêm
+Panel "Việc AI trước đó chưa lưu" (§17) trước đây hiện ở mọi ngữ
+cảnh trang nạp. Ở ngữ cảnh `?intoLesson` (nạp cộng thêm), mở lại
+kết quả AI từ panel rồi lưu sẽ cộng toàn bộ nội dung vào bài đích
+và bỏ qua bước gắn từ nhiễu (theo 18.4) — không phải ý định
+thiết kế. Đã sửa: panel chỉ hiện khi KHÔNG có intoLesson; việc
+AI vẫn nguyên trên máy chủ, mở trang nạp thường là thấy lại.
+Đường KHÔNG dùng AI ở chế độ cộng thêm không bị ảnh hưởng (kiểm
+tra trực tiếp + cảnh báo trùng + cộng dồn như thiết kế).

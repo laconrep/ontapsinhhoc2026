@@ -865,7 +865,12 @@ export function WorksheetImporter({
         </Card>
       ) : null}
 
-      {!preview && !aiJob
+      {/* §18 bổ sung: ở chế độ nạp cộng thêm (intoLesson) thì ẨN panel
+          việc AI chưa lưu — mở lại kết quả AI ở ngữ cảnh này sẽ khiến
+          nội dung bị cộng vào bài đích và mất bước gắn từ nhiễu của
+          job. Việc AI vẫn nguyên trên máy chủ, mở trang nạp thường
+          (không tham số) là thấy lại. */}
+      {!preview && !aiJob && !intoLesson
         ? (() => {
             const waiting = myAiJobs.filter((j) => !j.consumedAt)
             if (waiting.length === 0) return null
