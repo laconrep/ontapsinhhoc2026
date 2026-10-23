@@ -1492,3 +1492,55 @@ thiết kế. Đã sửa: panel chỉ hiện khi KHÔNG có intoLesson; việc
 AI vẫn nguyên trên máy chủ, mở trang nạp thường là thấy lại.
 Đường KHÔNG dùng AI ở chế độ cộng thêm không bị ảnh hưởng (kiểm
 tra trực tiếp + cảnh báo trùng + cộng dồn như thiết kế).
+
+## 19. Ảnh/bảng trong điểm kiến thức + MỖI DÒNG LÀ MỘT ĐIỂM KIẾN THỨC (GV chốt 2026-10-23)
+
+Bối cảnh: việc AI Bài 3 (lý thuyết có bảng thí nghiệm) để lộ hai lỗi:
+mã giữ chỗ @@TBL0@@ in nguyên văn trong điểm kiến thức ở bản xem
+trước, và AI dồn nhiều dòng của GV thành một điểm kiến thức lớn.
+
+### 19.1 Ảnh/bảng trong điểm kiến thức (sửa gốc)
+- Trước đây media chỉ được hỗ trợ trong thân/phương án câu hỏi
+  (attachBodyHtml -> bodyHtml); nội dung KP không có đường nào nên
+  token lọt nguyên văn vào bản xem trước, bài đã lưu và Tab 1.
+- ParsedKnowledgePoint thêm `bodyHtml`; attachBodyHtml xử lý cả KP:
+  phần tử media của các dòng chứa token -> bodyHtml của điểm (chỉ
+  phần media, không kèm chữ xung quanh), token bị xoá khỏi content,
+  và start/end của các cụm gạch chân phía sau token được TÍNH LẠI
+  theo thứ tự xuất hiện (xoá token làm lệch offset; khâu lưu
+  prepareKpTermsForSave kiểm tra offset rất chặt).
+- DB: knowledge_points.bodyHtml (schema + ensureSchema ALTER riêng
+  bọc catch); persist ghi ở cả hai đường (tạo mới + cộng thêm);
+  getLessonDetail trả kèm; KnowledgePointDto thêm bodyHtml (đường
+  học sinh select nguyên dòng nên tự có). Hiển thị: component dùng
+  chung KpMedia (cùng lớp sanitize DOMPurify như QuestionStem) ở
+  bản xem trước (worksheet-preview-doc) và thẻ điểm Tab 1
+  (KPCard — cả bản tự đánh giá lẫn bản chỉ-đọc).
+
+### 19.2 Mỗi dòng là một điểm kiến thức (luật thiết kế gốc của GV)
+- Định nghĩa: một điểm kiến thức = đoạn chữ giữa hai lần Enter.
+  ĐỀ MỤC (dòng tiêu đề mục) không sinh điểm. Nạp tay theo mẫu: mỗi
+  dòng "- " là một điểm.
+- Parser: dòng chữ thường theo sau một điểm kiến thức KHÔNG còn bị
+  gộp vào điểm đó (hành vi cũ) mà mở điểm kiến thức MỚI, gạch chân
+  trên chính dòng đó thành ô trống của điểm mới (extractBlanks như
+  dòng "- "). Token ảnh/bảng đứng một mình trong vùng lý thuyết thì
+  gắn vào điểm hiện tại thay vì biến mất.
+- Hệ quả bắt buộc: điểm kiến thức KHÔNG có cụm gạch chân hạ từ LỖI
+  chặn xuống CẢNH BÁO trong validateDocument — một dòng không gạch
+  chân là điểm chỉ-đọc hợp lệ (Tab 1 + tự đánh giá; Tab 2/3 vốn đã
+  tự bỏ qua điểm không có cụm). Không hạ thì tài liệu thật (Bài 1
+  Gene: dòng "3. Kết quả: ..." không gạch chân) bị khoá toàn bộ.
+  Hệ quả nhìn thấy: fixture Bài 1 parse ra 23 điểm thay vì 22;
+  check-preview-phien6 đã cập nhật kỳ vọng + đọc cảnh báo KP ở
+  warnings (ghi rõ §19 trong script).
+- Đường AI: renderAiResult chặn KP nhiều dòng (vấn đề sửa vòng
+  repair); skill ai_worker_processing thêm mục §19 — mỗi dòng một
+  điểm, đề mục bỏ qua, dòng chỉ có nhãn dẫn hoặc chỉ có hình/bảng
+  thì thuộc về điểm của dòng nội dung theo sau, token giữ inline.
+- GV sửa bản nháp bằng Enter: bản nháp là TEXT, lưu đi qua parser
+  nên luật dòng tự áp dụng — không cần tách riêng ở persist.
+- Kiểm chứng: check-kp-v19 15/15; suite 34/41 -> 35/42 (giữ nguyên
+  7 lỗi cũ); E2E §15/§16/§17/§18 đạt; E2E §19 trực tiếp 10/10 (lưu
+  qua /api/worksheet/save: 3 dòng -> 3 điểm, KP1 có bodyHtml bảng
+  thật + content sạch + offset khớp, getLessonDetail trả bodyHtml).

@@ -73,7 +73,9 @@ const val0 = validateDocument(parseResult)
 
 assert(summary0.chapters === 1 && summary0.lessons === 1, `chuong/bai ${JSON.stringify(summary0)}`)
 assert(summary0.questions === 51, `cau ${summary0.questions}`)
-assert(summary0.kps === 22, `kp ${summary0.kps}`)
+// §19: mỗi dòng là một điểm kiến thức — dòng "3. Kết quả: ..." (L26)
+// trước đây bị gộp vào KP trước, nay là KP riêng -> 23 (không phải 22).
+assert(summary0.kps === 23, `kp ${summary0.kps}`)
 
 const q0 = allQuestions(parseResult)
 const mc0 = q0.filter((q) => q.type === "MC")
@@ -91,7 +93,8 @@ assert(svg35.includes("<line"), "Cau 35 A thieu <line")
 assert(svg35.includes(">G<") && svg35.includes(">C<") && svg35.includes(">2<") && svg35.includes(">3<"), "Cau 35 A khong ra G/C=2/3")
 console.log("OK extract Cau 35 A phan so + 51 cau")
 
-const kpErr = val0.errors.find((e) => /Điểm kiến thức/.test(e.message ?? ""))
+// §19: KP chưa có gạch chân hạ xuống WARNING (điểm chỉ-đọc vẫn hợp lệ).
+const kpErr = val0.warnings.find((e) => /Điểm kiến thức/.test(e.message ?? ""))
 const leftoverErr = val0.errors.find((e) => /không thuộc câu nào/.test(e.message ?? ""))
 const quoteErr = val0.errors.find((e) => /Gạch chân kèm ngoặc kép/.test(e.message ?? ""))
 assert(kpErr, "thieu loi KP chua gach chan")

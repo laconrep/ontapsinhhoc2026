@@ -16,6 +16,7 @@ import {
 import { useRouter } from "next/navigation"
 import { saveTab1Progress, submitTab1 } from "@/app/actions/student-learn"
 import { cleanContentDisplay } from "@/lib/content-display"
+import { KpMedia } from "@/components/question/question-stem"
 import type { KnowledgePointDto } from "@/types"
 
 type Assessment = "known" | "unknown"
@@ -137,6 +138,7 @@ export function Tab1SelfAssess({
           key={kp.id}
           index={i + 1}
           content={kp.content}
+          bodyHtml={kp.bodyHtml}
           value={assessments[kp.id]}
           onChoose={(v) => choose(kp.id, v)}
         />
@@ -193,12 +195,15 @@ export function Tab1SelfAssess({
 export function KPCard({
   index,
   content,
+  bodyHtml,
   value,
   onChoose,
   readOnly,
 }: {
   index: number
   content: string
+  /** §19: HTML ảnh/bảng trong nội dung điểm (nếu có). */
+  bodyHtml?: string | null
   value?: Assessment
   onChoose?: (v: Assessment) => void
   readOnly?: boolean
@@ -238,6 +243,7 @@ export function KPCard({
               )}
             </button>
           )}
+          <KpMedia bodyHtml={bodyHtml} />
         </div>
       </div>
 

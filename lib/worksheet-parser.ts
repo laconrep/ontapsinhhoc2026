@@ -29,6 +29,9 @@ export interface ParsedKnowledgePoint {
   content: string
   underlinedTerms: UnderlinedTerm[]
   questions: ParsedQuestion[]
+  /** §19: HTML của riêng các phần tử ảnh/bảng xuất hiện trong nội dung
+   * KP (gắn bởi attachBodyHtml) — hiển thị kèm dưới đoạn chữ. */
+  bodyHtml?: string
   line: number
 }
 
@@ -854,6 +857,12 @@ export function parseTextContent(text: string): ParseResult {
     }
 
     if (/^@@(IMG|TBL)\d+@@$/.test(line) && !(curQuestion && canAppendStem(curQuestion, optionBuffer != null))) {
+      // §19: token ảnh/bảng đứng một mình trong vùng lý thuyết thì gắn
+      // vào điểm kiến thức hiện tại (thay vì biến mất như trước) để
+      // attachBodyHtml chuyển thành hình/bảng thật của điểm đó.
+      if (!curQuestion && curKp) {
+        curKp.content = curKp.content ? `${curKp.content}\n${line}` : line
+      }
       return
     }
 
@@ -862,9 +871,16 @@ export function parseTextContent(text: string): ParseResult {
       return
     }
 
-    if (!curQuestion && curKp) {
-      const extra = stripUnderline(line)
-      if (extra) curKp.content = curKp.content ? `${curKp.content}\n${extra}` : extra
+    if (!curQuestion && curKp && curLesson) {
+      // §19: MỖI DÒNG LÀ MỘT ĐIỂM KIẾN THỨC — dòng chữ thường theo sau
+      // một điểm kiến thức KHÔNG còn gộp vào điểm đó nữa, mà mở một
+      // điểm kiến thức mới; gạch chân trên chính dòng này thành ô
+      // trống của điểm mới, đúng như một dòng bắt đầu bằng "-".
+      const { content, underlinedTerms } = extractBlanks(line)
+      if (content) {
+        curKp = { content, underlinedTerms, questions: [], line: lineNo }
+        curLesson.knowledgePoints.push(curKp)
+      }
       return
     }
 
@@ -1030,11 +1046,58 @@ function stripRichTokens(text: string): string {
     .join("\n")
 }
 
+/** §19: HTML của riêng các phần tử ảnh/bảng trong một dòng (bỏ phần
+ * chữ xung quanh) — dùng cho bodyHtml của điểm kiến thức. */
+function mediaOnlyHtml(line: string, images: string[], tables: string[]): string {
+  const re = /@@(IMG|TBL)(\d+)@@/g
+  const out: string[] = []
+  let m: RegExpExecArray | null
+  while ((m = re.exec(line)) !== null) {
+    const html = m[1] === "IMG" ? images[Number(m[2])] : tables[Number(m[2])]
+    if (html) out.push(html)
+  }
+  return out.join("\n")
+}
+
 export function attachBodyHtml(result: ParseResult, images: string[], tables: string[]) {
   if (images.length === 0 && tables.length === 0) return
   for (const ch of result.chapters) {
     for (const lesson of ch.lessons) {
       for (const kp of lesson.knowledgePoints) {
+        // §19: ảnh/bảng nằm trong nội dung điểm kiến thức — trước đây
+        // mã giữ chỗ bị in nguyên văn; nay tách phần tử media thành
+        // bodyHtml của điểm và xoá mã khỏi nội dung chữ.
+        if (kp.content.includes("@@IMG") || kp.content.includes("@@TBL")) {
+          const media = kp.content
+            .split("\n")
+            .map((ln) => mediaOnlyHtml(ln, images, tables))
+            .filter(Boolean)
+            .join("\n")
+          if (media) kp.bodyHtml = media
+          kp.content = stripRichTokens(kp.content)
+          // Xoá token làm nội dung ngắn lại — offset start/end của các
+          // cụm gạch chân nằm sau token bị lệch. Tính lại theo thứ tự
+          // xuất hiện (bỏ qua vùng đã chiếm), cùng thuật toán đặt gạch
+          // chân của bản dựng AI; cụm nào không tìm thấy thì giữ
+          // nguyên (khâu lưu sẽ bắt lỗi như trước).
+          const claimed: { start: number; end: number }[] = []
+          for (const t of kp.underlinedTerms) {
+            if (!t.text) continue
+            let from = 0
+            let idx = kp.content.indexOf(t.text, from)
+            while (idx !== -1) {
+              const end = idx + t.text.length
+              if (!claimed.some((c) => idx < c.end && end > c.start)) {
+                claimed.push({ start: idx, end })
+                t.start = idx
+                t.end = end
+                break
+              }
+              from = idx + 1
+              idx = kp.content.indexOf(t.text, from)
+            }
+          }
+        }
         for (const q of kp.questions) {
           if (!q.content.includes("@@IMG") && !q.content.includes("@@TBL")) continue
           const lines = q.content.split("\n")
@@ -1168,7 +1231,11 @@ export function validateDocument(result: ParseResult): ValidationResult {
     }
     for (const kp of lesson.knowledgePoints) {
       if (kp.underlinedTerms.length === 0) {
-        errors.push({
+        // §19: mỗi dòng là một điểm kiến thức — một dòng nội dung không
+        // có gạch chân vẫn là điểm kiến thức hợp lệ (chỉ để đọc và tự
+        // đánh giá ở Tab 1, không sinh bài điền khuyết/kéo thả). Hạ từ
+        // lỗi chặn xuống cảnh báo để GV biết, không khoá cả tài liệu.
+        warnings.push({
           line: kp.line,
           message: `Điểm kiến thức phải có ít nhất 1 từ gạch chân (__từ__ hoặc __"từ"__): "${kp.content.slice(0, 30)}"`,
         })

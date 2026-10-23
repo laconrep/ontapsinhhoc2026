@@ -78,6 +78,15 @@ export function renderAiResult(result: AiResult): RenderOutcome {
     for (const lesson of chapter.lessons) {
       out.push(`[${lesson.title}]`)
       for (const kp of lesson.knowledgePoints) {
+        // §19: MỖI DÒNG LÀ MỘT ĐIỂM KIẾN THỨC — nội dung một điểm chỉ
+        // được là một dòng duy nhất; worker phải tách mỗi dòng của tài
+        // liệu thành một điểm riêng (đề mục thì bỏ, không thành điểm).
+        if (kp.content.split("\n").filter((s) => s.trim()).length > 1) {
+          problems.push(
+            `KP "${kp.content.slice(0, 60)}...": nội dung điểm kiến thức phải là MỘT dòng duy nhất — tách mỗi dòng thành một điểm kiến thức riêng`,
+          )
+          continue
+        }
         const rendered = renderKpContent(kp.content, kp.underlines ?? [])
         if ("problem" in rendered) {
           problems.push(`KP "${kp.content.slice(0, 60)}...": ${rendered.problem}`)

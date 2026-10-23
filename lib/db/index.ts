@@ -269,6 +269,14 @@ export function ensureSchema(): Promise<void> {
           .query(`ALTER TABLE ai_jobs ADD COLUMN IF NOT EXISTS "consumedAt" timestamp`)
           .catch((e) => console.error("[ensureSchema] ai_jobs.consumedAt DDL failed:", e)),
       )
+      // §19: điểm kiến thức chứa ảnh/bảng — thêm cột bodyHtml (HTML của
+      // riêng các phần tử media trong nội dung điểm), ALTER riêng bọc
+      // catch riêng như mọi đợt.
+      .then(() =>
+        pool
+          .query(`ALTER TABLE knowledge_points ADD COLUMN IF NOT EXISTS "bodyHtml" text`)
+          .catch((e) => console.error("[ensureSchema] knowledge_points.bodyHtml DDL failed:", e)),
+      )
       // §18: bài "lưu tại lớp" — lessons thêm classId, chapterId nới lỏng
       // thành nullable. Hai ALTER độc lập, bọc catch riêng như mọi đợt.
       .then(() =>

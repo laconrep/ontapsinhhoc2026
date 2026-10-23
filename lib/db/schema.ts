@@ -138,6 +138,8 @@ export const knowledgePoints = pgTable("knowledge_points", {
     .notNull()
     .references(() => lessons.id, { onDelete: "cascade" }),
   content: text("content").notNull(),
+  /** §19: HTML ảnh/bảng nằm trong nội dung điểm kiến thức. */
+  bodyHtml: text("bodyHtml"),
   underlinedTerms: jsonb("underlinedTerms"),
   order: integer("order").notNull().default(0),
 })

@@ -307,6 +307,7 @@ async function persistParseResult(
             .values({
               lessonId: targetId,
               content: prepared.content,
+              bodyHtml: action.source.bodyHtml ?? null,
               underlinedTerms: prepared.terms,
               order: kpOrder++,
             })
@@ -429,6 +430,7 @@ async function persistParseResult(
             .values({
               lessonId,
               content: prepared.content,
+              bodyHtml: pKp.bodyHtml ?? null,
               underlinedTerms: prepared.terms,
               order: kpOrder++,
             })

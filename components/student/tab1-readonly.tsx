@@ -20,6 +20,7 @@ export function Tab1Readonly({
           key={kp.id}
           index={i + 1}
           content={kp.content}
+          bodyHtml={kp.bodyHtml}
           value={assessments[kp.id]}
           readOnly
         />

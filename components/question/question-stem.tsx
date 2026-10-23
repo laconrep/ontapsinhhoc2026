@@ -56,6 +56,33 @@ function sanitizeStemHtml(raw: string): string {
   return tpl.innerHTML
 }
 
+/**
+ * §19: khối ảnh/bảng của một ĐIỂM KIẾN THỨC — hiển thị KÈM dưới nội dung
+ * chữ của điểm (khác QuestionStem ở chỗ không thay thế nội dung, vì nội
+ * dung điểm còn mang các cụm gạch chân cần trình bày riêng). Dùng cùng
+ * lớp lọc sanitize như thân câu hỏi.
+ */
+export function KpMedia({
+  bodyHtml,
+  className,
+}: {
+  bodyHtml?: string | null
+  className?: string
+}) {
+  if (!bodyHtml) return null
+  const html = sanitizeStemHtml(bodyHtml)
+  if (!html) return null
+  return (
+    <div
+      className={cn(
+        "mt-2 leading-relaxed text-foreground [&_img]:max-w-full [&_img.eq-inline]:inline-block [&_img.eq-inline]:align-middle [&_img.eq-inline]:mx-1 [&_img.eq-inline]:my-0 [&_img.eq-inline]:h-[2.5em] [&_img.eq-inline]:w-auto [&_img:not(.eq-inline)]:mx-auto [&_img:not(.eq-inline)]:my-2 [&_img:not(.eq-inline)]:max-h-48 [&_table]:my-2 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-border [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-border [&_th]:px-2 [&_th]:py-1",
+        className,
+      )}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  )
+}
+
 export function QuestionStem({
   content,
   bodyHtml,

@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { BookOpenText, ChevronDown } from "lucide-react"
-import { QuestionStem } from "@/components/question/question-stem"
+import { QuestionStem, KpMedia } from "@/components/question/question-stem"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import type { ParseResult, ValidationError } from "@/lib/worksheet-parser"
@@ -218,7 +218,8 @@ export function PreviewDocument({
                             AI sinh — cần kiểm tra
                           </Badge>
                         ) : null}
-                        <p className="text-foreground">{highlightBlanks(kp.content, kp.underlinedTerms)}</p>
+                        <p className="whitespace-pre-wrap text-foreground">{highlightBlanks(kp.content, kp.underlinedTerms)}</p>
+                        <KpMedia bodyHtml={kp.bodyHtml} />
                         {kp.questions.length > 0 && (
                           <div className="mt-2 space-y-3">
                             {kp.questions.map((q, qi) => {

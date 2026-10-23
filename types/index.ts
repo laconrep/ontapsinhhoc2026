@@ -65,6 +65,8 @@ export interface KnowledgePointDto {
   id: string
   lessonId: string
   content: string
+  /** §19: HTML ảnh/bảng trong nội dung điểm kiến thức (nếu có). */
+  bodyHtml?: string | null
   underlinedTerms: UnderlinedTerm[]
   order: number
 }
