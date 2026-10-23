@@ -682,7 +682,7 @@ export function WorksheetImporter({
           <h1 className="font-heading text-2xl font-bold text-foreground">Nạp câu hỏi từ file</h1>
           <p className="mt-1 text-muted-foreground">
             Tải lên tài liệu .docx, .pdf hoặc .txt được soạn theo cú pháp mẫu. Hệ thống sẽ tự tách
-            chương, bài, điểm kiến thức và sinh câu hỏi. Không dùng dấu + hay *.
+            chương, bài, điểm kiến thức và sinh câu hỏi.
           </p>
         </div>
       )}
@@ -710,43 +710,6 @@ export function WorksheetImporter({
               Mẫu văn bản (.txt)
             </a>
           </div>
-          <ul className="space-y-1 text-sm text-muted-foreground">
-            <li>
-              Khung tài liệu: <code className="text-foreground">{"{chương}"}</code>{" "}
-              <code className="text-foreground">[bài]</code> rồi điểm kiến thức bắt đầu bằng{" "}
-              <code className="text-foreground">-</code>.
-            </li>
-            <li>
-              Mốc nhóm dính (chỉ đặt loại, không tạo câu; giữ đến mốc mới):{" "}
-              <code className="text-foreground">#</code> trắc nghiệm,{" "}
-              <code className="text-foreground">##</code> đúng/sai,{" "}
-              <code className="text-foreground">###</code> trả lời ngắn.
-            </li>
-            <li>
-              Mỗi câu bắt đầu bằng <code className="text-foreground">Câu 1.</code> /{" "}
-              <code className="text-foreground">câu 1:</code> / <code className="text-foreground">cau:</code>{" "}
-              (số bất kỳ). Dòng trống không cắt câu.
-            </li>
-            <li>
-              Trắc nghiệm: 4 lựa chọn <code className="text-foreground">A. B. C. D.</code> (mỗi dòng, cùng 1
-              dòng, hoặc 2+2). Gạch chân đáp án đúng.
-            </li>
-            <li>
-              Đúng/Sai: 4 ý <code className="text-foreground">a) b) c) d)</code>. Gạch chân = Đúng.
-            </li>
-            <li>
-              Trả lời ngắn: đề đến <code className="text-foreground">Đáp án:</code> /{" "}
-              <code className="text-foreground">dap an:</code>.
-            </li>
-            <li>
-              Phần <code className="text-foreground">ĐÁP ÁN</code> /{" "}
-              <code className="text-foreground">HƯỚNG DẪN GIẢI</code> ở cuối file bị bỏ, không nạp thành câu.
-            </li>
-            <li>
-              Trong .txt/.pdf dùng <code className="text-foreground">__...__</code> để gạch chân. Trong Word
-              dùng gạch chân thật. Công thức Word được giữ thành ảnh.
-            </li>
-          </ul>
         </CardContent>
       </Card>
 

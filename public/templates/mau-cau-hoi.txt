@@ -1,59 +1,19 @@
-// ============================================================
-// MAU FILE NAP BAI — MOI FILE CHI NAP CHO MOT BAI
-// ============================================================
-// - Dong dau tien la [Ten bai]: ten bai se hien tren the bai o
-//   tab Bai giang. Chuong khong ghi trong file — khi nap, ban
-//   chon chuong (hoac tao chuong moi) ngay o man hinh nap.
-// - Neu bo trong [] (khong ghi ten), AI se gan ten cho bai va
-//   bai o trang thai NHAP cho ban duyet ten truoc khi san sang.
-// - Muon nap them noi dung vao bai da co: bam nut "Nap file"
-//   tren the bai — noi dung cong don, muc trung chi giu 1 ban.
-// - File cu chua nhieu bai van nap duoc: he thong tach thanh
-//   cac bai rieng nhu truoc.
-
+Nguyên tắc: các cụm từ gạch chân là phần điền khuyết, các cụm từ gạch chân và trong dấu “ “ là các từ điền khuyết nhưng được phép hoán đổi vị trí
 [Tên bài — ADN và ARN]
 - ADN là đại phân tử cấu tạo theo nguyên tắc __đa phân__, đơn phân là __nucleotide__.
+- Hai mạch của ADN liên kết theo nguyên tắc __bổ sung__, trong đó __“A”__ liên kết với __"T"__ và __“G”__ liên kết với __"X"__.
 #
-cau: ADN có cấu trúc không gian dạng gì?
+Câu 1: ADN có cấu trúc không gian dạng gì?
 A. Mạch thẳng
 __B. Xoắn kép__
 C. Vòng tròn
 D. Xoắn ba
-
 ##
-cau: Chọn đúng/sai về ADN:
+Câu 1: Chọn đúng/sai về ADN:
 a. ADN có hai mạch
 __b. Đơn phân của ADN là nucleotide__
 c. ADN chỉ có một mạch đơn
 d. ADN không có trong nhân
-
 ###
-cau: Đơn phân của ADN được gọi là gì?
+Câu 1: Đơn phân của ADN được gọi là gì?
 dap an: nucleotide
-- Hai mạch của ADN liên kết theo nguyên tắc __"bổ sung"__, trong đó A liên kết với __"T"__ và G liên kết với __"X"__.
-
-// ============================================================
-// HUONG DAN CU PHAP (cac dong bat dau bang // se duoc bo qua)
-// ============================================================
-// [Ten bai]                   -> Tieu de bai (bat buoc; de trong [] thi AI gan ten, bai o trang thai nhap)
-// - Noi dung kien thuc...     -> Mot diem kien thuc
-// __tu__                      -> O dien khuyet co dinh
-// __"tu"__                    -> O dien khuyet hoan doi (cac o __"tu"__ dung lien nhau trong cung cau co the trao cho nhau)
-// LUU Y: "tu" (ngoac kep thuong, khong co __) KHONG tao o trong nao ca.
-// O hoan doi chi hoat dong khi dung __"tu"__ va cac o dung lien nhau trong cung cau.
-//
-// #                           -> Cau trac nghiem (MC)
-// cau: ...                    -> De cau
-// A. ...  B. ...  C. ...  D.  -> 4 lua chon (nhan a. a) A. A) deu duoc)
-// __B. Xoan kep__             -> Gach chan ca dong hoac chu cai dau = dap an dung (dung 1 dong dung)
-// Khong dung dau + va dau *
-//
-// ##                          -> Cau dung/sai (TF)
-// cau: ...                    -> De cau
-// a. ...  b. ...  c. ...  d.  -> 4 y
-// __b. ...__                  -> Gach chan = dung; khong gach chan = sai
-//
-// ###                         -> Cau tra loi ngan (SA)
-// cau: ...                    -> De cau
-// dap an: ...                 -> Dap an (tu hoac so). Chap nhan "Đáp án:"
-// dap an: x | y               -> Chap nhan ca x va y (hoc sinh gõ mot trong hai deu dung)
