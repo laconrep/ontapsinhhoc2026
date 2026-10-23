@@ -1,5 +1,17 @@
-{Chương I - Cơ sở vật chất di truyền}
-[ADN và ARN]
+// ============================================================
+// MAU FILE NAP BAI — MOI FILE CHI NAP CHO MOT BAI
+// ============================================================
+// - Dong dau tien la [Ten bai]: ten bai se hien tren the bai o
+//   tab Bai giang. Chuong khong ghi trong file — khi nap, ban
+//   chon chuong (hoac tao chuong moi) ngay o man hinh nap.
+// - Neu bo trong [] (khong ghi ten), AI se gan ten cho bai va
+//   bai o trang thai NHAP cho ban duyet ten truoc khi san sang.
+// - Muon nap them noi dung vao bai da co: bam nut "Nap file"
+//   tren the bai — noi dung cong don, muc trung chi giu 1 ban.
+// - File cu chua nhieu bai van nap duoc: he thong tach thanh
+//   cac bai rieng nhu truoc.
+
+[Tên bài — ADN và ARN]
 - ADN là đại phân tử cấu tạo theo nguyên tắc __đa phân__, đơn phân là __nucleotide__.
 #
 cau: ADN có cấu trúc không gian dạng gì?
@@ -23,8 +35,7 @@ dap an: nucleotide
 // ============================================================
 // HUONG DAN CU PHAP (cac dong bat dau bang // se duoc bo qua)
 // ============================================================
-// {Ten chuong}                -> Tieu de chuong
-// [Ten bai]                   -> Tieu de bai (bat buoc)
+// [Ten bai]                   -> Tieu de bai (bat buoc; de trong [] thi AI gan ten, bai o trang thai nhap)
 // - Noi dung kien thuc...     -> Mot diem kien thuc
 // __tu__                      -> O dien khuyet co dinh
 // __"tu"__                    -> O dien khuyet hoan doi (cac o __"tu"__ dung lien nhau trong cung cau co the trao cho nhau)

@@ -1,6 +1,6 @@
 "use server"
 
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm"
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { db, ensureSchema } from "@/lib/db"
 import {
@@ -50,6 +50,8 @@ export async function assignLessons(
       and(
         eq(lessons.teacherId, teacher.id),
         eq(lessons.status, "ready"),
+        // §18: bài tại lớp không được giao sang lớp khác.
+        isNull(lessons.classId),
         inArray(lessons.id, uniqueIds),
       ),
     )
@@ -102,7 +104,8 @@ export async function getClassAssignments(classId: string): Promise<ClassAssignm
     })
     .from(classAssignments)
     .innerJoin(lessons, eq(lessons.id, classAssignments.lessonId))
-    .innerJoin(chapters, eq(chapters.id, lessons.chapterId))
+    // §18: bài tại lớp không có chương — LEFT JOIN + nhãn thay thế.
+    .leftJoin(chapters, eq(chapters.id, lessons.chapterId))
     .where(eq(classAssignments.classId, classId))
     .orderBy(desc(classAssignments.createdAt))
 
@@ -111,7 +114,7 @@ export async function getClassAssignments(classId: string): Promise<ClassAssignm
     classId: r.classId,
     lessonId: r.lessonId,
     lessonTitle: r.lessonTitle,
-    chapterTitle: r.chapterTitle,
+    chapterTitle: r.chapterTitle ?? "Tại lớp",
     dueAt: r.dueAt ? r.dueAt.toISOString() : null,
     note: r.note,
     createdAt: r.createdAt.toISOString(),
@@ -183,8 +186,9 @@ export async function removeAssignment(classId: string, id: string): Promise<voi
   await ensureSchema()
   await assertTeacherOwnsClass(classId, teacher.id)
 
-  await db
-    .delete(classAssignments)
+  const [assignment] = await db
+    .select({ lessonId: classAssignments.lessonId })
+    .from(classAssignments)
     .where(
       and(
         eq(classAssignments.id, id),
@@ -192,6 +196,23 @@ export async function removeAssignment(classId: string, id: string): Promise<voi
         eq(classAssignments.teacherId, teacher.id),
       ),
     )
+    .limit(1)
+  if (!assignment) return
+
+  // §18: bài "lưu tại lớp" sống chết cùng dòng giao bài của lớp đó —
+  // gỡ khỏi lớp là xoá luôn bài (nó không tồn tại ở thư viện).
+  const [lesson] = await db
+    .select({ classId: lessons.classId })
+    .from(lessons)
+    .where(eq(lessons.id, assignment.lessonId))
+    .limit(1)
+  if (lesson?.classId === classId) {
+    await db
+      .delete(lessons)
+      .where(and(eq(lessons.id, assignment.lessonId), eq(lessons.teacherId, teacher.id)))
+  } else {
+    await db.delete(classAssignments).where(eq(classAssignments.id, id))
+  }
   revalidatePath(`/teacher/classes/${classId}`)
   revalidatePath("/student/learn")
   revalidatePath("/student")
@@ -219,7 +240,8 @@ export async function getAssignedLessonsForStudent(): Promise<AssignedLessonDto[
     })
     .from(classAssignments)
     .innerJoin(lessons, eq(lessons.id, classAssignments.lessonId))
-    .innerJoin(chapters, eq(chapters.id, lessons.chapterId))
+    // §18: bài tại lớp không có chương — LEFT JOIN + nhãn thay thế.
+    .leftJoin(chapters, eq(chapters.id, lessons.chapterId))
     .where(inArray(classAssignments.classId, classIds))
     .orderBy(desc(classAssignments.createdAt))
 
@@ -270,7 +292,7 @@ export async function getAssignedLessonsForStudent(): Promise<AssignedLessonDto[
     out.push({
       lessonId: r.lessonId,
       lessonTitle: r.lessonTitle,
-      chapterTitle: r.chapterTitle,
+      chapterTitle: r.chapterTitle ?? "Tại lớp",
       dueAt: r.dueAt ? r.dueAt.toISOString() : null,
       note: r.note,
       studentStatus,
@@ -342,11 +364,13 @@ export async function assignLessonToClasses(
   await ensureSchema()
 
   const [lesson] = await db
-    .select({ id: lessons.id, status: lessons.status })
+    .select({ id: lessons.id, status: lessons.status, classId: lessons.classId })
     .from(lessons)
     .where(and(eq(lessons.id, lessonId), eq(lessons.teacherId, teacher.id)))
     .limit(1)
   if (!lesson) throw new Error("Không tìm thấy bài giảng")
+  // §18: bài lưu tại lớp chỉ thuộc về lớp đó, không giao đi nơi khác.
+  if (lesson.classId) throw new Error("Bài lưu tại lớp không giao được cho lớp khác")
   if (lesson.status !== "ready") throw new Error("Bài giảng chưa ở trạng thái sẵn sàng để giao")
 
   const uniqueIds = [...new Set(classIds.filter(Boolean))]

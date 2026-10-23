@@ -269,6 +269,32 @@ export function ensureSchema(): Promise<void> {
           .query(`ALTER TABLE ai_jobs ADD COLUMN IF NOT EXISTS "consumedAt" timestamp`)
           .catch((e) => console.error("[ensureSchema] ai_jobs.consumedAt DDL failed:", e)),
       )
+      // §18: bài "lưu tại lớp" — lessons thêm classId, chapterId nới lỏng
+      // thành nullable. Hai ALTER độc lập, bọc catch riêng như mọi đợt.
+      .then(() =>
+        pool
+          .query(
+            `ALTER TABLE lessons ADD COLUMN IF NOT EXISTS "classId" uuid REFERENCES classes(id) ON DELETE CASCADE`,
+          )
+          .catch((e) => console.error("[ensureSchema] lessons.classId DDL failed:", e)),
+      )
+      .then(() =>
+        pool
+          .query(`ALTER TABLE lessons ALTER COLUMN "chapterId" DROP NOT NULL`)
+          .catch((e) => console.error("[ensureSchema] lessons.chapterId DDL failed:", e)),
+      )
+      // §18: các insert giao bài (cũ lẫn mới) đều dùng ON CONFLICT
+      // (classId, lessonId) — DB nào lệch schema thiếu unique index
+      // này thì mọi lượt giao bài đều lỗi. Tạo idempotent, bọc catch
+      // riêng (nếu dữ liệu đã trùng cặp thì index không tạo được,
+      // app vẫn chạy và log lại như các DDL khác).
+      .then(() =>
+        pool
+          .query(
+            `CREATE UNIQUE INDEX IF NOT EXISTS ca_class_lesson_unique ON class_assignments ("classId", "lessonId")`,
+          )
+          .catch((e) => console.error("[ensureSchema] ca_class_lesson_unique DDL failed:", e)),
+      )
       .then(() =>
         pool
           .query(`

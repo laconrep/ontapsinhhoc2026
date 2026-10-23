@@ -43,6 +43,9 @@ export interface AiKnowledgePoint {
 
 export interface AiLesson {
   title: string
+  /** §18: true = tên bài do AI đặt (tài liệu gốc không ghi tên bài) —
+   * khi GV lưu, bài bị để ở trạng thái nháp chờ duyệt tên. */
+  titleGeneratedByAi?: boolean
   knowledgePoints: AiKnowledgePoint[]
 }
 
@@ -90,4 +93,7 @@ export interface AiResultMeta {
   repairRounds: number
   /** §16: từ nhiễu kéo thả theo từng cụm — gắn vào KP sau khi GV lưu. */
   distractors?: AiDistractorEntry[]
+  /** §18: chỉ số bài (phẳng) có tên do AI đặt — importer truyền xuống
+   * lúc lưu để các bài đó vào trạng thái nháp chờ GV duyệt tên. */
+  draftLessonIndexes?: number[]
 }

@@ -116,9 +116,10 @@ export const chapters = pgTable("chapters", {
 export const lessons = pgTable("lessons", {
   id: uuid("id").primaryKey().defaultRandom(),
   title: text("title").notNull(),
-  chapterId: uuid("chapterId")
-    .notNull()
-    .references(() => chapters.id, { onDelete: "cascade" }),
+  // §18: bài thuộc thư viện thì có chapterId; bài "lưu tại lớp" thì có
+  // classId và chapterId = null (không vào thư viện, không giao lớp khác).
+  chapterId: uuid("chapterId").references(() => chapters.id, { onDelete: "cascade" }),
+  classId: uuid("classId").references(() => classes.id, { onDelete: "cascade" }),
   teacherId: text("teacherId")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),

@@ -1387,3 +1387,98 @@ danh sách chờ (không mở lại/lưu trùng được nữa).
   consume -> hết khỏi danh sách chờ -> consume lại vẫn 200 ->
   việc pending cũng được list). E2E §15 26/26 và §16 29/29 giữ
   nguyên; bộ check 33/40 (7 lỗi cũ không đổi); tsc/build sạch.
+
+## 18. Form file mới: 1 file = 1 bài + đích lưu linh hoạt (2026-10-23)
+
+Quyết định của chủ dự án (đã chốt): mỗi file nạp chỉ cho MỘT bài; cấu
+trúc file mới giữ dòng `[Tên bài]`, bỏ khung chương trong file —
+chương được CHỌN Ở GIAO DIỆN khi nạp. Mẫu mau-cau-hoi.txt/.docx đã
+soạn lại theo form này.
+
+### 18.1 Tên bài và trạng thái nháp
+- Parser: dòng `[ ]`/`[]` (tên trống) được nhận diện là bài thiếu
+  tên — `ParsedLesson.titleMissing = true`, validateDocument chỉ
+  CẢNH BÁO (không chặn lưu như BUG-09 dành cho lỗi nội dung).
+- Khi lưu: bài có tên trong file -> `ready` như cũ; bài thiếu tên
+  -> tên tạm = tên file (bỏ đuôi), trạng thái **draft** chờ GV
+  duyệt tên. Đường AI: worker đặt `titleGeneratedByAi: true` trên
+  bài mình đặt tên (skill ai_worker_processing đã bổ sung quy tắc);
+  submitJobResult tính `resultMeta.draftLessonIndexes` (chỉ số bài
+  phẳng); importer truyền `draftLessonIndexes` xuống lúc lưu và
+  persist ép đúng các bài đó sang draft.
+- File cũ chứa nhiều bài (kèm `{chương}`) VẪN nạp được: tách
+  thành các bài riêng như trước, chương lấy theo file khi GV
+  không ép chương đích.
+
+### 18.2 Đích lưu (PersistOptions ở lib/worksheet-import.ts)
+Đường lưu nhận thêm: `targetChapterId` (ép mọi bài trong file
+vào một chương do GV chọn/tạo ngay ở màn hình nạp — mặc định
+importer chọn sẵn chương đầu tiên để file form mới không rơi
+vào "Chương chưa đặt tên"), `classId` (lưu tại lớp), `intoLessonId`
+(nạp cộng thêm), `draftLessonIndexes`. Mọi đích đều kiểm tra
+quyền sở hữu của GV trước khi ghi; insert câu hỏi tách thành
+helper `insertParsedQuestion` dùng chung (bất biến BUG-02 giữ
+nguyên, check-import-batch2 đã cập nhật khẳng định tương đương).
+
+### 18.3 Bài "lưu tại lớp" (class-only)
+- Schema: `lessons.classId` (uuid, FK classes cascade) +
+  `chapterId` nới thành nullable (ensureSchema ALTER, bọc catch
+  riêng từng câu như mọi đợt). Bài tại lớp: chapterId = null,
+  classId = lớp; persist/createClassLesson ghi luôn dòng
+  class_assignments cho chính lớp đó.
+- Hệ quả đã xử lý đồng bộ: thư viện (getChaptersWithLessons) tự
+  loại bài tại lớp theo chapterId; getLessonDetail/getClassAssignments/
+  getAssignedLessonsForStudent chuyển LEFT JOIN chương + nhãn thay
+  thế; phía HS: getStudentLessons gom bài tại lớp (ready, có KP)
+  thành nhóm riêng "Bài tại lớp <tên lớp>"; assignLessons/
+  assignLessonToClasses CHẶN giao bài tại lớp sang lớp khác;
+  removeAssignment trên bài tại lớp = XOÁ luôn bài (bài không
+  tồn tại ngoài lớp).
+- ensureSchema bổ sung CREATE UNIQUE INDEX IF NOT EXISTS
+  ca_class_lesson_unique (schema drizzle đã khai báo nhưng DB
+  lệch sẽ thiếu — thiếu thì MỌI insert giao bài dùng ON CONFLICT
+  đều lỗi; phát hiện khi E2E §18 chạy trên DB local bị lệch).
+
+### 18.4 Nạp cộng thêm vào bài có sẵn (append + chống trùng)
+- Vào từ nút "Nạp file" (bài chưa từng nạp) / "Đã nạp file" (đã
+  nạp — trạng thái suy từ `lessons.originalFileKey`) trên thẻ
+  bài, hoặc nút "Nạp từ file" dưới tên bài ở màn hình tạo bài
+  thủ công (lesson-detail). Importer mở với `?intoLesson=<id>`.
+- Toàn bộ KP của file (gộp phẳng mọi bài trong file) cộng dồn
+  vào bài đích: KP trùng nội dung (chuẩn hoá trim/gộp khoảng
+  trắng/thường hoá — CHỈ để chống trùng, không dính logic chấm)
+  thì gộp câu mới vào KP cũ; câu trùng (vân tay: loại + stem +
+  options, riêng SA là tập đáp án chấp nhận đã sắp xếp) ở BẤT KỲ
+  KP nào trong bài thì bỏ qua. `lib/append-dedupe.ts` dùng chung:
+  client tính trước để cảnh báo ở bản xem trước (qua action
+  getLessonDedupeSnapshot), server tính lại lúc lưu làm kết quả
+  chính thức (trả về appended{addedKps, addedQuestions,
+  skippedQuestions} + duplicateWarnings). Tên/chương/trạng thái
+  của bài đích KHÔNG đổi; originalFileKey cập nhật theo file mới
+  nạp. AI + nạp cộng thêm: bỏ qua gắn từ nhiễu §16 (vị trí KP đã
+  lệch sau gộp) — Tab 3 dùng pool mặc định cho các KP đó.
+
+### 18.5 Bố cục tab Bài giảng và tab Lớp
+- Tab Bài giảng: BỎ nút "Nạp từ file" toàn cục ở đầu trang.
+  Popup "+ Bài giảng" trên thẻ chương chỉ còn 2 nút "Tạo bài
+  giảng" / "Hủy": tạo bài nháp "Bài giảng mới" rồi đi thẳng sang
+  màn hình tạo bài thủ công (/teacher/lessons/[id]); nút "Nạp từ
+  file" nằm ngay dưới tên bài ở màn hình đó. Giữ nút tạo chương
+  như cũ.
+- Tab Lớp: nạp từ file -> khi bấm "Lưu vào hệ thống", importer
+  hỏi THƯ VIỆN (chọn chương, giao luôn cho lớp) hay TẠI LỚP;
+  "Tạo bài trống" cũng hỏi tương tự ngay trong hộp thoại
+  (createClassLesson cho nhánh tại lớp).
+
+### 18.6 Kiểm chứng
+- scripts/check-import-v18.mjs mới: 20/20 (parser titleMissing +
+  cảnh báo + tách file cũ; append-dedupe 4 nhóm tình huống).
+  Bộ check toàn cục 34 pass / 7 fail — đúng 7 lỗi nền cũ;
+  check-import-batch2 cập nhật khẳng định BUG-02 theo helper.
+- E2E live mới test-import-v18-e2e.mjs: 33/33 (chương đích +
+  ready; tên trống -> draft + tên file; file cũ tách 2 bài; nạp
+  cộng thêm 2 lượt với số đếm trùng khớp chính xác; snapshot;
+  class-only: vô hình ở thư viện, HS thấy ở nhóm riêng khi
+  ready, chặn giao chéo, gỡ = xoá; AI titleGeneratedByAi ->
+  meta [0] -> lưu draft). Hồi quy E2E §15/§16/§17 đạt trên cùng
+  bản build; tsc/build sạch.

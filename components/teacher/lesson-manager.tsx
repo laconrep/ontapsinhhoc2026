@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { noteActionSuccess, reloadIfStaleAction } from "@/lib/stale-action"
 import {
@@ -65,6 +66,7 @@ const STATUS_VARIANT: Record<string, "secondary" | "default" | "destructive" | "
 }
 
 export function LessonManager({ initialChapters }: { initialChapters: ChapterDto[] }) {
+  const router = useRouter()
   const [chapters, setChapters] = useState<ChapterDto[]>(initialChapters)
   const [open, setOpen] = useState<Record<string, boolean>>(
     Object.fromEntries(initialChapters.map((c) => [c.id, true])),
@@ -82,6 +84,11 @@ export function LessonManager({ initialChapters }: { initialChapters: ChapterDto
     id?: string
   } | null>(null)
   const [lessonTitle, setLessonTitle] = useState("")
+  // §18: popup "+ Bài giảng" trên thẻ chương — chỉ 2 nút Tạo bài
+  // giảng / Huỷ; tạo xong đi thẳng sang màn hình tạo bài thủ công.
+  const [createChoice, setCreateChoice] = useState<{ chapterId: string; chapterTitle: string } | null>(
+    null,
+  )
   const [confirmState, setConfirmState] = useState<
     { kind: "chapter" | "lesson"; id: string } | null
   >(null)
@@ -176,6 +183,24 @@ export function LessonManager({ initialChapters }: { initialChapters: ChapterDto
     })
   }
 
+  /** §18: tạo bài nháp rồi sang thẳng màn hình tạo bài thủ công. */
+  function startManualCreate() {
+    if (!createChoice) return
+    const chapterId = createChoice.chapterId
+    setCreateChoice(null)
+    startTransition(async () => {
+      try {
+        const row = await createLesson(chapterId, "Bài giảng mới")
+        noteActionSuccess()
+        router.push(`/teacher/lessons/${row.id}`)
+      } catch (e) {
+        if (!reloadIfStaleAction(e)) {
+          toast.error(e instanceof Error ? e.message : "Có lỗi xảy ra")
+        }
+      }
+    })
+  }
+
   function submitLesson() {
     if (!lessonTitle.trim() || !lessonDialog) return
     startTransition(async () => {
@@ -233,10 +258,6 @@ export function LessonManager({ initialChapters }: { initialChapters: ChapterDto
           <p className="mt-1 text-muted-foreground">Quản lý chương, bài giảng và điểm kiến thức.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/teacher/lessons/import" className={buttonVariants({ variant: "outline" })}>
-            <Upload className="h-4 w-4" />
-            Nạp từ file
-          </Link>
           <Button
             onClick={() => {
               setChapterDialog({ mode: "create" })
@@ -278,10 +299,9 @@ export function LessonManager({ initialChapters }: { initialChapters: ChapterDto
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => {
-                    setLessonDialog({ mode: "create", chapterId: chapter.id })
-                    setLessonTitle("")
-                  }}
+                  onClick={() =>
+                    setCreateChoice({ chapterId: chapter.id, chapterTitle: chapter.title })
+                  }
                 >
                   <Plus className="h-4 w-4" />
                   Bài giảng
@@ -339,6 +359,18 @@ export function LessonManager({ initialChapters }: { initialChapters: ChapterDto
                           <Badge variant={STATUS_VARIANT[lesson.status]}>
                             {STATUS_LABEL[lesson.status]}
                           </Badge>
+                          <Link
+                            href={`/teacher/lessons/import?intoLesson=${lesson.id}`}
+                            className={buttonVariants({ variant: "outline", size: "sm" })}
+                            title={
+                              lesson.originalFileKey
+                                ? "Bài đã nạp từ file — bấm để nạp thêm file khác (cộng dồn, mục trùng chỉ giữ 1 bản)"
+                                : "Nạp nội dung từ file vào bài này"
+                            }
+                          >
+                            <Upload className="h-4 w-4" />
+                            {lesson.originalFileKey ? "Đã nạp file" : "Nạp file"}
+                          </Link>
                           <Button
                             variant="outline"
                             size="sm"
@@ -393,6 +425,31 @@ export function LessonManager({ initialChapters }: { initialChapters: ChapterDto
           ))}
         </div>
       )}
+
+      {/* §18: popup "+ Bài giảng" — 2 nút: Tạo bài giảng (sang màn
+          hình tạo thủ công) / Huỷ. Nạp từ file nằm ở màn hình tạo bài
+          và trên thẻ bài, không nằm trong popup này. */}
+      <Dialog open={createChoice !== null} onOpenChange={(v) => !v && setCreateChoice(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Thêm bài giảng vào chương {createChoice?.chapterTitle}</DialogTitle>
+            <DialogDescription>
+              Bài mới được tạo ở trạng thái Nháp và mở ngay ở màn hình tạo bài thủ công — bạn đặt
+              tên, thêm từng điểm kiến thức, hoặc bấm "Nạp từ file" ngay dưới tên bài để nạp nội
+              dung từ file vào bài.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateChoice(null)}>
+              Huỷ
+            </Button>
+            <Button onClick={startManualCreate} disabled={isPending}>
+              <Plus className="h-4 w-4" />
+              Tạo bài giảng
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Chapter dialog */}
       <Dialog open={chapterDialog !== null} onOpenChange={(v) => !v && setChapterDialog(null)}>

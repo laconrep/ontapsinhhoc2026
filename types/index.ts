@@ -51,7 +51,12 @@ export interface ChapterDto {
 export interface LessonDto {
   id: string
   title: string
-  chapterId: string
+  /** §18: null khi bài "lưu tại lớp" (không thuộc chương/thư viện). */
+  chapterId: string | null
+  /** §18: lớp sở hữu khi bài lưu tại lớp; null với bài thư viện. */
+  classId?: string | null
+  /** §18: tên file đã nạp vào bài (null = bài tạo thủ công, chưa nạp file). */
+  originalFileKey?: string | null
   order: number
   status: "draft" | "processing" | "ready" | "error"
   knowledgePointCount?: number

@@ -125,7 +125,12 @@ srcIncludes("components/student/tab3-drag-drop.tsx", "slots.length === 0", "BUG-
 // ---- BUG-02: import liên kết KP + transaction (đối chiếu nguồn) ----
 srcIncludes("lib/worksheet-import.ts", "db.transaction", "BUG-02: persistParseResult phải bọc transaction")
 srcIncludes("lib/worksheet-import.ts", ".returning({ id: knowledgePoints.id })", "BUG-02: insert KP phải lấy id")
-srcIncludes("lib/worksheet-import.ts", "knowledgePointId: kpRow.id", "BUG-02: câu hỏi phải gán knowledgePointId của KP chứa nó")
+// §18: insert câu hỏi đã tách sang helper insertParsedQuestion dùng
+// chung (tạo mới + nạp cộng thêm) — bất biến BUG-02 giữ nguyên: helper
+// gán knowledgePointId từ tham số kpId và đường tạo mới truyền đúng
+// kpRow.id của KP chứa câu.
+srcIncludes("lib/worksheet-import.ts", "knowledgePointId: kpId", "BUG-02: câu hỏi phải gán knowledgePointId của KP chứa nó")
+srcIncludes("lib/worksheet-import.ts", "insertParsedQuestion(tx, lessonId, kpRow.id, pQ, qOrder++)", "BUG-02: đường tạo mới phải truyền kpRow.id của KP chứa câu vào helper")
 srcExcludes("lib/worksheet-import.ts", "knowledgePointId: null", "BUG-02: không còn gán cứng knowledgePointId null")
 
 // ---- BUG-08: SA nhiều đáp án ----

@@ -319,6 +319,18 @@ export async function submitJobResult(
       if (line != null) meta.filledAnswerLines.push(line)
     }
   }
+  // §18: bài nào có tên do AI đặt -> ghi chỉ số phẳng vào meta để
+  // importer ép trạng thái nháp khi lưu (GV duyệt tên rồi mới sẵn sàng).
+  {
+    const draftIdx: number[] = []
+    let li = 0
+    for (const c of result.chapters)
+      for (const l of c.lessons) {
+        if (l.titleGeneratedByAi) draftIdx.push(li)
+        li++
+      }
+    if (draftIdx.length > 0) meta.draftLessonIndexes = draftIdx
+  }
   // §16: bản đồ từ nhiễu theo vị trí bài/KP (thứ tự phẳng hoá giống
   // thứ tự persistParseResult tạo bài) để gắn vào KP sau khi GV lưu.
   meta.distractors = []

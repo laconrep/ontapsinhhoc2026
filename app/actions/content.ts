@@ -3,9 +3,12 @@
 import { db, ensureSchema } from "@/lib/db"
 import {
   chapters,
+  classes,
+  classAssignments,
   lessons,
   knowledgePoints,
   questions,
+  questionOptions,
   spacedRepetition,
   studentProgress,
 } from "@/lib/db/schema"
@@ -34,6 +37,7 @@ export async function getChaptersWithLessons(): Promise<ChapterDto[]> {
       chapterId: lessons.chapterId,
       order: lessons.order,
       status: lessons.status,
+      originalFileKey: lessons.originalFileKey,
       kpCount: sql<number>`count(${knowledgePoints.id})`.as("kpCount"),
     })
     .from(lessons)
@@ -54,6 +58,8 @@ export async function getChaptersWithLessons(): Promise<ChapterDto[]> {
         chapterId: l.chapterId,
         order: l.order,
         status: l.status,
+        // §18: thẻ bài hiện "Đã nạp file" khi bài từng được nạp từ file.
+        originalFileKey: l.originalFileKey,
         knowledgePointCount: Number(l.kpCount),
       })),
   }))
@@ -127,6 +133,164 @@ export async function createLesson(chapterId: string, title: string): Promise<{ 
   return row
 }
 
+/**
+ * §18: tạo bài "lưu tại lớp" từ tab Lớp học — bài không vào thư viện
+ * (chapterId = null, classId = lớp), kèm dòng giao bài cho chính lớp
+ * đó để hiện ngay trong danh sách của lớp (HS chỉ học khi bài ready).
+ */
+export async function createClassLesson(
+  classId: string,
+  title: string,
+): Promise<{ id: string }> {
+  const user = await requireRole("teacher")
+  await ensureSchema()
+  if (!title.trim()) throw new Error("Tên bài giảng không được để trống")
+  const [cls] = await db
+    .select({ id: classes.id })
+    .from(classes)
+    .where(and(eq(classes.id, classId), eq(classes.teacherId, user.id)))
+    .limit(1)
+  if (!cls) throw new Error("Không tìm thấy lớp học")
+
+  const countRes = await db
+    .select({ c: sql<number>`count(*)` })
+    .from(lessons)
+    .where(eq(lessons.classId, classId))
+  const [row] = await db
+    .insert(lessons)
+    .values({
+      title: title.trim(),
+      chapterId: null,
+      classId,
+      teacherId: user.id,
+      order: Number(countRes[0]?.c ?? 0),
+      status: "draft",
+    })
+    .returning({ id: lessons.id })
+  await db
+    .insert(classAssignments)
+    .values({ classId, lessonId: row.id, teacherId: user.id })
+    .onConflictDoNothing({ target: [classAssignments.classId, classAssignments.lessonId] })
+  revalidatePath(`/teacher/classes/${classId}`)
+  return row
+}
+
+/** §18: thông tin bài đích cho trang nạp bài (nạp cộng thêm vào bài). */
+export async function getLessonForImport(lessonId: string): Promise<{
+  id: string
+  title: string
+  chapterTitle: string
+  classId: string | null
+} | null> {
+  const user = await requireRole("teacher")
+  await ensureSchema()
+  const [row] = await db
+    .select({
+      id: lessons.id,
+      title: lessons.title,
+      chapterId: lessons.chapterId,
+      classId: lessons.classId,
+      chapterTitle: chapters.title,
+      className: classes.name,
+    })
+    .from(lessons)
+    .leftJoin(chapters, eq(chapters.id, lessons.chapterId))
+    .leftJoin(classes, eq(classes.id, lessons.classId))
+    .where(and(eq(lessons.id, lessonId), eq(lessons.teacherId, user.id)))
+    .limit(1)
+  if (!row) return null
+  return {
+    id: row.id,
+    title: row.title,
+    chapterTitle:
+      row.chapterTitle ??
+      (row.classId ? `Bài tại lớp ${row.className ?? ""}`.trim() : "Chưa phân chương"),
+    classId: row.classId,
+  }
+}
+
+/**
+ * §18: ảnh chụp nội dung hiện có của bài đích — importer dùng để tính
+ * cảnh báo trùng ở bản xem trước khi nạp cộng thêm (server tính lại
+ * lúc lưu làm kết quả chính thức).
+ */
+export async function getLessonDedupeSnapshot(lessonId: string): Promise<{
+  kps: { id: string; content: string }[]
+  questions: {
+    knowledgePointId: string
+    type: string
+    content: string
+    options: string[]
+    correctAnswer: string | null
+  }[]
+}> {
+  const user = await requireRole("teacher")
+  await ensureSchema()
+  const [own] = await db
+    .select({ id: lessons.id })
+    .from(lessons)
+    .where(and(eq(lessons.id, lessonId), eq(lessons.teacherId, user.id)))
+    .limit(1)
+  if (!own) throw new Error("Không tìm thấy bài giảng")
+
+  const kps = await db
+    .select({ id: knowledgePoints.id, content: knowledgePoints.content })
+    .from(knowledgePoints)
+    .where(eq(knowledgePoints.lessonId, lessonId))
+    .orderBy(asc(knowledgePoints.order))
+  const qs = await db
+    .select({
+      id: questions.id,
+      knowledgePointId: questions.knowledgePointId,
+      type: questions.type,
+      content: questions.content,
+    })
+    .from(questions)
+    .where(eq(questions.lessonId, lessonId))
+    .orderBy(asc(questions.order))
+  const opts = qs.length
+    ? await db
+        .select({
+          questionId: questionOptions.questionId,
+          content: questionOptions.content,
+          isCorrect: questionOptions.isCorrect,
+        })
+        .from(questionOptions)
+        .where(
+          sql`${questionOptions.questionId} in (${sql.join(
+            qs.map((q) => sql`${q.id}`),
+            sql`, `,
+          )})`,
+        )
+        .orderBy(asc(questionOptions.order))
+    : []
+  const byQ = new Map<string, { content: string; isCorrect: boolean }[]>()
+  for (const o of opts) {
+    const list = byQ.get(o.questionId) ?? []
+    list.push({ content: o.content, isCorrect: o.isCorrect })
+    byQ.set(o.questionId, list)
+  }
+  return {
+    kps,
+    questions: qs.map((q) => {
+      const list = byQ.get(q.id) ?? []
+      return {
+        knowledgePointId: q.knowledgePointId ?? "",
+        type: q.type,
+        content: q.content,
+        options: q.type === "SA" ? [] : list.map((o) => o.content),
+        correctAnswer:
+          q.type === "SA"
+            ? list
+                .filter((o) => o.isCorrect)
+                .map((o) => o.content)
+                .join(" | ")
+            : null,
+      }
+    }),
+  }
+}
+
 export async function updateLesson(
   id: string,
   data: { title?: string; status?: LessonDto["status"] },
@@ -156,19 +320,31 @@ export async function getLessonDetail(id: string): Promise<{
   const user = await requireRole("teacher")
   noStore()
   await ensureSchema()
-  const [lesson] = await db
+  const [lessonRow] = await db
     .select({
       id: lessons.id,
       title: lessons.title,
       chapterId: lessons.chapterId,
+      classId: lessons.classId,
       order: lessons.order,
       status: lessons.status,
+      originalFileKey: lessons.originalFileKey,
       chapterTitle: chapters.title,
+      className: classes.name,
     })
     .from(lessons)
-    .innerJoin(chapters, eq(chapters.id, lessons.chapterId))
+    .leftJoin(chapters, eq(chapters.id, lessons.chapterId))
+    .leftJoin(classes, eq(classes.id, lessons.classId))
     .where(and(eq(lessons.id, id), eq(lessons.teacherId, user.id)))
-  if (!lesson) return null
+  if (!lessonRow) return null
+  // §18: bài tại lớp không có chương — hiện ngữ cảnh lớp thay thế.
+  const { className, ...lessonRest } = lessonRow
+  const lesson = {
+    ...lessonRest,
+    chapterTitle:
+      lessonRow.chapterTitle ??
+      (lessonRow.classId ? `Bài tại lớp ${className ?? ""}`.trim() : "Chưa phân chương"),
+  }
 
   const kps = await db
     .select({

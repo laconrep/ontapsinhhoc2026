@@ -10,7 +10,7 @@ import {
   removeAssignment,
   updateAssignment,
 } from "@/app/actions/assignments"
-import { createLesson, getChapterOptions } from "@/app/actions/content"
+import { createClassLesson, createLesson, getChapterOptions } from "@/app/actions/content"
 import type { ClassAssignmentDto } from "@/types"
 import Link from "next/link"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -86,10 +86,13 @@ export function ClassAssignments({
   const [loadingChapters, setLoadingChapters] = useState(false)
   const [newChapterId, setNewChapterId] = useState("")
   const [newTitle, setNewTitle] = useState("")
+  // §18: tạo bài trống từ tab Lớp — lưu vào thư viện hay tại lớp.
+  const [createTarget, setCreateTarget] = useState<"library" | "class">("library")
 
   function openCreate() {
     setCreateOpen(true)
     setCreateStep("choose")
+    setCreateTarget("library")
     setNewTitle("")
     setNewChapterId("")
     setLoadingChapters(true)
@@ -103,14 +106,24 @@ export function ClassAssignments({
   }
 
   function handleCreate() {
-    if (!newChapterId || !newTitle.trim()) {
-      toast.error("Hãy chọn chương và nhập tên bài giảng")
+    if (!newTitle.trim()) {
+      toast.error("Hãy nhập tên bài giảng")
+      return
+    }
+    if (createTarget === "library" && !newChapterId) {
+      toast.error("Hãy chọn chương để lưu vào thư viện")
       return
     }
     startTransition(async () => {
       try {
-        await createLesson(newChapterId, newTitle)
-        toast.success("Đã tạo bài giảng — bài nằm ở tab Bài giảng, giao cho lớp khi đã sẵn sàng")
+        if (createTarget === "class") {
+          // §18: bài chỉ nằm trong lớp này, không vào thư viện.
+          await createClassLesson(classId, newTitle)
+          toast.success("Đã tạo bài tại lớp — mở bài trong danh sách để soạn nội dung")
+        } else {
+          await createLesson(newChapterId, newTitle)
+          toast.success("Đã tạo bài giảng — bài nằm ở tab Bài giảng, giao cho lớp khi đã sẵn sàng")
+        }
         setCreateOpen(false)
         router.refresh()
       } catch (err) {
@@ -334,7 +347,7 @@ export function ClassAssignments({
             <DialogDescription>
               {createStep === "choose"
                 ? "Chọn cách tạo bài — giống hệt các cách tạo bài ở tab Bài giảng."
-                : "Bài trống sẽ ở trạng thái Nháp, soạn nội dung sau ở tab Bài giảng."}
+                : "Bài trống sẽ ở trạng thái Nháp. Chọn lưu vào thư viện hoặc chỉ tại lớp này."}
             </DialogDescription>
           </DialogHeader>
           {createStep === "choose" ? (
@@ -351,8 +364,8 @@ export function ClassAssignments({
                 <span className="text-left">
                   <span className="block font-medium">Nạp từ file</span>
                   <span className="block text-xs text-muted-foreground">
-                    File worksheet .txt/.docx/.pdf. Hết lỗi mới lưu được; lưu xong bài sẵn
-                    sàng và được giao luôn cho lớp này.
+                    File worksheet .txt/.docx/.pdf. Hết lỗi mới lưu được; khi lưu bạn chọn
+                    vào thư viện (giao luôn cho lớp này) hoặc chỉ tại lớp.
                   </span>
                 </span>
               </Link>
@@ -368,8 +381,8 @@ export function ClassAssignments({
                 <span className="text-left">
                   <span className="block font-medium">Tạo bài trống</span>
                   <span className="block text-xs text-muted-foreground">
-                    Chỉ cần chọn chương và đặt tên — như nút tạo bài ở tab Bài giảng, soạn
-                    nội dung sau.
+                    Đặt tên rồi chọn lưu vào thư viện hoặc chỉ tại lớp này — soạn nội dung
+                    sau.
                   </span>
                 </span>
               </button>
@@ -383,26 +396,64 @@ export function ClassAssignments({
             <>
               <div className="grid gap-3">
             <div className="grid gap-1.5">
-              <Label htmlFor="create-chapter">Chương</Label>
-              <select
-                id="create-chapter"
-                value={newChapterId}
-                onChange={(e) => setNewChapterId(e.target.value)}
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                disabled={loadingChapters || chapters.length === 0}
-              >
-                {chapters.map((ch) => (
-                  <option key={ch.id} value={ch.id}>
-                    {ch.title}
-                  </option>
-                ))}
-              </select>
-              {!loadingChapters && chapters.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Chưa có chương nào. Hãy tạo chương ở tab Bài giảng trước.
-                </p>
-              ) : null}
+              <span className="text-sm font-medium">Lưu bài vào</span>
+              <div className="grid gap-2">
+                <label className="flex cursor-pointer items-start gap-2 rounded-md border p-3 hover:bg-muted/50">
+                  <input
+                    type="radio"
+                    name="create-target"
+                    className="mt-1 size-4 accent-primary"
+                    checked={createTarget === "library"}
+                    onChange={() => setCreateTarget("library")}
+                  />
+                  <span>
+                    <span className="block text-sm font-medium">Thư viện (tab Bài giảng)</span>
+                    <span className="block text-xs text-muted-foreground">
+                      Dùng lại được cho lớp khác; giao cho lớp này khi bài sẵn sàng.
+                    </span>
+                  </span>
+                </label>
+                <label className="flex cursor-pointer items-start gap-2 rounded-md border p-3 hover:bg-muted/50">
+                  <input
+                    type="radio"
+                    name="create-target"
+                    className="mt-1 size-4 accent-primary"
+                    checked={createTarget === "class"}
+                    onChange={() => setCreateTarget("class")}
+                  />
+                  <span>
+                    <span className="block text-sm font-medium">Chỉ tại lớp này</span>
+                    <span className="block text-xs text-muted-foreground">
+                      Bài không vào thư viện, không giao lại cho lớp khác được.
+                    </span>
+                  </span>
+                </label>
+              </div>
             </div>
+            {createTarget === "library" ? (
+              <div className="grid gap-1.5">
+                <Label htmlFor="create-chapter">Chương</Label>
+                <select
+                  id="create-chapter"
+                  value={newChapterId}
+                  onChange={(e) => setNewChapterId(e.target.value)}
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  disabled={loadingChapters || chapters.length === 0}
+                >
+                  {chapters.map((ch) => (
+                    <option key={ch.id} value={ch.id}>
+                      {ch.title}
+                    </option>
+                  ))}
+                </select>
+                {!loadingChapters && chapters.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Chưa có chương nào. Hãy tạo chương ở tab Bài giảng trước, hoặc chọn lưu
+                    tại lớp.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             <div className="grid gap-1.5">
               <Label htmlFor="create-title">Tên bài giảng</Label>
               <Input
@@ -427,7 +478,11 @@ export function ClassAssignments({
                 </Button>
                 <Button
                   onClick={handleCreate}
-                  disabled={pending || chapters.length === 0 || !newTitle.trim()}
+                  disabled={
+                    pending ||
+                    !newTitle.trim() ||
+                    (createTarget === "library" && chapters.length === 0)
+                  }
                 >
                   Tạo bài giảng
                 </Button>

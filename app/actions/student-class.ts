@@ -112,7 +112,7 @@ export async function getStudentLessons(): Promise<ChapterDto[]> {
     .groupBy(lessons.id)
     .orderBy(asc(lessons.order), asc(lessons.createdAt))
 
-  return chapterRows
+  const grouped: ChapterDto[] = chapterRows
     .map((c) => ({
       id: c.id,
       title: c.title,
@@ -129,4 +129,59 @@ export async function getStudentLessons(): Promise<ChapterDto[]> {
         })),
     }))
     .filter((c) => c.lessons.length > 0)
+
+  // §18: bài "lưu tại lớp" (chapterId = null, classId = lớp của HS) —
+  // gom thành một nhóm riêng theo từng lớp để HS vẫn học được.
+  const myClasses = await db
+    .select({ id: classes.id, name: classes.name })
+    .from(classStudents)
+    .innerJoin(classes, eq(classes.id, classStudents.classId))
+    .where(eq(classStudents.studentId, student.id))
+  if (myClasses.length > 0) {
+    const scopedRows = await db
+      .select({
+        id: lessons.id,
+        title: lessons.title,
+        chapterId: lessons.chapterId,
+        classId: lessons.classId,
+        order: lessons.order,
+        status: lessons.status,
+        kpCount: sql<number>`count(${knowledgePoints.id})`.as("kpCount"),
+      })
+      .from(lessons)
+      .leftJoin(knowledgePoints, eq(knowledgePoints.lessonId, lessons.id))
+      .where(
+        and(
+          inArray(
+            lessons.classId,
+            myClasses.map((c) => c.id),
+          ),
+          eq(lessons.status, "ready"),
+        ),
+      )
+      .groupBy(lessons.id)
+      .orderBy(asc(lessons.order), asc(lessons.createdAt))
+    myClasses.forEach((cls, i) => {
+      const ls = scopedRows
+        .filter((l) => l.classId === cls.id && Number(l.kpCount) > 0)
+        .map((l) => ({
+          id: l.id,
+          title: l.title,
+          chapterId: l.chapterId,
+          order: l.order,
+          status: l.status,
+          knowledgePointCount: Number(l.kpCount),
+        }))
+      if (ls.length > 0) {
+        grouped.push({
+          id: `class:${cls.id}`,
+          title: `Bài tại lớp ${cls.name}`,
+          order: 10000 + i,
+          lessons: ls,
+        })
+      }
+    })
+  }
+
+  return grouped
 }

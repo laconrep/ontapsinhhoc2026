@@ -5,6 +5,7 @@ import {
   parseMediaArray,
   saveWorksheetBuffer,
   saveWorksheetFromText,
+  type PersistOptions,
 } from "@/lib/worksheet-import"
 import { hitRateLimit } from "@/lib/rate-limit"
 import { safeErrorMessage } from "@/lib/api-error"
@@ -40,17 +41,41 @@ export async function POST(req: Request) {
 
   try {
     const formData = await req.formData()
+    // §18: đích đến do trang nạp bài chọn — ép chương / lưu tại lớp /
+    // nạp cộng thêm vào bài có sẵn / các bài bị ép nháp (tên do AI đặt).
+    const strField = (name: string): string | undefined => {
+      const v = formData.get(name)
+      return typeof v === "string" && v ? v : undefined
+    }
+    const options: PersistOptions = {
+      targetChapterId: strField("targetChapterId"),
+      classId: strField("classId"),
+      intoLessonId: strField("intoLessonId"),
+    }
+    const rawDraftIdx = strField("draftLessonIndexes")
+    if (rawDraftIdx) {
+      try {
+        const parsed = JSON.parse(rawDraftIdx) as unknown
+        if (Array.isArray(parsed)) {
+          options.draftLessonIndexes = parsed.filter(
+            (x): x is number => typeof x === "number" && Number.isInteger(x) && x >= 0,
+          )
+        }
+      } catch {
+        // JSON hỏng -> bỏ qua, không chặn lưu.
+      }
+    }
     const text = formData.get("text")
     if (typeof text === "string") {
       const rawName = formData.get("filename")
       const filename = typeof rawName === "string" && rawName ? rawName : "draft.txt"
       const images = parseMediaArray(formData.get("images"))
       const tables = parseMediaArray(formData.get("tables"))
-      const result = await saveWorksheetFromText(user, text, filename, images, tables)
+      const result = await saveWorksheetFromText(user, text, filename, images, tables, options)
       return NextResponse.json(result)
     }
     const { buffer, filename } = await bufferFromFormData(formData)
-    const result = await saveWorksheetBuffer(user, buffer, filename)
+    const result = await saveWorksheetBuffer(user, buffer, filename, options)
     return NextResponse.json(result)
   } catch (e) {
     // SEC-09: chỉ trả message nghiệp vụ đã biết; lỗi lạ -> thông báo chung.

@@ -1,5 +1,14 @@
 import { db, ensureSchema } from "@/lib/db"
-import { chapters, lessons, knowledgePoints, questions, questionOptions } from "@/lib/db/schema"
+import {
+  chapters,
+  classes,
+  classAssignments,
+  lessons,
+  knowledgePoints,
+  questions,
+  questionOptions,
+} from "@/lib/db/schema"
+import { computeAppendPlan, type ExistingQuestionRef } from "@/lib/append-dedupe"
 import { and, eq, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { extractAndParse, MAX_FILE_SIZE } from "@/lib/extract-file"
@@ -12,6 +21,8 @@ import {
   attachOptionBodyHtml,
   splitSaAcceptedAnswers,
   type ParseResult,
+  type ParsedKnowledgePoint,
+  type ParsedQuestion,
   type ValidationError,
 } from "@/lib/worksheet-parser"
 import type { SessionUser } from "@/lib/auth-helpers"
@@ -36,6 +47,29 @@ export interface SaveResult {
   createdKps: number
   createdQuestions: number
   lessonIds: string[]
+  /** §18: kết quả nạp cộng thêm vào bài có sẵn (chỉ có ở chế độ intoLesson). */
+  appended?: { addedKps: number; addedQuestions: number; skippedQuestions: number }
+  /** §18: cảnh báo trùng chính thức do server tính lại lúc lưu. */
+  duplicateWarnings?: string[]
+}
+
+/** §18: tuỳ chọn đích đến cho một lượt lưu từ trang nạp bài. */
+export interface PersistOptions {
+  /** Ép mọi bài trong file vào đúng chương này (chọn ở giao diện). */
+  targetChapterId?: string
+  /** Lưu tại lớp: bài không vào thư viện (chapterId = null, classId = lớp). */
+  classId?: string
+  /** Nạp cộng thêm vào một bài có sẵn thay vì tạo bài mới. */
+  intoLessonId?: string
+  /** Chỉ số bài (phẳng, theo thứ tự trong file) bị ép trạng thái nháp —
+   * dùng cho bản AI khi tên bài do AI đặt (GV phải duyệt tên). */
+  draftLessonIndexes?: number[]
+}
+
+function fallbackLessonTitle(filename: string): string {
+  const base = filename.split(/[\\/]/).pop() ?? ""
+  const stripped = base.replace(/\.(docx|pdf|txt)$/i, "").trim()
+  return stripped || "Bài chưa đặt tên"
 }
 
 export function previewParseResult(result: ParseResult): ParseResult {
@@ -91,15 +125,98 @@ function toTxtFilename(filename: string) {
   return filename.replace(/\.[^.]+$/, "") + ".txt"
 }
 
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+/** Chèn 1 câu hỏi đã parse (kèm options) — dùng chung cho tạo bài mới và nạp cộng thêm. */
+async function insertParsedQuestion(
+  tx: Tx,
+  lessonId: string,
+  kpId: string,
+  pQ: ParsedQuestion,
+  order: number,
+): Promise<void> {
+  const [qRow] = await tx
+    .insert(questions)
+    .values({
+      lessonId,
+      // BUG-02: câu hỏi thuộc về KP chứa nó (trước đây gán cứng null
+      // làm Tab 4 rơi vào chế độ ngẫu nhiên và mất seed spaced repetition).
+      knowledgePointId: kpId,
+      order,
+      type: pQ.type,
+      content: pQ.content,
+      // §15.3: giải chi tiết đi cùng câu (text thuần, render dạng
+      // text phía client nên không qua sanitize HTML).
+      solution: pQ.solution?.trim() ? pQ.solution.trim() : null,
+      // SEC-02: bodyHtml (kể cả từ images/tables client gửi) phải
+      // qua sanitize phía server trước khi lưu.
+      bodyHtml: sanitizeBodyHtml(pQ.bodyHtml),
+      difficulty: 1,
+    })
+    .returning({ id: questions.id })
+
+  if (pQ.type === "SA") {
+    // BUG-08: "dap an: x | y" = chấp nhận x HOẶC y — mỗi vế một
+    // option isCorrect (gradeSA đã nhận danh sách accepted).
+    const acceptedParts = splitSaAcceptedAnswers(pQ.correctAnswer)
+    const acceptedList = acceptedParts.length > 0 ? acceptedParts : [pQ.correctAnswer ?? ""]
+    await tx.insert(questionOptions).values(
+      acceptedList.map((content, i) => ({
+        questionId: qRow.id,
+        content,
+        isCorrect: true,
+        order: i,
+      })),
+    )
+  } else if (pQ.options.length > 0) {
+    await tx.insert(questionOptions).values(
+      pQ.options.map((o, i) => ({
+        questionId: qRow.id,
+        content: o.content,
+        bodyHtml: sanitizeBodyHtml(o.bodyHtml),
+        isCorrect: o.isCorrect,
+        order: i,
+      })),
+    )
+  }
+}
+
 async function persistParseResult(
   user: SessionUser,
   parseResult: ParseResult,
   filename: string,
+  options: PersistOptions = {},
 ): Promise<SaveResult> {
   await ensureSchema()
   const validation = validateDocument(parseResult)
   if (!validation.isValid) {
     throw new Error("Tài liệu chưa hợp lệ, không thể lưu. Vui lòng kiểm tra lại.")
+  }
+
+  // §18: kiểm tra quyền sở hữu các đích đến trước khi ghi.
+  if (options.targetChapterId) {
+    const [ch] = await db
+      .select({ id: chapters.id })
+      .from(chapters)
+      .where(and(eq(chapters.id, options.targetChapterId), eq(chapters.teacherId, user.id)))
+      .limit(1)
+    if (!ch) throw new Error("Không tìm thấy chương đích")
+  }
+  if (options.classId) {
+    const [cl] = await db
+      .select({ id: classes.id })
+      .from(classes)
+      .where(and(eq(classes.id, options.classId), eq(classes.teacherId, user.id)))
+      .limit(1)
+    if (!cl) throw new Error("Không tìm thấy lớp đích")
+  }
+  if (options.intoLessonId) {
+    const [ls] = await db
+      .select({ id: lessons.id })
+      .from(lessons)
+      .where(and(eq(lessons.id, options.intoLessonId), eq(lessons.teacherId, user.id)))
+      .limit(1)
+    if (!ls) throw new Error("Không tìm thấy bài đích")
   }
 
   const result: SaveResult = {
@@ -113,127 +230,235 @@ async function persistParseResult(
   // BUG-02: toàn bộ import trong MỘT transaction — lỗi giữa chừng thì
   // không để lại bài dở dang (trước đây insert rời từng dòng).
   await db.transaction(async (tx) => {
-  for (const pChapter of parseResult.chapters) {
-    const [existingChapter] = await tx
-      .select({ id: chapters.id })
-      .from(chapters)
-      .where(and(eq(chapters.teacherId, user.id), eq(chapters.title, pChapter.title)))
-      .limit(1)
-
-    let chapterId: string
-    if (existingChapter) {
-      chapterId = existingChapter.id
-    } else {
-      const [countRow] = await tx
-        .select({ c: sql<number>`count(*)` })
-        .from(chapters)
-        .where(eq(chapters.teacherId, user.id))
-      const [row] = await tx
-        .insert(chapters)
-        .values({ title: pChapter.title, teacherId: user.id, order: Number(countRow?.c ?? 0) })
-        .returning({ id: chapters.id })
-      chapterId = row.id
-      result.createdChapters += 1
+    // ---- §18: nạp CỘNG THÊM vào một bài có sẵn ----
+    if (options.intoLessonId) {
+      const targetId = options.intoLessonId
+      const existingKps = await tx
+        .select({ id: knowledgePoints.id, content: knowledgePoints.content, order: knowledgePoints.order })
+        .from(knowledgePoints)
+        .where(eq(knowledgePoints.lessonId, targetId))
+        .orderBy(knowledgePoints.order)
+      const existingQs = await tx
+        .select({
+          id: questions.id,
+          knowledgePointId: questions.knowledgePointId,
+          type: questions.type,
+          content: questions.content,
+        })
+        .from(questions)
+        .where(eq(questions.lessonId, targetId))
+      const existingOpts = existingQs.length
+        ? await tx
+            .select({
+              questionId: questionOptions.questionId,
+              content: questionOptions.content,
+              isCorrect: questionOptions.isCorrect,
+              order: questionOptions.order,
+            })
+            .from(questionOptions)
+            .where(
+              sql`${questionOptions.questionId} in (${sql.join(
+                existingQs.map((q) => sql`${q.id}`),
+                sql`, `,
+              )})`,
+            )
+            .orderBy(questionOptions.order)
+        : []
+      const optsByQ = new Map<string, { content: string; isCorrect: boolean }[]>()
+      for (const o of existingOpts) {
+        const list = optsByQ.get(o.questionId) ?? []
+        list.push({ content: o.content, isCorrect: o.isCorrect })
+        optsByQ.set(o.questionId, list)
+      }
+      const existingRefs: ExistingQuestionRef[] = existingQs.map((q) => {
+        const opts = optsByQ.get(q.id) ?? []
+        return {
+          knowledgePointId: q.knowledgePointId ?? "",
+          type: q.type,
+          content: q.content,
+          options: q.type === "SA" ? [] : opts.map((o) => o.content),
+          correctAnswer:
+            q.type === "SA"
+              ? opts
+                  .filter((o) => o.isCorrect)
+                  .map((o) => o.content)
+                  .join(" | ")
+              : null,
+        }
+      })
+      const incoming: ParsedKnowledgePoint[] = parseResult.chapters.flatMap((c) =>
+        c.lessons.flatMap((l) => l.knowledgePoints),
+      )
+      const plan = computeAppendPlan(
+        existingKps.map((k) => ({ id: k.id, content: k.content })),
+        existingRefs,
+        incoming,
+      )
+      // Thứ tự câu hỏi là bộ đếm toàn bài (như đường tạo mới) — câu
+      // cộng thêm nối tiếp sau câu cuối hiện có.
+      let qOrder = existingQs.length
+      let kpOrder = existingKps.length
+      for (const action of plan.actions) {
+        let kpId = action.targetKpId
+        if (!kpId) {
+          const prepared = prepareKpTermsForSave(action.source.content, action.source.underlinedTerms)
+          const [kpRow] = await tx
+            .insert(knowledgePoints)
+            .values({
+              lessonId: targetId,
+              content: prepared.content,
+              underlinedTerms: prepared.terms,
+              order: kpOrder++,
+            })
+            .returning({ id: knowledgePoints.id })
+          kpId = kpRow.id
+        }
+        for (const pQ of action.addQuestions) {
+          await insertParsedQuestion(tx, targetId, kpId, pQ, qOrder++)
+        }
+      }
+      await tx
+        .update(lessons)
+        .set({ originalFileKey: filename, updatedAt: new Date() })
+        .where(eq(lessons.id, targetId))
+      result.lessonIds = [targetId]
+      result.createdKps = plan.addedKps
+      result.createdQuestions = plan.addedQuestions
+      result.appended = {
+        addedKps: plan.addedKps,
+        addedQuestions: plan.addedQuestions,
+        skippedQuestions: plan.skippedQuestions,
+      }
+      result.duplicateWarnings = plan.warnings
+      return
     }
 
-    for (const pLesson of pChapter.lessons) {
+    // ---- Tạo bài mới (thư viện / tại lớp / ép chương đích) ----
+    const draftIdx = new Set(options.draftLessonIndexes ?? [])
+    let flatIdx = 0
+
+    // Chuẩn hoá thành các nhóm bài theo chương đích.
+    const groups: { chapterId: string | null; lessons: typeof parseResult.chapters[number]["lessons"] }[] = []
+    if (options.classId || options.targetChapterId) {
+      groups.push({
+        chapterId: options.classId ? null : (options.targetChapterId as string),
+        lessons: parseResult.chapters.flatMap((c) => c.lessons),
+      })
+    } else {
+      for (const pChapter of parseResult.chapters) {
+        const [existingChapter] = await tx
+          .select({ id: chapters.id })
+          .from(chapters)
+          .where(and(eq(chapters.teacherId, user.id), eq(chapters.title, pChapter.title)))
+          .limit(1)
+        let chapterId: string
+        if (existingChapter) {
+          chapterId = existingChapter.id
+        } else {
+          const [countRow] = await tx
+            .select({ c: sql<number>`count(*)` })
+            .from(chapters)
+            .where(eq(chapters.teacherId, user.id))
+          const [row] = await tx
+            .insert(chapters)
+            .values({ title: pChapter.title, teacherId: user.id, order: Number(countRow?.c ?? 0) })
+            .returning({ id: chapters.id })
+          chapterId = row.id
+          result.createdChapters += 1
+        }
+        groups.push({ chapterId, lessons: pChapter.lessons })
+      }
+    }
+
+    for (const group of groups) {
       const existing = await tx
         .select({ title: lessons.title })
         .from(lessons)
-        .where(and(eq(lessons.chapterId, chapterId), eq(lessons.teacherId, user.id)))
+        .where(
+          group.chapterId
+            ? and(eq(lessons.chapterId, group.chapterId), eq(lessons.teacherId, user.id))
+            : and(eq(lessons.classId, options.classId as string), eq(lessons.teacherId, user.id)),
+        )
       const titles = new Set(existing.map((e) => e.title))
-      let title = pLesson.title
-      let n = 2
-      while (titles.has(title)) {
-        title = `${pLesson.title} (${n})`
-        n += 1
-      }
-
-      const [lessonCount] = await tx
+      const [scopeCount] = await tx
         .select({ c: sql<number>`count(*)` })
         .from(lessons)
-        .where(eq(lessons.chapterId, chapterId))
-      const [lessonRow] = await tx
-        .insert(lessons)
-        .values({
-          title,
-          chapterId,
-          teacherId: user.id,
-          order: Number(lessonCount?.c ?? 0),
-          status: "ready",
-          originalFileKey: filename,
-        })
-        .returning({ id: lessons.id })
-      const lessonId = lessonRow.id
-      result.createdLessons += 1
-      result.lessonIds.push(lessonId)
+        .where(
+          group.chapterId
+            ? eq(lessons.chapterId, group.chapterId)
+            : eq(lessons.classId, options.classId as string),
+        )
+      let nextOrder = Number(scopeCount?.c ?? 0)
 
-      let kpOrder = 0
-      let qOrder = 0
-      for (const pKp of pLesson.knowledgePoints) {
-        // BUG-01: không lưu KP nào mà offset không khớp nội dung.
-        const prepared = prepareKpTermsForSave(pKp.content, pKp.underlinedTerms)
-        const [kpRow] = await tx
-          .insert(knowledgePoints)
+      for (const pLesson of group.lessons) {
+        const myIdx = flatIdx++
+        // §18: tên do GV ghi trong file -> sẵn sàng; tên bỏ trống/AI đặt
+        // -> gán tên thay thế và để NHÁP chờ GV duyệt tên.
+        const titleMissing = pLesson.titleMissing === true || draftIdx.has(myIdx)
+        let title = titleMissing ? fallbackLessonTitle(filename) : pLesson.title
+        let n = 2
+        while (titles.has(title)) {
+          title = `${titleMissing ? fallbackLessonTitle(filename) : pLesson.title} (${n})`
+          n += 1
+        }
+        titles.add(title)
+
+        const [lessonRow] = await tx
+          .insert(lessons)
           .values({
-            lessonId,
-            content: prepared.content,
-            underlinedTerms: prepared.terms,
-            order: kpOrder++,
+            title,
+            chapterId: group.chapterId,
+            classId: options.classId ?? null,
+            teacherId: user.id,
+            order: nextOrder++,
+            status: titleMissing ? "draft" : "ready",
+            originalFileKey: filename,
           })
-          .returning({ id: knowledgePoints.id })
-        result.createdKps += 1
+          .returning({ id: lessons.id })
+        const lessonId = lessonRow.id
+        result.createdLessons += 1
+        result.lessonIds.push(lessonId)
 
-        for (const pQ of pKp.questions) {
-          const [qRow] = await tx
-            .insert(questions)
+        let kpOrder = 0
+        let qOrder = 0
+        for (const pKp of pLesson.knowledgePoints) {
+          // BUG-01: không lưu KP nào mà offset không khớp nội dung.
+          const prepared = prepareKpTermsForSave(pKp.content, pKp.underlinedTerms)
+          const [kpRow] = await tx
+            .insert(knowledgePoints)
             .values({
               lessonId,
-              // BUG-02: câu hỏi thuộc về KP chứa nó (trước đây gán cứng null
-              // làm Tab 4 rơi vào chế độ ngẫu nhiên và mất seed spaced repetition).
-              knowledgePointId: kpRow.id,
-              order: qOrder++,
-              type: pQ.type,
-              content: pQ.content,
-              // §15.3: giải chi tiết đi cùng câu (text thuần, render dạng
-              // text phía client nên không qua sanitize HTML).
-              solution: pQ.solution?.trim() ? pQ.solution.trim() : null,
-              // SEC-02: bodyHtml (kể cả từ images/tables client gửi) phải
-              // qua sanitize phía server trước khi lưu.
-              bodyHtml: sanitizeBodyHtml(pQ.bodyHtml),
-              difficulty: 1,
+              content: prepared.content,
+              underlinedTerms: prepared.terms,
+              order: kpOrder++,
             })
-            .returning({ id: questions.id })
-          result.createdQuestions += 1
+            .returning({ id: knowledgePoints.id })
+          result.createdKps += 1
 
-          if (pQ.type === "SA") {
-            // BUG-08: "dap an: x | y" = chấp nhận x HOẶC y — mỗi vế một
-            // option isCorrect (gradeSA đã nhận danh sách accepted).
-            const acceptedParts = splitSaAcceptedAnswers(pQ.correctAnswer)
-            const acceptedList = acceptedParts.length > 0 ? acceptedParts : [pQ.correctAnswer ?? ""]
-            await tx.insert(questionOptions).values(
-              acceptedList.map((content, i) => ({
-                questionId: qRow.id,
-                content,
-                isCorrect: true,
-                order: i,
-              })),
-            )
-          } else if (pQ.options.length > 0) {
-            await tx.insert(questionOptions).values(
-              pQ.options.map((o, i) => ({
-                questionId: qRow.id,
-                content: o.content,
-                bodyHtml: sanitizeBodyHtml(o.bodyHtml),
-                isCorrect: o.isCorrect,
-                order: i,
-              })),
-            )
+          for (const pQ of pKp.questions) {
+            await insertParsedQuestion(tx, lessonId, kpRow.id, pQ, qOrder++)
+            result.createdQuestions += 1
           }
         }
       }
     }
-  }
+
+    // §18: bài lưu tại lớp -> ghi luôn dòng giao bài cho chính lớp đó
+    // để tab Lớp và phía học sinh thấy bài (HS chỉ thấy khi bài ready).
+    if (options.classId && result.lessonIds.length > 0) {
+      await tx
+        .insert(classAssignments)
+        .values(
+          result.lessonIds.map((lessonId) => ({
+            classId: options.classId as string,
+            lessonId,
+            teacherId: user.id,
+          })),
+        )
+        .onConflictDoNothing({
+          target: [classAssignments.classId, classAssignments.lessonId],
+        })
+    }
   })
 
   revalidatePath("/teacher/lessons")
@@ -246,9 +471,10 @@ export async function saveWorksheetBuffer(
   user: SessionUser,
   buffer: Buffer,
   filename: string,
+  options: PersistOptions = {},
 ): Promise<SaveResult> {
   const { parseResult } = await extractAndParse(buffer, filename)
-  return persistParseResult(user, parseResult, filename)
+  return persistParseResult(user, parseResult, filename, options)
 }
 
 // SEC-02/SEC-06: giới hạn media do client gửi kèm text (images/tables là
@@ -298,7 +524,8 @@ export async function saveWorksheetFromText(
   filename: string,
   images?: string[],
   tables?: string[],
+  options: PersistOptions = {},
 ): Promise<SaveResult> {
   const parseResult = parseWorksheetText(text, images, tables)
-  return persistParseResult(user, parseResult, toTxtFilename(filename))
+  return persistParseResult(user, parseResult, toTxtFilename(filename), options)
 }

@@ -36,6 +36,9 @@ export interface ParsedLesson {
   title: string
   knowledgePoints: ParsedKnowledgePoint[]
   line: number
+  /** §18: dòng [bài] có nhưng để trống tên — khi lưu, hệ thống gán tên
+   * thay thế (AI/tên file) và để bài ở trạng thái nháp chờ GV duyệt. */
+  titleMissing?: boolean
 }
 
 export interface ParsedChapter {
@@ -712,12 +715,19 @@ export function parseTextContent(text: string): ParseResult {
       return
     }
 
-    const lessonMatch = line.match(/^\[(.+)\]$/)
+    const lessonMatch = line.match(/^\[(.*)\]$/)
     if (lessonMatch) {
       sawStructure = true
       closeQuestion()
       const chap = ensureChapter()
-      curLesson = { title: lessonMatch[1].trim(), knowledgePoints: [], line: lineNo }
+      const lessonTitle = lessonMatch[1].trim()
+      curLesson = {
+        title: lessonTitle,
+        knowledgePoints: [],
+        line: lineNo,
+        // §18: [] hoặc [ ] = GV bỏ trống tên bài.
+        titleMissing: lessonTitle === "" || undefined,
+      }
       chap.lessons.push(curLesson)
       curKp = null
       return
@@ -1141,8 +1151,20 @@ export function validateDocument(result: ParseResult): ValidationResult {
   }
 
   for (const lesson of lessons) {
+    // §18: tên bài bỏ trống không chặn lưu — cảnh báo để GV biết bài sẽ
+    // được gán tên thay thế và để ở trạng thái nháp chờ duyệt.
+    if (lesson.titleMissing) {
+      warnings.push({
+        line: lesson.line,
+        message:
+          "Bài chưa có tên trong file — khi lưu, hệ thống sẽ gán tên thay thế (AI hoặc tên file) và để bài ở trạng thái Nháp chờ bạn duyệt tên.",
+      })
+    }
     if (lesson.knowledgePoints.length === 0) {
-      errors.push({ line: lesson.line, message: `Bài "${lesson.title}" phải có ít nhất 1 điểm kiến thức` })
+      errors.push({
+        line: lesson.line,
+        message: `Bài "${lesson.title || "chưa đặt tên"}" phải có ít nhất 1 điểm kiến thức`,
+      })
     }
     for (const kp of lesson.knowledgePoints) {
       if (kp.underlinedTerms.length === 0) {

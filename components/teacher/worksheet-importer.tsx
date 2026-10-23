@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { assignLessons } from "@/app/actions/assignments"
 import { applyAiDistractors } from "@/app/actions/worksheet"
+import { createChapter, getLessonDedupeSnapshot } from "@/app/actions/content"
+import { computeAppendPlan, type AppendPlan } from "@/lib/append-dedupe"
 import {
   Download,
   Eye,
@@ -18,6 +20,8 @@ import {
   X,
 } from "lucide-react"
 import { Button, buttonVariants } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Dialog,
@@ -83,7 +87,13 @@ interface SaveResult {
   createdKps: number
   createdQuestions: number
   lessonIds: string[]
+  /** §18: nạp cộng thêm — số mục thực thêm vào bài đích. */
+  appended?: { addedKps: number; addedQuestions: number; skippedQuestions: number }
+  duplicateWarnings?: string[]
 }
+
+/** §18: đích lưu khi GV nạp bài từ tab Lớp học. */
+type SaveFork = { kind: "library"; chapterId: string } | { kind: "class" }
 
 async function postForm<T>(url: string, fd: FormData): Promise<T> {
   const res = await fetch(url, { method: "POST", body: fd })
@@ -102,9 +112,16 @@ const ACCEPT = ".txt,.docx,.pdf"
 
 export function WorksheetImporter({
   assignToClass,
+  intoLesson,
+  chapterOptions,
 }: {
   assignToClass?: { id: string; name: string } | null
+  /** §18: nạp cộng thêm vào bài này thay vì tạo bài mới. */
+  intoLesson?: { id: string; title: string; chapterTitle: string } | null
+  /** §18: các chương hiện có của GV cho ô chọn chương đích. */
+  chapterOptions?: { id: string; title: string }[]
 }) {
+  const chapters = chapterOptions ?? []
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
@@ -129,6 +146,48 @@ export function WorksheetImporter({
   // §16: id job AI của bản xem trước hiện tại — giữ lại sau khi aiJob
   // đã đóng, để gắn từ nhiễu vào bài ngay sau khi lưu.
   const aiJobIdRef = useRef<string | null>(null)
+  // --- Đích lưu (§18) ---
+  // Ngữ cảnh thường: chương đích ("" = theo chương trong file). Mặc
+  // định chọn sẵn chương đầu tiên để file form mới (không ghi chương)
+  // không rơi vào "Chương chưa đặt tên".
+  const [chapterChoice, setChapterChoice] = useState<string>(() => chapters[0]?.id ?? "")
+  const [newChapterName, setNewChapterName] = useState("")
+  // Từ tab Lớp: hộp thoại hỏi thư viện / tại lớp.
+  const [forkOpen, setForkOpen] = useState(false)
+  const [forkKind, setForkKind] = useState<"library" | "class">("library")
+  const [forkChapterChoice, setForkChapterChoice] = useState<string>(() => chapters[0]?.id ?? "")
+  const [forkNewChapterName, setForkNewChapterName] = useState("")
+  // Nạp cộng thêm: kế hoạch chống trùng tính ở bản xem trước.
+  const [appendPlan, setAppendPlan] = useState<AppendPlan | null>(null)
+  const [appendPlanLoading, setAppendPlanLoading] = useState(false)
+
+  // §18: đối chiếu trùng lặp mỗi khi bản xem trước thay đổi ở chế độ
+  // nạp cộng thêm (server tính lại lúc lưu làm kết quả chính thức).
+  useEffect(() => {
+    if (!intoLesson || !preview) {
+      setAppendPlan(null)
+      return
+    }
+    let cancelled = false
+    setAppendPlanLoading(true)
+    getLessonDedupeSnapshot(intoLesson.id)
+      .then((snap) => {
+        if (cancelled) return
+        const incoming = preview.parseResult.chapters.flatMap((c) =>
+          c.lessons.flatMap((l) => l.knowledgePoints),
+        )
+        setAppendPlan(computeAppendPlan(snap.kps, snap.questions, incoming))
+      })
+      .catch(() => {
+        if (!cancelled) setAppendPlan(null)
+      })
+      .finally(() => {
+        if (!cancelled) setAppendPlanLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [intoLesson, preview])
 
   function pickFile(f: File | null) {
     if (!f) return
@@ -436,6 +495,66 @@ export function WorksheetImporter({
 
   function doSave() {
     if (!file || !preview?.isValid) return
+    // §18: đi từ tab Lớp học -> hỏi trước: lưu vào thư viện hay tại lớp.
+    if (assignToClass && !intoLesson) {
+      setForkKind("library")
+      setForkChapterChoice((prev) => prev || chapters[0]?.id || "")
+      setForkOpen(true)
+      return
+    }
+    void proceedSave(null)
+  }
+
+  /** §18: xác nhận hộp thoại thư viện/tại lớp rồi mới lưu thật. */
+  async function confirmFork() {
+    if (!assignToClass) return
+    if (forkKind === "class") {
+      setForkOpen(false)
+      void proceedSave({ kind: "class" })
+      return
+    }
+    let chapterId = forkChapterChoice
+    if (chapterId === "__new__") {
+      if (!forkNewChapterName.trim()) {
+        toast.error("Hãy nhập tên chương mới")
+        return
+      }
+      try {
+        const created = await createChapter(forkNewChapterName.trim())
+        chapterId = created.id
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Không tạo được chương")
+        return
+      }
+    }
+    if (!chapterId) {
+      toast.error("Hãy chọn chương để lưu vào thư viện")
+      return
+    }
+    setForkOpen(false)
+    void proceedSave({ kind: "library", chapterId })
+  }
+
+  async function proceedSave(fork: SaveFork | null) {
+    if (!file || !preview?.isValid) return
+    // §18: ngữ cảnh thường + chọn "tạo chương mới" -> tạo trước lấy id.
+    let plainChapterId: string | undefined
+    if (!intoLesson && !assignToClass) {
+      if (chapterChoice === "__new__") {
+        if (!newChapterName.trim()) {
+          toast.error("Hãy nhập tên chương mới hoặc chọn một chương khác")
+          return
+        }
+        try {
+          plainChapterId = (await createChapter(newChapterName.trim())).id
+        } catch (e) {
+          toast.error(e instanceof Error ? e.message : "Không tạo được chương")
+          return
+        }
+      } else if (chapterChoice) {
+        plainChapterId = chapterChoice
+      }
+    }
     startSave(async () => {
       try {
         const fd = new FormData()
@@ -447,12 +566,27 @@ export function WorksheetImporter({
         } else {
           fd.append("file", file)
         }
+        // §18: đích lưu.
+        if (intoLesson) {
+          fd.append("intoLessonId", intoLesson.id)
+        } else if (fork?.kind === "class" && assignToClass) {
+          fd.append("classId", assignToClass.id)
+        } else if (fork?.kind === "library") {
+          fd.append("targetChapterId", fork.chapterId)
+        } else if (plainChapterId) {
+          fd.append("targetChapterId", plainChapterId)
+        }
+        // §18: tên bài do AI đặt -> server ép các bài đó sang nháp.
+        if (previewIsAiResult && aiMeta?.draftLessonIndexes?.length) {
+          fd.append("draftLessonIndexes", JSON.stringify(aiMeta.draftLessonIndexes))
+        }
         const res = await postForm<SaveResult>("/api/worksheet/save", fd)
         savedRef.current = true
         // §16: bản xem trước là kết quả AI -> gắn từ nhiễu kéo thả của
         // job vào các KP vừa tạo (lỗi ở bước này không chặn việc lưu:
         // Tab 3 tự quay về pool mặc định cho KP chưa có từ nhiễu).
-        if (previewIsAiResult && aiJobIdRef.current && res.lessonIds?.length) {
+        // Nạp cộng thêm thì bỏ qua: vị trí KP đã lệch sau khi gộp.
+        if (!intoLesson && previewIsAiResult && aiJobIdRef.current && res.lessonIds?.length) {
           try {
             await applyAiDistractors(aiJobIdRef.current, res.lessonIds)
           } catch {
@@ -474,7 +608,22 @@ export function WorksheetImporter({
             // Không chặn luồng lưu: việc còn listed thì GV ẩn tay được.
           }
         }
-        if (assignToClass && res.lessonIds?.length) {
+        if (intoLesson) {
+          const a = res.appended
+          toast.success(
+            a
+              ? `Đã nạp thêm vào bài "${intoLesson.title}": +${a.addedKps} điểm kiến thức, +${a.addedQuestions} câu hỏi${
+                  a.skippedQuestions > 0 ? `, bỏ qua ${a.skippedQuestions} câu trùng` : ""
+                }`
+              : "Đã nạp thêm vào bài",
+          )
+          router.push(`/teacher/lessons/${intoLesson.id}`)
+        } else if (fork?.kind === "class" && assignToClass) {
+          toast.success(
+            `Đã lưu ${res.createdLessons} bài tại lớp ${assignToClass.name} (không vào thư viện)`,
+          )
+          router.push(`/teacher/classes/${assignToClass.id}?tab=assignments`)
+        } else if (assignToClass && res.lessonIds?.length) {
           // Đi từ nút tắt trong tab Lớp học: lưu xong GIAO LUÔN các bài
           // vừa nạp cho lớp đó (bài nạp file đã ở trạng thái ready).
           try {
@@ -489,8 +638,16 @@ export function WorksheetImporter({
           }
           router.push(`/teacher/classes/${assignToClass.id}?tab=assignments`)
         } else {
+          const draftCount = preview
+            ? preview.parseResult.chapters
+                .flatMap((c) => c.lessons)
+                .filter((l) => l.titleMissing).length +
+              (previewIsAiResult ? (aiMeta?.draftLessonIndexes?.length ?? 0) : 0)
+            : 0
           toast.success(
-            `Đã lưu: ${res.createdLessons} bài, ${res.createdKps} kiến thức, ${res.createdQuestions} câu hỏi`,
+            `Đã lưu: ${res.createdLessons} bài, ${res.createdKps} kiến thức, ${res.createdQuestions} câu hỏi${
+              draftCount > 0 ? ` — ${draftCount} bài ở trạng thái Nháp chờ duyệt tên` : ""
+            }`,
           )
           router.push("/teacher/lessons")
         }
@@ -505,9 +662,17 @@ export function WorksheetImporter({
     <div className={preview ? "w-full space-y-4" : "mx-auto max-w-3xl space-y-6"}>
       {assignToClass ? (
         <div className="rounded-lg border border-primary/40 bg-primary/5 px-4 py-3 text-sm">
-          Bạn đang tạo bài cho lớp <strong>{assignToClass.name}</strong>: sau khi lưu thành công,
-          bài sẽ <strong>được giao luôn cho lớp này</strong> và đồng thời xuất hiện ở tab Bài
-          giảng.
+          Bạn đang tạo bài cho lớp <strong>{assignToClass.name}</strong>. Khi bấm "Lưu vào hệ
+          thống", bạn sẽ chọn lưu vào <strong>thư viện</strong> (chọn chương, bài được giao luôn
+          cho lớp này) hoặc lưu <strong>tại lớp</strong> (chỉ lớp này có, không vào thư viện).
+        </div>
+      ) : null}
+      {intoLesson ? (
+        <div className="rounded-lg border border-primary/40 bg-primary/5 px-4 py-3 text-sm">
+          Bạn đang nạp cộng thêm vào bài <strong>{intoLesson.title}</strong> (
+          {intoLesson.chapterTitle}). Nội dung file sẽ <strong>cộng dồn</strong> vào bài này;
+          điểm kiến thức/câu hỏi trùng với nội dung đã có sẽ <strong>chỉ giữ 1 bản</strong> và
+          được cảnh báo ở bản xem trước.
         </div>
       ) : null}
       {preview ? (
@@ -775,6 +940,108 @@ export function WorksheetImporter({
           })()
         : null}
 
+      {preview && !intoLesson && !assignToClass ? (
+        <Card>
+          <CardContent className="flex flex-wrap items-end gap-3 pt-4">
+            <div className="grid min-w-64 flex-1 gap-1.5">
+              <Label htmlFor="imp-chapter">Lưu các bài vào chương</Label>
+              <select
+                id="imp-chapter"
+                value={chapterChoice}
+                onChange={(e) => setChapterChoice(e.target.value)}
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Theo chương ghi trong file</option>
+                {chapters.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.title}
+                  </option>
+                ))}
+                <option value="__new__">+ Tạo chương mới…</option>
+              </select>
+            </div>
+            {chapterChoice === "__new__" ? (
+              <div className="grid min-w-64 flex-1 gap-1.5">
+                <Label htmlFor="imp-chapter-new">Tên chương mới</Label>
+                <Input
+                  id="imp-chapter-new"
+                  value={newChapterName}
+                  onChange={(e) => setNewChapterName(e.target.value)}
+                  placeholder="VD: Di truyền học phân tử"
+                />
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {preview && !intoLesson
+        ? (() => {
+            const notes: string[] = []
+            preview.parseResult.chapters
+              .flatMap((c) => c.lessons)
+              .forEach((l, i) => {
+                if (l.titleMissing) {
+                  notes.push(
+                    `Bài ${i + 1} chưa có tên trong file — sẽ dùng tên file "${file?.name ?? ""}" và để ở trạng thái Nháp chờ bạn duyệt tên.`,
+                  )
+                }
+              })
+            if (previewIsAiResult) {
+              const titles = preview.parseResult.chapters.flatMap((c) =>
+                c.lessons.map((l) => l.title),
+              )
+              for (const idx of aiMeta?.draftLessonIndexes ?? []) {
+                if (titles[idx]) {
+                  notes.push(
+                    `Tên bài "${titles[idx]}" do AI đặt — bài sẽ ở trạng thái Nháp chờ bạn duyệt tên.`,
+                  )
+                }
+              }
+            }
+            if (notes.length === 0) return null
+            return (
+              <Card className="border-sky-300 bg-sky-50 dark:border-sky-800 dark:bg-sky-950/40">
+                <CardContent className="space-y-1 pt-4 text-sm text-sky-800 dark:text-sky-300">
+                  <p className="font-medium">Tên bài chờ duyệt:</p>
+                  <ul className="list-inside list-disc space-y-1">
+                    {notes.map((n, i) => (
+                      <li key={i}>{n}</li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            )
+          })()
+        : null}
+
+      {preview && intoLesson ? (
+        <Card className="border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40">
+          <CardContent className="space-y-1 pt-4 text-sm text-amber-800 dark:text-amber-300">
+            <p className="font-medium">Đối chiếu trùng lặp với bài hiện có:</p>
+            {appendPlanLoading ? (
+              <p>Đang đối chiếu…</p>
+            ) : appendPlan ? (
+              <>
+                <p>
+                  Sẽ thêm {appendPlan.addedKps} điểm kiến thức, {appendPlan.addedQuestions} câu
+                  hỏi; bỏ qua {appendPlan.skippedQuestions} câu trùng.
+                </p>
+                {appendPlan.warnings.length > 0 ? (
+                  <ul className="list-inside list-disc space-y-1">
+                    {appendPlan.warnings.map((w, i) => (
+                      <li key={i}>{w}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </>
+            ) : (
+              <p>Không đối chiếu được — hệ thống sẽ chống trùng lại khi lưu.</p>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
+
       {preview?.warnings && preview.warnings.length > 0 && (
         <Card className="border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40">
           <CardContent className="space-y-1 pt-4 text-sm text-amber-800 dark:text-amber-300">
@@ -801,6 +1068,85 @@ export function WorksheetImporter({
           onRevalidated={handleRevalidated}
         />
       )}
+
+      <Dialog open={forkOpen} onOpenChange={setForkOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Lưu bài vào đâu?</DialogTitle>
+            <DialogDescription>
+              Bài được tạo từ tab Lớp học. Chọn nơi lưu trước khi hệ thống ghi bài.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <label className="flex cursor-pointer items-start gap-2 rounded-md border p-3 hover:bg-muted/50">
+              <input
+                type="radio"
+                name="save-fork"
+                className="mt-1 size-4 accent-primary"
+                checked={forkKind === "library"}
+                onChange={() => setForkKind("library")}
+              />
+              <span className="flex-1">
+                <span className="block font-medium">Lưu vào thư viện</span>
+                <span className="block text-sm text-muted-foreground">
+                  Bài vào tab Bài giảng để dùng lại cho các lớp khác, đồng thời được giao luôn
+                  cho lớp {assignToClass?.name}.
+                </span>
+              </span>
+            </label>
+            {forkKind === "library" ? (
+              <div className="grid gap-2 pl-6">
+                <Label htmlFor="fork-chapter">Chương lưu bài</Label>
+                <select
+                  id="fork-chapter"
+                  value={forkChapterChoice}
+                  onChange={(e) => setForkChapterChoice(e.target.value)}
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  {chapters.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.title}
+                    </option>
+                  ))}
+                  <option value="__new__">+ Tạo chương mới…</option>
+                </select>
+                {forkChapterChoice === "__new__" ? (
+                  <Input
+                    value={forkNewChapterName}
+                    onChange={(e) => setForkNewChapterName(e.target.value)}
+                    placeholder="Tên chương mới"
+                  />
+                ) : null}
+              </div>
+            ) : null}
+            <label className="flex cursor-pointer items-start gap-2 rounded-md border p-3 hover:bg-muted/50">
+              <input
+                type="radio"
+                name="save-fork"
+                className="mt-1 size-4 accent-primary"
+                checked={forkKind === "class"}
+                onChange={() => setForkKind("class")}
+              />
+              <span className="flex-1">
+                <span className="block font-medium">Lưu tại lớp {assignToClass?.name}</span>
+                <span className="block text-sm text-muted-foreground">
+                  Bài chỉ nằm trong lớp này — không vào thư viện, không giao lại cho lớp khác
+                  được.
+                </span>
+              </span>
+            </label>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setForkOpen(false)}>
+              Huỷ
+            </Button>
+            <Button onClick={() => void confirmFork()} disabled={isSaving}>
+              <Save className="h-4 w-4" />
+              Lưu vào hệ thống
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={modeOpen} onOpenChange={setModeOpen}>
         <DialogContent>

@@ -29,9 +29,10 @@ import {
   Pencil,
   Plus,
   Trash2,
+  Upload,
   X,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
@@ -577,15 +578,32 @@ export function LessonDetail({
           size="sm"
           className="mb-2 -ml-2 text-muted-foreground"
           nativeButton={false}
-          render={<Link href="/teacher/lessons" />}
+          render={
+            <Link
+              href={
+                lesson.classId
+                  ? `/teacher/classes/${lesson.classId}?tab=assignments`
+                  : "/teacher/lessons"
+              }
+            />
+          }
         >
           <ArrowLeft className="h-4 w-4" />
-          Quay lại bài giảng
+          {lesson.classId ? "Quay lại lớp học" : "Quay lại bài giảng"}
         </Button>
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-sm text-muted-foreground">{lesson.chapterTitle}</p>
             <h1 className="font-heading text-2xl font-bold text-foreground">{lesson.title}</h1>
+            {/* §18: nạp nội dung từ file vào chính bài đang mở (cộng
+                dồn, chống trùng) thay vì thêm tay từng điểm kiến thức. */}
+            <Link
+              href={`/teacher/lessons/import?intoLesson=${lesson.id}`}
+              className={buttonVariants({ variant: "outline", size: "sm" }) + " mt-2"}
+            >
+              <Upload className="h-4 w-4" />
+              Nạp từ file
+            </Link>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Trạng thái:</span>
