@@ -43,9 +43,10 @@ export const auth = betterAuth({
         type: "string",
         required: false,
         defaultValue: "student",
-        // SEC-01: client KHÔNG được tự gửi role khi đăng ký/cập nhật.
+        // Client KHÔNG được tự gửi role khi đăng ký/cập nhật.
         // Đăng ký luôn là student; quyền teacher chỉ cấp qua
-        // completeOnboarding kèm mã mời (xem app/actions/onboarding.ts).
+        // completeOnboarding (từ §23 không còn mã mời — xem
+        // app/actions/onboarding.ts).
         input: false,
       },
       isOnboarded: {

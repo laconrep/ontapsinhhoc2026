@@ -1,11 +1,11 @@
-// SEC-01 + SEC-08 (sualogic.md mục 12): chống tự cấp quyền giáo viên.
-// Test ở mức code/cấu hình + hành vi của helper mã mời; hành vi API thật
-// (sign-up/update-user) được kiểm chứng riêng trên app chạy thật.
+// §23 (bãi bỏ SEC-01) + SEC-08 (sualogic.md mục 12, §23): không còn
+// mã mời giáo viên lúc onboarding; các bất biến còn lại (role không
+// input, hook ép student, mật khẩu >= 8) giữ nguyên.
 import { register } from "node:module"
 import { pathToFileURL } from "node:url"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { readFileSync } from "node:fs"
+import { readFileSync, existsSync } from "node:fs"
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const rootUrl = pathToFileURL(root.endsWith("/") ? root : root + "/").href
@@ -38,24 +38,13 @@ function readSrc(rel) {
   return readFileSync(resolve(root, rel), "utf8")
 }
 
-// --- Hành vi helper mã mời giáo viên (lib/teacher-invite.ts) ---
-process.env.TEACHER_INVITE_CODE = "MA-MOI-BI-MAT-123"
-const invite = await import("../lib/teacher-invite.ts")
-assert(invite.isTeacherInviteConfigured() === true, "env hợp lệ phải coi là đã cấu hình")
-assert(invite.verifyTeacherInviteCode("MA-MOI-BI-MAT-123") === true, "mã đúng phải được chấp nhận")
-assert(invite.verifyTeacherInviteCode("MA-MOI-BI-MAT-124") === false, "mã sai phải bị từ chối")
-assert(invite.verifyTeacherInviteCode("") === false, "mã rỗng phải bị từ chối")
-assert(invite.verifyTeacherInviteCode(undefined) === false, "thiếu mã phải bị từ chối")
-assert(invite.verifyTeacherInviteCode("MA-MOI-BI-MAT-123 ") === false, "mã thừa khoảng trắng phải bị từ chối")
-
-process.env.TEACHER_INVITE_CODE = "short"
-assert(invite.isTeacherInviteConfigured() === false, "env ngắn hơn 8 ký tự phải coi như chưa cấu hình")
-assert(invite.verifyTeacherInviteCode("short") === false, "chưa cấu hình đúng thì không mã nào qua được (fail-closed)")
-delete process.env.TEACHER_INVITE_CODE
-assert(invite.verifyTeacherInviteCode("MA-MOI-BI-MAT-123") === false, "không có env thì luôn từ chối")
-
-const inviteSrc = readSrc("lib/teacher-invite.ts")
-assert(inviteSrc.includes("timingSafeEqual"), "so sánh mã mời phải dùng timingSafeEqual")
+// --- §23: không còn cơ chế mã mời giáo viên ---
+// lib/teacher-invite.ts đã bị xóa; onboarding không còn tham chiếu tới
+// mã mời hay env TEACHER_INVITE_CODE.
+assert(!existsSync(resolve(root, "lib/teacher-invite.ts")), "lib/teacher-invite.ts phải bị xóa (§23)")
+const onboardingEarly = readSrc("app/actions/onboarding.ts")
+assert(!onboardingEarly.includes("verifyTeacherInviteCode"), "onboarding §23: không còn kiểm mã mời")
+assert(!onboardingEarly.includes("process.env.TEACHER_INVITE_CODE"), "onboarding §23: không còn đọc env TEACHER_INVITE_CODE")
 
 // --- lib/auth.ts: role không còn input, hook ép student, mật khẩu >= 8 ---
 const auth = readSrc("lib/auth.ts")
@@ -71,16 +60,16 @@ const authForm = readSrc("components/auth/auth-form.tsx")
 assert(!authForm.includes("signUp.email({ email, password, name, role })"), "auth-form còn gửi role khi signUp")
 assert(authForm.includes("signUp.email({ email, password, name })"), "auth-form phải signUp không kèm role")
 
-// --- completeOnboarding: whitelist + isOnboarded + mã mời ---
+// --- completeOnboarding: whitelist + isOnboarded, KHÔNG mã mời (§23) ---
 const onboarding = readSrc("app/actions/onboarding.ts")
 assert(onboarding.includes("ROLE_WHITELIST"), "onboarding thiếu whitelist vai trò")
 assert(onboarding.includes("current.isOnboarded"), "onboarding phải chặn khi đã onboard")
-assert(onboarding.includes("verifyTeacherInviteCode"), "onboarding teacher phải kiểm mã mời")
 assert(!/completeOnboarding\(role: UserRole\) \{\s*const userId/.test(onboarding), "onboarding còn bản cũ ghi thẳng role")
 
-// --- UI onboarding có ô nhập mã mời khi chọn giáo viên ---
+// --- UI onboarding KHÔNG còn ô nhập mã mời khi chọn giáo viên (§23) ---
 const obForm = readSrc("components/auth/onboarding-form.tsx")
-assert(obForm.includes("Mã mời giáo viên"), "onboarding-form thiếu ô nhập mã mời giáo viên")
+assert(!obForm.includes("Mã mời giáo viên"), "onboarding-form §23: còn ô nhập mã mời giáo viên")
+assert(!obForm.includes("teacher-invite-code"), "onboarding-form §23: còn input mã mời giáo viên")
 assert(obForm.includes("completeOnboarding(role"), "onboarding-form chưa gọi completeOnboarding kèm vai trò chọn")
 
-console.log("PASS check-sec01-auth (SEC-01, SEC-08 mật khẩu)")
+console.log("PASS check-sec01-auth (§23, SEC-08 mật khẩu)")

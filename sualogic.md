@@ -1629,3 +1629,56 @@ mẫu báo cáo chỉ khớp khung sửa màn hình nạp file.)
   7.1 bài trống tại lớp vẫn draft); E2E §17 chạy lại ALL PASS (lần chạy
   đầu rớt FAIL 9 do phiên GV thứ hai chập chờn — việc vẫn chưa bị
   consume, đúng mẫu auth lỗi đã biết khi chạy dồn); E2E §15 ALL PASS.
+
+## 22. Ảnh import lưu lên Vercel Blob (GV chốt 2026-10-24, commit 0176d08)
+- Bối cảnh: database Neon cũ hết 5 GB transfer/tháng (xem §21 và nhật ký
+  sự cố 2026-10-24) — nghi ngờ lớn là ảnh base64 nằm trong DB. GV chốt
+  dùng Vercel Blob trước để test trên 3 lớp ~150 học sinh; B2 Private
+  giữ làm dự phòng, R2 loại vì lần đầu kích hoạt thường bắt thẻ/PayPal
+  (GV không có thẻ; bucket Public của B2 cũng bắt thẻ hoặc phí $1).
+- Thiết kế (điểm can thiệp duy nhất: trích xuất phía server,
+  lib/extract-file.ts): ảnh raster (png/jpeg/gif/webp) upload lên Blob
+  bằng @vercel/blob put() (access public, pathname = sha256 nội dung +
+  đuôi file, addRandomSuffix false → ảnh giống nhau dedupe thành một
+  object/URL); images[] thành URL Blob, downstream (job/draft/bodyHtml/
+  preview/HS) không đổi gì. SVG công thức giữ data URI inline (code
+  tính chiều cao đọc trực tiếp từ SVG). Thiếu BLOB_READ_WRITE_TOKEN →
+  chạy y như cũ (base64); upload lỗi → fallback base64 + log, import
+  không bao giờ gãy vì Blob. Allowlist sanitize (SEC-02) mở thêm chỉ
+  đúng host *.public.blob.vercel-storage.com.
+- Kiểm chứng: tsc sạch; suite 35/42 (nguyên 7 lỗi cũ); test chuyên biệt
+  28/28 (fallback khi chưa có token, dedupe, chặn userinfo/host na ná,
+  parser giữ ảnh Blob). Upload thật lên store chưa kiểm chứng trong
+  sandbox (cần token từ store GV tạo trên Vercel) — phải test import
+  thật một file docx có ảnh sau khi deploy.
+- Vận hành: vượt hạn mức Blob gói miễn phí (1 GB lưu trữ / 10 GB tải
+  xuống / 2.000 upload/tháng) thì ảnh ngừng hiển thị tới chu kỳ sau
+  chứ không tính phí thêm. Dung lượng test: 150 em mở lần đầu bài 3 MB
+  = 450 MB (4,5% hạn mức); làm lại trên cùng máy nhờ cache trình duyệt
+  nên không tốn thêm.
+
+## 23. Bỏ mã mời giáo viên lúc onboarding (GV chốt 2026-10-24)
+- Quyết định đảo ngược SEC-01 (§12): giáo viên tạo tài khoản KHÔNG cần
+  mã mời nữa — đăng ký rồi chọn "Giáo viên" là thành giáo viên ngay.
+  Lý do trực tiếp: GV bị kẹt ở màn hình onboarding vì không nhớ mã mời
+  cũ (đặt từ 21/10), và GV xác nhận lại mô hình đúng của app: mã mời
+  là mã lớp 6 ký tự để học sinh vào lớp, không phải mã cấp quyền giáo
+  viên.
+- Phạm vi thay đổi (chỉ đường cấp quyền giáo viên, không động tới mã
+  lớp): app/actions/onboarding.ts bỏ kiểm tra verifyTeacherInviteCode
+  (completeOnboarding giờ chỉ nhận role); components/auth/
+  onboarding-form.tsx bỏ ô nhập mã mời giáo viên; xóa lib/
+  teacher-invite.ts (chỉ còn onboarding dùng tới); sửa comment ở
+  lib/auth.ts. Mã lớp không đổi gì: classes.inviteCode, uniqueInviteCode,
+  joinClass, joinClassSchema 6 ký tự, QR/mã ở tab Lớp giữ nguyên.
+- Hệ quả CHẤP NHẬN (đã nói rõ với GV): ai cũng tự đăng ký làm giáo
+  viên được — kể cả dùng AI (hiện AI tính vào chi phí vận hành cho tới
+  khi hệ gói/quyền lên). Với quy mô pilot (3 lớp) thì rủi ro thấp;
+  khi mở rộng thì hệ gói/quyền (§12, admin gagabux95@gmail.com) mới là
+  chỗ siết lại. Biến môi trường TEACHER_INVITE_CODE trên Vercel từ
+  đây không còn được code đọc tới — để lại cũng vô hại, dọn sau cũng
+  được.
+- Ranh giới giữ nguyên: vai trò vẫn chỉ có student/teacher (không có
+  role admin trong code); đã onboard rồi thì không tự đổi vai trò qua
+  đường này; đăng ký luôn tạo student, client không tự gửi role.
+- Kiểm chứng: tsc sạch; suite 35/42 (nguyên 7 lỗi cũ).

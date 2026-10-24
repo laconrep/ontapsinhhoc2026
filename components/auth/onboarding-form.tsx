@@ -3,16 +3,14 @@
 import { useState, useTransition } from "react"
 import { completeOnboarding } from "@/app/actions/onboarding"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { GraduationCap, BookOpen } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { UserRole } from "@/types"
 
 /**
- * SEC-01: vai trò được chốt TẠI ĐÂY (đăng ký luôn tạo student). Chọn
- * "Giáo viên" thì phải nhập mã mời giáo viên do quản trị viên cấp;
- * server kiểm tra lại mã (completeOnboarding) — client không tự cấp quyền.
+ * Vai trò được chốt TẠI ĐÂY (đăng ký luôn tạo student). §23
+ * (2026-10-24): chọn "Giáo viên" không cần mã mời nữa — cơ chế
+ * SEC-01 đã bãi bỏ; server chỉ chốt vai trò (completeOnboarding).
  */
 export function OnboardingForm({
   initialRole,
@@ -22,7 +20,6 @@ export function OnboardingForm({
   name: string
 }) {
   const [role, setRole] = useState<UserRole>(initialRole)
-  const [inviteCode, setInviteCode] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const isTeacher = role === "teacher"
@@ -31,7 +28,7 @@ export function OnboardingForm({
     setError(null)
     startTransition(async () => {
       try {
-        await completeOnboarding(role, isTeacher ? inviteCode : undefined)
+        await completeOnboarding(role)
       } catch (e) {
         // redirect() của server action ném lỗi có digest NEXT_REDIRECT —
         // phải ném lại để Next điều hướng.
@@ -56,8 +53,7 @@ export function OnboardingForm({
             Xin chào, {name}!
           </h1>
           <p className="mt-2 text-muted-foreground text-pretty leading-relaxed">
-            Chọn vai trò của bạn để bắt đầu. Giáo viên cần mã mời do quản trị
-            viên cấp.
+            Chọn vai trò của bạn để bắt đầu.
           </p>
         </div>
 
@@ -77,23 +73,6 @@ export function OnboardingForm({
             desc="Tạo lớp, soạn bài giảng và theo dõi tiến độ học sinh."
           />
         </div>
-
-        {isTeacher && (
-          <div className="mt-5 flex flex-col gap-2">
-            <Label htmlFor="teacher-invite-code">Mã mời giáo viên</Label>
-            <Input
-              id="teacher-invite-code"
-              value={inviteCode}
-              onChange={(e) => setInviteCode(e.target.value)}
-              placeholder="Nhập mã mời được cấp"
-              autoComplete="off"
-            />
-            <p className="text-xs text-muted-foreground">
-              Chưa có mã mời? Hãy liên hệ quản trị viên, hoặc tiếp tục với vai
-              trò học sinh.
-            </p>
-          </div>
-        )}
 
         {error && (
           <p className="mt-4 text-sm text-destructive" role="alert">

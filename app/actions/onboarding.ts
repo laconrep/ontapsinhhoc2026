@@ -5,20 +5,22 @@ import { user as userTable } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 import { redirect } from "next/navigation"
 import { getCurrentUser } from "@/lib/auth-helpers"
-import { verifyTeacherInviteCode } from "@/lib/teacher-invite"
 import type { UserRole } from "@/types"
 
 const ROLE_WHITELIST: readonly string[] = ["student", "teacher"]
 
 /**
- * SEC-01: hoàn tất onboarding — chỉ chạy MỘT lần (khi isOnboarded = false).
+ * Hoàn tất onboarding — chỉ chạy MỘT lần (khi isOnboarded = false).
  * - role phải thuộc whitelist {"student","teacher"} (kiểm tra tay tương
  *   đương zod); giá trị khác bị từ chối.
- * - role "teacher" chỉ được chấp nhận khi inviteCode khớp env
- *   TEACHER_INVITE_CODE (cơ chế TẠM THỜI — xem lib/teacher-invite.ts).
+ * - §23 (2026-10-24, GV chốt): chọn "teacher" KHÔNG cần mã mời nữa —
+ *   cơ chế SEC-01 (mã mời giáo viên qua env TEACHER_INVITE_CODE) đã
+ *   bãi bỏ. "Mã mời" còn lại duy nhất là mã lớp 6 ký tự để học sinh
+ *   vào lớp (xem app/actions/student-class.ts) — không liên quan gì
+ *   tới đường này.
  * - Đã onboard rồi thì gọi lại bị từ chối: không còn đường tự đổi vai trò.
  */
-export async function completeOnboarding(role: UserRole, inviteCode?: string) {
+export async function completeOnboarding(role: UserRole) {
   const current = await getCurrentUser()
   if (!current) throw new Error("Chưa đăng nhập")
   if (current.isOnboarded) {
@@ -26,11 +28,6 @@ export async function completeOnboarding(role: UserRole, inviteCode?: string) {
   }
   if (!ROLE_WHITELIST.includes(role)) {
     throw new Error("Vai trò không hợp lệ")
-  }
-  if (role === "teacher" && !verifyTeacherInviteCode(inviteCode)) {
-    throw new Error(
-      "Mã mời giáo viên không đúng. Nếu chưa có mã mời, hãy liên hệ quản trị viên hoặc đăng ký với vai trò học sinh.",
-    )
   }
 
   await db
