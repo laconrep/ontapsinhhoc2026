@@ -31,11 +31,12 @@ export function sanitizeBodyHtml(raw: string | null | undefined): string | null 
     allowedClasses: {
       img: [...SANITIZE_IMG_CLASSES],
     },
-    // Không cho bất kỳ scheme nào (http/https/javascript/...), ngoại trừ
-    // scheme "data" trên <img> — và src data: còn bị kiểm chặt hơn bằng
-    // isAllowedImgSrc + exclusiveFilter bên dưới (chỉ data:image/*;base64).
+    // Không cho bất kỳ scheme nào, ngoại trừ scheme "data" trên <img> và
+    // scheme "https" trên <img> — và src https: còn bị kiểm chặt hơn bằng
+    // isAllowedImgSrc + exclusiveFilter bên dưới (chỉ host public của
+    // Vercel Blob; mọi https host khác đều bị bỏ).
     allowedSchemes: [],
-    allowedSchemesByTag: { img: ["data"] },
+    allowedSchemesByTag: { img: ["data", "https"] },
     allowProtocolRelative: false,
     transformTags: {
       th: (_tag, attribs) => ({
@@ -48,7 +49,8 @@ export function sanitizeBodyHtml(raw: string | null | undefined): string | null 
       }),
     },
     exclusiveFilter: (frame) => {
-      // Bỏ hẳn <img> có src không phải data URI ảnh hợp lệ.
+      // Bỏ hẳn <img> có src không hợp lệ (không phải data URI ảnh, cũng
+      // không phải https URL từ host public của Vercel Blob).
       return frame.tag === "img" && !isAllowedImgSrc(frame.attribs.src ?? "")
     },
   })

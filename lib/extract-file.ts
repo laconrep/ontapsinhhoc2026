@@ -3,6 +3,7 @@ import { parseTextContent, parseHtmlToResultAndText, type ParseResult } from "./
 import { isConvertibleMetafile, wmfToSvg } from "./docx-equations"
 import { preprocessOmml } from "./docx-omml"
 import { equationHeightEm } from "./equation-size"
+import { uploadRasterToBlob } from "./blob-media"
 
 export const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 
@@ -121,8 +122,13 @@ async function extractAndParseInner(buffer: Buffer, filename: string): Promise<E
             if (svg) return { src: svg }
             return { src: `data:${image.contentType};base64,${raw.toString("base64")}` }
           }
-          const encoded = await image.readAsBase64String()
-          return { src: `data:${image.contentType};base64,${encoded}` }
+          // Ảnh raster: upload lên Vercel Blob khi đã cấu hình token; chưa
+          // cấu hình hoặc upload lỗi -> giữ nguyên base64 như trước (xem
+          // lib/blob-media.ts). SVG công thức KHÔNG đi qua nhánh này.
+          const raw = await image.read()
+          const blobUrl = await uploadRasterToBlob(raw, image.contentType)
+          if (blobUrl) return { src: blobUrl }
+          return { src: `data:${image.contentType};base64,${raw.toString("base64")}` }
         }),
       },
     )

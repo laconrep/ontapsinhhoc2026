@@ -1,4 +1,5 @@
 import type { UnderlinedTerm } from "@/types"
+import { isBlobPublicUrl } from "./sanitize-shared"
 
 // ============ Kiểu dữ liệu kết quả parse ============
 
@@ -946,7 +947,14 @@ function escapeHtmlText(s: string): string {
 
 function imgTagToPlaceholder(tag: string, images: string[]): string {
   const src = tag.match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1] ?? ""
-  if (!/^data:image\/[a-zA-Z0-9.+-]+;base64,/i.test(src) && !src.startsWith("/")) return ""
+  // Chấp nhận data URI, đường dẫn nội bộ, và https URL từ host public của
+  // Vercel Blob (ảnh raster đã upload lúc trích xuất) — mọi src khác bị bỏ.
+  if (
+    !/^data:image\/[a-zA-Z0-9.+-]+;base64,/i.test(src) &&
+    !src.startsWith("/") &&
+    !isBlobPublicUrl(src)
+  )
+    return ""
   const alt = (tag.match(/\balt\s*=\s*["']([^"']*)["']/i)?.[1] ?? "").replace(/[<>"']/g, "")
   const cls = tag.match(/\bclass\s*=\s*["'](eq-inline|eq-figure)["']/i)?.[1] ?? ""
   const h = tag.match(/\bstyle\s*=\s*["']height:([\d.]+)em;width:auto["']/i)?.[1]

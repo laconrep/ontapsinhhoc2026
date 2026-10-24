@@ -27,15 +27,31 @@ export const SANITIZE_ALLOWED_TAGS = [
 export const SANITIZE_IMG_CLASSES = ["eq-inline", "eq-figure"] as const
 
 /**
- * src duy nhất được phép cho <img>: data URI base64 của ảnh raster hoặc SVG.
- * Loại mọi dạng //host, http:, https:, javascript:, đường dẫn tương đối.
+ * src duy nhất được phép cho <img>: data URI base64 của ảnh raster hoặc SVG,
+ * HOẶC https URL từ host public của Vercel Blob (hướng lưu trữ media, test
+ * phase 2026-10-24). Loại mọi dạng //host, http:, javascript:, đường dẫn
+ * tương đối, và https tới bất kỳ host nào khác.
  * (SVG ở dạng base64 không tự chạy script khi nạp qua <img>.)
  */
 export const DATA_IMAGE_SRC_RE =
   /^data:image\/(?:png|jpeg|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=\s]+$/
 
+/** Hậu tố host public của Vercel Blob — xem lib/blob-media.ts. */
+export const BLOB_PUBLIC_HOST_SUFFIX = ".public.blob.vercel-storage.com"
+
+/** True khi src là https URL từ host public của Vercel Blob — không rộng hơn. */
+export function isBlobPublicUrl(src: string): boolean {
+  try {
+    const u = new URL(src.trim())
+    return u.protocol === "https:" && u.hostname.endsWith(BLOB_PUBLIC_HOST_SUFFIX)
+  } catch {
+    return false
+  }
+}
+
 export function isAllowedImgSrc(src: string): boolean {
-  return DATA_IMAGE_SRC_RE.test(src.trim())
+  const s = src.trim()
+  return DATA_IMAGE_SRC_RE.test(s) || isBlobPublicUrl(s)
 }
 
 /** colspan/rowspan chỉ nhận số nguyên dương ngắn. */
