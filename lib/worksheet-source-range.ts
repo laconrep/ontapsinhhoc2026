@@ -1,4 +1,4 @@
-import { isCauHeading } from "./worksheet-parser"
+import { isCauHeading, type ParseResult } from "./worksheet-parser"
 
 export interface LineRange {
   startLine: number
@@ -70,6 +70,39 @@ export function blockRange(text: string, line: number, message?: string): LineRa
   }
   if (end < idx) end = idx
   return { startLine: start + 1, endLine: end + 1 }
+}
+
+/** Tập hợp các dòng bắt đầu một điểm kiến thức trong kết quả parse. */
+export function collectKpLines(parseResult: ParseResult): Set<number> {
+  const lines = new Set<number>()
+  for (const chapter of parseResult.chapters ?? []) {
+    for (const lesson of chapter.lessons ?? []) {
+      for (const kp of lesson.knowledgePoints ?? []) {
+        if (typeof kp.line === "number") lines.add(kp.line)
+      }
+    }
+  }
+  return lines
+}
+
+/**
+ * Khối đang sửa có phải khối điểm kiến thức không — quyết định khung
+ * sửa có bật Ctrl+click gạch chân hay không. Trước đây chỉ nhận diện
+ * bằng tiền tố "-" ở dòng đầu khối, nên điểm kiến thức dạng "1. ...",
+ * "a. ..." (luật §19 công nhận là điểm riêng) bị mất chức năng gạch
+ * chân dù parse đã xác định đó là điểm. Nay nhận diện thêm bằng dòng
+ * bắt đầu của khối có nằm trong tập dòng điểm của parse hay không.
+ */
+export function isKpBlock(
+  block: string,
+  message: string | undefined,
+  kpLines: Set<number>,
+  startLine: number,
+): boolean {
+  const first = block.split("\n")[0]?.trim() ?? ""
+  if (first.startsWith("-")) return true
+  if (message != null && message.includes("Điểm kiến thức")) return true
+  return kpLines.has(startLine)
 }
 
 export function spliceBlock(text: string, startLine: number, endLine: number, edit: string): string {

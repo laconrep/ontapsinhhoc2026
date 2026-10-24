@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState, type MouseEvent } from "react"
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
 import { AlertTriangle, CheckCircle2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -8,7 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { PreviewDocument } from "@/components/teacher/worksheet-preview-doc"
 import {
   blockRange,
+  collectKpLines,
   collectMediaTokens,
+  isKpBlock,
   spliceBlock,
   type LineRange,
 } from "@/lib/worksheet-source-range"
@@ -49,11 +51,6 @@ function sliceBlock(text: string, range: LineRange): string {
   return text.split("\n").slice(range.startLine - 1, range.endLine).join("\n")
 }
 
-function isKpEditor(block: string, message?: string): boolean {
-  const first = block.split("\n")[0]?.trim() ?? ""
-  return first.startsWith("-") || (message != null && message.includes("Điểm kiến thức"))
-}
-
 export function ImportErrorFix({
   errors,
   sourceText,
@@ -72,6 +69,10 @@ export function ImportErrorFix({
   const [tokenWarn, setTokenWarn] = useState(false)
   const [checking, setChecking] = useState(false)
   const [isKp, setIsKp] = useState(false)
+  // Dòng bắt đầu của mọi điểm kiến thức theo lần parse gần nhất — dùng
+  // để nhận diện khối điểm (kể cả dạng "1. ...", "a. ...") thay vì chỉ
+  // trông vào tiền tố "-" ở dòng đầu khối.
+  const kpLines = useMemo(() => collectKpLines(parseResult), [parseResult])
   const previewRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -142,7 +143,7 @@ export function ImportErrorFix({
     setActiveRange(range)
     setBlockEdit(block)
     setTokenWarn(false)
-    setIsKp(isKpEditor(block, message))
+    setIsKp(isKpBlock(block, message, kpLines, range.startLine))
     scrollToLine(line)
   }
 

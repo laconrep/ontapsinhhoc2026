@@ -1544,3 +1544,27 @@ trước, và AI dồn nhiều dòng của GV thành một điểm kiến thức
   7 lỗi cũ); E2E §15/§16/§17/§18 đạt; E2E §19 trực tiếp 10/10 (lưu
   qua /api/worksheet/save: 3 dòng -> 3 điểm, KP1 có bodyHtml bảng
   thật + content sạch + offset khớp, getLessonDetail trả bodyHtml).
+
+## 20. Ctrl+click gạch chân mất tác dụng với điểm dạng "1. ...", "a. ..." (sửa 2026-10-24)
+
+Báo cáo của GV: điểm bắt đầu bằng "-" thì Ctrl+click gạch chân được,
+điểm dạng "1. ...", "a. ..." thì không. Mẫu này chỉ khớp đúng một chỗ:
+khung sửa khối ở màn hình nạp file (ImportErrorFix) quyết định bật
+Ctrl+click bằng tiền tố "-" ở dòng đầu khối (isKpEditor) — luật cũ từ
+trước §19. Theo luật §19, dòng "1. ..."/"a. ..." cũng là điểm riêng
+nhưng không có "-", nên khung sửa tắt chức năng và không hiện cả
+hướng dẫn. (Hộp thoại điểm ở màn hình bài giảng không có luật này —
+mẫu báo cáo chỉ khớp khung sửa màn hình nạp file.)
+
+- Sửa: isKpBlock mới trong lib/worksheet-source-range.ts — nhận diện
+  khối điểm bằng dòng bắt đầu của khối có nằm trong tập dòng điểm
+  của parseResult hay không (collectKpLines), giữ nguyên hai luật cũ
+  (tiền tố "-" và thông điệp lỗi nhắc "Điểm kiến thức"). Khung sửa
+  dùng tập dòng từ lần parse gần nhất.
+- Sửa kèm cùng cử chỉ: applyKpWrap trước đây nở từ theo ký tự "_" nên
+  Ctrl+click vào từ ĐÃ gạch (vd "__phân tử__") bọc thêm một lớp dấu
+  thành "____phân__ tử__" thay vì gỡ gạch. Nay kiểm tra cụm đã gạch
+  trước khi nở từ: chạm vào cụm thì gỡ sạch dấu; vùng chọn giao một
+  phần với dấu thì giữ nguyên để khỏi hỏng dấu.
+- Kiểm chứng: check-kp-v19 mở rộng 25/25 (10 kiểm tra mới cho hai
+  sửa trên), suite 35/42 (nguyên 7 lỗi cũ), tsc sạch.

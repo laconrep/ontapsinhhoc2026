@@ -123,5 +123,30 @@ const HEAD = "{Chuong 1}\n[Bai 1]\n"
   check("bản dựng AI: token thành bodyHtml, chữ sạch", (kp.bodyHtml ?? "").includes("<table") && !kp.content.includes("@@"))
 }
 
+// ---------- Ctrl+click gạch chân ở khung sửa màn hình nạp file ----------
+// Khung sửa trước đây chỉ bật Ctrl+click khi dòng đầu khối bắt đầu
+// bằng "-" — điểm dạng "1. ..."/"a. ..." (luật §19) bị mất chức năng.
+{
+  const { collectKpLines, isKpBlock } = await import("../lib/worksheet-source-range.ts")
+  const { applyKpWrap } = await import("../lib/kp-blank-wrap.ts")
+  const doc = parseTextContent(`${HEAD}- ADN là __phân tử__ mang thông tin di truyền.\n1. Thí nghiệm: nghiên cứu sự biểu hiện __gene__.\n#\ncau: ADN là gì?\nA. một\n__B. hai__\n`)
+  const kpLines = collectKpLines(doc)
+  check("collectKpLines gom đủ dòng điểm gạch ngang + dòng trần", kpLines.has(3) && kpLines.has(4) && kpLines.size === 2)
+  check("khối '-' vẫn bật Ctrl+click", isKpBlock("- ADN là phân tử.", undefined, kpLines, 3) === true)
+  check("khối '1. ...' là điểm theo parse -> bật Ctrl+click", isKpBlock("1. Thí nghiệm: nghiên cứu gene.", undefined, kpLines, 4) === true)
+  check("khối câu hỏi không bật Ctrl+click", isKpBlock("cau: ADN là gì?", undefined, kpLines, 6) === false)
+  check("không có thông tin parse -> khối '1. ...' vẫn tắt như cũ", isKpBlock("1. Thí nghiệm.", undefined, new Set(), 4) === false)
+  check("thông điệp lỗi điểm kiến thức vẫn bật", isKpBlock("...", "Điểm kiến thức phải có ít nhất 1 từ gạch chân", kpLines, 99) === true)
+
+  const r1 = applyKpWrap("ADN là __phân tử__ mang gen.", 10, 10)
+  check("Ctrl+click vào từ đã gạch -> gỡ sạch dấu, không hỏng", r1.text === "ADN là phân tử mang gen.")
+  const r2 = applyKpWrap("ADN là __phân__ tử.", 9, 9)
+  check("Ctrl+click vào từ đơn đã gạch -> gỡ sạch", r2.text === "ADN là phân tử.")
+  const r3 = applyKpWrap("ADN là phân tử mang gen.", 8, 8)
+  check("Ctrl+click vào từ chưa gạch -> vẫn gạch như cũ", r3.text === "ADN là __phân__ tử mang gen.")
+  const r4 = applyKpWrap("ADN là __phân__ tử.", 5, 10)
+  check("vùng chọn giao một phần với dấu gạch -> giữ nguyên, không hỏng dấu", r4.text === "ADN là __phân__ tử.")
+}
+
 console.log(`check-kp-v19: ${pass} pass, ${fail} fail`)
 if (fail > 0) process.exit(1)
