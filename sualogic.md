@@ -1568,3 +1568,64 @@ mẫu báo cáo chỉ khớp khung sửa màn hình nạp file.)
   phần với dấu thì giữ nguyên để khỏi hỏng dấu.
 - Kiểm chứng: check-kp-v19 mở rộng 25/25 (10 kiểm tra mới cho hai
   sửa trên), suite 35/42 (nguyên 7 lỗi cũ), tsc sạch.
+
+## 21. Thẻ đỏ "bài nháp chưa lưu" + lưu xong tự Sẵn sàng (GV chốt 2026-10-24)
+
+- Bối cảnh: GV hỏi vì sao bài AI đã tạo (Bài 3) mà đang sửa chưa lưu
+  thì không tìm thấy ở đâu — vì bài chưa lưu chưa phải là bài giảng:
+  việc AI chỉ nằm trong panel "Việc AI trước đó chưa lưu" ở trang nạp,
+  nạp thường chỉ nằm trong tab trình duyệt. GV chốt: việc đang dở phải
+  HIỆN RA ở nơi GV nhìn thấy, màu đỏ, để GV biết mà sửa tiếp.
+- Quy tắc chung: bất cứ bài nào đang "chưa lưu xong" thì thẻ màu đỏ +
+  dòng chữ đỏ nhỏ "bài nháp chưa lưu".
+- (1) Bài nháp ĐÃ tạo (kể cả bài trống vừa bấm Tạo): đã có dòng trong
+  DB nên thẻ đỏ hiện ngay trong danh sách — tab Bài giảng (trong
+  chương của nó) và tab Lớp (danh sách bài của lớp). Thay cho huy hiệu
+  "Nháp" xám trước đây. Hết đỏ khi bài thành "Sẵn sàng".
+- (2) Bài nạp file (thường hay AI) chưa bấm Lưu: chưa có dòng bài thật
+  nên hiện bằng THẺ ĐỎ GIỮ CHỖ từ bảng mới import_drafts (teacherId,
+  classId nullable, kind ai/upload, jobId, filename, sourceText,
+  images, tables; ensureSchema tạo bảng + index, bọc catch riêng như
+  mọi đợt). Lớp bắt đầu nạp -> thẻ ở tab Lớp đó; đường nạp thường ->
+  thẻ ở nhóm "Chưa lưu" trên cùng tab Bài giảng. Bấm "Mở tiếp" ->
+  trang nạp mở lại đúng bản xem trước đang dở (?resumeJob= / ?resumeDraft=
+  + assignToClass nếu có; mở xong dọn tham số khỏi URL). Bấm X -> bỏ
+  việc (việc AI thì consume luôn job). Thẻ biến mất khi lưu xong
+  (save route dọn theo draftId/aiJobId; consume route dọn theo jobId)
+  hoặc khi GV bỏ. HS không bao giờ thấy thẻ này (HS chỉ thấy bài ready).
+- Nạp cộng thêm (intoLesson) KHÔNG sinh thẻ — bài đích đã có thẻ đỏ
+  của nó nếu còn nháp; trạng thái bài đích không đổi khi nạp thêm.
+- Ghi thẻ lúc nào: AI -> ngay khi tạo job xong (startAiFlow); nạp
+  thường -> ngay khi có bản xem trước (doValidate xong). Nạp thường
+  cùng (GV, lớp, tên file) thì thay thế dòng cũ để khỏi nhân đôi thẻ
+  khi nạp lại cùng file. Bỏ file ở đường nạp thường (reset) thì xoá
+  luôn dòng; reset ở đường AI thì giữ job + thẻ (đúng vòng đời panel §17).
+- Mở lại việc nạp thường: dựng preview client-side từ sourceText đã
+  ghi (parseTextContent + attachBodyHtml/attachOptionBodyHtml + validate
+  — cùng cách applyAiReady dựng từ resultText) để giữ nguyên ảnh/bảng
+  đã trích từ file gốc; KHÔNG validate lại từ file text (sẽ mất media).
+  Mở lại việc AI: dùng đúng resumeReadyJob/trackJob của §17.
+- (3) LƯU XONG TỰ SẴN SÀNG (thay đổi duy nhất GV yêu cầu so với đề xuất):
+  persist ở lib/worksheet-import.ts giờ gán status "ready" cho MỌI bài
+  mới tạo qua đường nạp file. Hệ quả CỐ Ý, đã nói rõ với GV: thay thế
+  cơ chế "nháp chờ duyệt tên" của §18 cho đường nạp file — bài thiếu
+  tên (tên file thay thế) và bài AI đặt tên nay lưu xong thành Sẵn sàng
+  luôn, vì GV đã thấy tên ở bản xem trước rồi mới bấm Lưu; không còn
+  bước chuyển trạng thái tay. Cảnh báo titleMissing, ghi chú tên bài ở
+  preview và toast sau lưu đã sửa theo (không còn chữ "Nháp chờ duyệt").
+  draftLessonIndexes vẫn được gửi và vẫn quyết định TÊN thay thế, chỉ
+  không còn ép trạng thái.
+- Ranh giới giữ nguyên (đã nêu với GV): bài trống tạo bằng nút vẫn là
+  Nháp (thẻ đỏ) cho tới khi GV chuyển "Sẵn sàng" ở dropdown Trạng thái
+  — màn hình bài giảng không có nút Lưu toàn bài, lưu KP là lưu tăng
+  dần từng điểm nên không thể tự sẵn sàng sau một lần lưu KP (bài đang
+  soạn dở mà thành sẵn sàng thì HS lớp đó thấy bài chưa xong). Bài
+  giao cho lớp vẫn yêu cầu ready như cũ (assignLessons lọc readyIds);
+  bài tại lớp HS chỉ thấy khi ready (getStudentLessons lọc status).
+- Kiểm chứng: tsc sạch; suite 35/42 (nguyên 7 lỗi cũ); check API mới
+  test-import-drafts-21.mjs 21/21 (tạo/liệt kê theo lớp-thư viện, thay
+  thế cùng file, lưu kèm draftId -> ready + mất thẻ, job AI + consume
+  -> mất thẻ, DELETE); E2E §18 ALL PASS (đã cập nhật 2.1/8.3 sang ready,
+  7.1 bài trống tại lớp vẫn draft); E2E §17 chạy lại ALL PASS (lần chạy
+  đầu rớt FAIL 9 do phiên GV thứ hai chập chờn — việc vẫn chưa bị
+  consume, đúng mẫu auth lỗi đã biết khi chạy dồn); E2E §15 ALL PASS.

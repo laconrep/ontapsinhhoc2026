@@ -281,6 +281,7 @@ export interface ClassAssignmentDto {
   classId: string
   lessonId: string
   lessonTitle: string
+  lessonStatus: string
   chapterTitle: string
   dueAt: string | null
   note: string | null

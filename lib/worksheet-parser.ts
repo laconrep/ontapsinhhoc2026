@@ -1215,12 +1215,13 @@ export function validateDocument(result: ParseResult): ValidationResult {
 
   for (const lesson of lessons) {
     // §18: tên bài bỏ trống không chặn lưu — cảnh báo để GV biết bài sẽ
-    // được gán tên thay thế và để ở trạng thái nháp chờ duyệt.
+    // được gán tên thay thế. §21: lưu xong bài ở trạng thái Sẵn sàng
+    // luôn nên GV kiểm tra lại tên ở bản xem trước trước khi bấm Lưu.
     if (lesson.titleMissing) {
       warnings.push({
         line: lesson.line,
         message:
-          "Bài chưa có tên trong file — khi lưu, hệ thống sẽ gán tên thay thế (AI hoặc tên file) và để bài ở trạng thái Nháp chờ bạn duyệt tên.",
+          "Bài chưa có tên trong file — khi lưu, hệ thống sẽ gán tên thay thế (AI hoặc tên file). Kiểm tra lại tên trước khi lưu.",
       })
     }
     if (lesson.knowledgePoints.length === 0) {

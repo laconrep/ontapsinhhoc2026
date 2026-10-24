@@ -329,6 +329,35 @@ export function ensureSchema(): Promise<void> {
         `)
           .catch((e) => console.error("[ensureSchema] ai_teacher_assignments DDL failed:", e)),
       )
+      // §21: bảng việc nạp dở (thẻ đỏ giữ chỗ) + index tra theo GV/lớp.
+      .then(() =>
+        pool
+          .query(`
+          CREATE TABLE IF NOT EXISTS import_drafts (
+            "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            "teacherId" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+            "classId" uuid REFERENCES classes(id) ON DELETE CASCADE,
+            "kind" text NOT NULL,
+            "jobId" uuid,
+            "filename" text NOT NULL,
+            "sourceText" text,
+            "images" jsonb,
+            "tables" jsonb,
+            "createdAt" timestamp NOT NULL DEFAULT now()
+          )
+        `)
+          .catch((e) => console.error("[ensureSchema] import_drafts DDL failed:", e)),
+      )
+      .then(() =>
+        pool
+          .query(`CREATE INDEX IF NOT EXISTS import_drafts_teacher_idx ON import_drafts ("teacherId")`)
+          .catch((e) => console.error("[ensureSchema] import_drafts_teacher_idx DDL failed:", e)),
+      )
+      .then(() =>
+        pool
+          .query(`CREATE INDEX IF NOT EXISTS import_drafts_class_idx ON import_drafts ("classId")`)
+          .catch((e) => console.error("[ensureSchema] import_drafts_class_idx DDL failed:", e)),
+      )
       .then(() => undefined)
       .catch((e) => {
         // 2026-10-21 (sự cố production): KHÔNG ném lỗi ra caller nữa.

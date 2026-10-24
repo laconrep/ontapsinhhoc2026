@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic"
 export default async function ImportLessonPage({
   searchParams,
 }: {
-  searchParams: Promise<{ assignToClass?: string; intoLesson?: string }>
+  searchParams: Promise<{ assignToClass?: string; intoLesson?: string; resumeJob?: string; resumeDraft?: string }>
 }) {
   const sp = await searchParams
   // Ngữ cảnh lớp (đi từ nút tắt "Tạo bài giảng" trong tab Lớp học):
@@ -36,6 +36,8 @@ export default async function ImportLessonPage({
       assignToClass={assignToClass}
       intoLesson={intoLesson}
       chapterOptions={chapterOptions}
+      resumeJob={sp.resumeJob ?? null}
+      resumeDraft={sp.resumeDraft ?? null}
     />
   )
 }

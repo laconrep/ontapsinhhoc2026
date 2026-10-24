@@ -12,6 +12,7 @@ import {
 } from "@/app/actions/assignments"
 import { createClassLesson, createLesson, getChapterOptions } from "@/app/actions/content"
 import type { ClassAssignmentDto } from "@/types"
+import { UnsavedDrafts } from "@/components/teacher/unsaved-drafts"
 import Link from "next/link"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -237,6 +238,9 @@ export function ClassAssignments({
         </div>
       </div>
 
+      {/* §21: việc nạp file bắt đầu từ lớp này nhưng chưa bấm Lưu. */}
+      <UnsavedDrafts classId={classId} />
+
       {initial.length === 0 ? (
         <EmptyState
           className="rounded-xl border border-dashed border-border"
@@ -249,11 +253,25 @@ export function ClassAssignments({
           {initial.map((item) => {
             const badge = dueBadge(item.dueAt)
             return (
-              <Card key={item.id}>
+              <Card
+                key={item.id}
+                className={
+                  item.lessonStatus === "draft"
+                    ? "border-red-300 bg-red-50/60 dark:border-red-900 dark:bg-red-950/30"
+                    : undefined
+                }
+              >
                 <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
                   <div className="min-w-0">
                     <CardTitle className="font-heading text-base leading-snug">{item.lessonTitle}</CardTitle>
                     <p className="mt-1 text-xs text-muted-foreground">{item.chapterTitle}</p>
+                    {/* §21: bài đã giao nhưng vẫn là nháp (vd lưu trước
+                        §21) -> thẻ đỏ + dòng chữ đỏ như ở tab Bài giảng. */}
+                    {item.lessonStatus === "draft" ? (
+                      <p className="mt-1 text-xs font-medium text-red-600 dark:text-red-400">
+                        bài nháp chưa lưu
+                      </p>
+                    ) : null}
                   </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger

@@ -569,6 +569,37 @@ export const aiJobs = pgTable(
 
 // AI-MCP: log MỌI lượt tương tác AI (tạo việc, worker gọi tool, nộp bản
 // dựng...) ngay từ đầu — nền cho gói/trần lượt dùng và tab quản trị sau này.
+// §21: việc nạp file đang dở (chưa bấm Lưu) — thẻ đỏ giữ chỗ ở lớp / tab
+// Bài giảng. Một dòng cho mỗi phiên nạp chưa xong: việc AI (jobId) hoặc
+// nạp thường (sourceText + media đã trích). classId null = bắt đầu từ
+// đường nạp thường (hiện ở nhóm "Chưa lưu" của tab Bài giảng);
+// classId có giá trị = bắt đầu từ tab Lớp đó. Dòng biến mất khi lưu
+// xong (save/consume) hoặc GV bỏ việc — không phải là bài giảng, HS
+// không bao giờ thấy.
+export const importDrafts = pgTable(
+  "import_drafts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    teacherId: text("teacherId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    classId: uuid("classId").references(() => classes.id, {
+      onDelete: "cascade",
+    }),
+    kind: text("kind", { enum: ["ai", "upload"] }).notNull(),
+    jobId: uuid("jobId"),
+    filename: text("filename").notNull(),
+    sourceText: text("sourceText"),
+    images: jsonb("images"),
+    tables: jsonb("tables"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (t) => ({
+    byTeacher: index("import_drafts_teacher_idx").on(t.teacherId),
+    byClass: index("import_drafts_class_idx").on(t.classId),
+  }),
+)
+
 export const aiUsageLogs = pgTable(
   "ai_usage_logs",
   {

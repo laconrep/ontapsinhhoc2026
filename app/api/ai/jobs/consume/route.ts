@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth-helpers"
 import { markAiJobConsumed } from "@/lib/ai/jobs"
+import { clearImportDrafts } from "@/lib/import-drafts"
 import { safeErrorMessage } from "@/lib/api-error"
 
 export const runtime = "nodejs"
@@ -21,6 +22,8 @@ export async function POST(req: Request) {
     }
     const ok = await markAiJobConsumed(user.id, body.jobId)
     if (!ok) return NextResponse.json({ error: "Không tìm thấy việc" }, { status: 404 })
+    // §21: việc AI đã xong -> thẻ đỏ giữ chỗ của nó (nếu có) cũng biến mất.
+    await clearImportDrafts(user.id, undefined, body.jobId)
     return NextResponse.json({ ok: true })
   } catch (e) {
     return NextResponse.json({ error: safeErrorMessage(e, "Không đánh dấu được việc") }, { status: 400 })

@@ -9,6 +9,7 @@ import {
 } from "@/lib/worksheet-import"
 import { hitRateLimit } from "@/lib/rate-limit"
 import { safeErrorMessage } from "@/lib/api-error"
+import { clearImportDrafts } from "@/lib/import-drafts"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -42,7 +43,9 @@ export async function POST(req: Request) {
   try {
     const formData = await req.formData()
     // §18: đích đến do trang nạp bài chọn — ép chương / lưu tại lớp /
-    // nạp cộng thêm vào bài có sẵn / các bài bị ép nháp (tên do AI đặt).
+    // nạp cộng thêm vào bài có sẵn / tên bài do AI đặt (chỉ còn quyết
+    // định tên thay thế — §21 lưu xong là sẵn sàng luôn, không ép nháp).
+    // §21: draftId/aiJobId để dọn thẻ đỏ giữ chỗ sau khi lưu thành công.
     const strField = (name: string): string | undefined => {
       const v = formData.get(name)
       return typeof v === "string" && v ? v : undefined
@@ -52,6 +55,8 @@ export async function POST(req: Request) {
       classId: strField("classId"),
       intoLessonId: strField("intoLessonId"),
     }
+    const draftId = strField("draftId")
+    const aiJobId = strField("aiJobId")
     const rawDraftIdx = strField("draftLessonIndexes")
     if (rawDraftIdx) {
       try {
@@ -72,10 +77,12 @@ export async function POST(req: Request) {
       const images = parseMediaArray(formData.get("images"))
       const tables = parseMediaArray(formData.get("tables"))
       const result = await saveWorksheetFromText(user, text, filename, images, tables, options)
+      await clearImportDrafts(user.id, draftId, aiJobId)
       return NextResponse.json(result)
     }
     const { buffer, filename } = await bufferFromFormData(formData)
     const result = await saveWorksheetBuffer(user, buffer, filename, options)
+    await clearImportDrafts(user.id, draftId, aiJobId)
     return NextResponse.json(result)
   } catch (e) {
     // SEC-09: chỉ trả message nghiệp vụ đã biết; lỗi lạ -> thông báo chung.

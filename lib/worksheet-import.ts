@@ -393,8 +393,13 @@ async function persistParseResult(
 
       for (const pLesson of group.lessons) {
         const myIdx = flatIdx++
-        // §18: tên do GV ghi trong file -> sẵn sàng; tên bỏ trống/AI đặt
-        // -> gán tên thay thế và để NHÁP chờ GV duyệt tên.
+        // §18: tên do GV ghi trong file -> giữ nguyên; tên bỏ trống/AI
+        // đặt -> gán tên thay thế (tên file / tên AI đặt).
+        // §21: lưu xong là Sẵn sàng luôn — GV đã thấy tên ở bản xem
+        // trước rồi mới bấm Lưu nên không còn "nháp chờ duyệt tên" nữa.
+        // draftLessonIndexes giờ chỉ còn quyết định tên thay thế, không
+        // ép trạng thái. Nạp cộng thêm không đổi trạng thái bài đích
+        // (nhánh intoLesson ở trên return trước khi tới đây).
         const titleMissing = pLesson.titleMissing === true || draftIdx.has(myIdx)
         let title = titleMissing ? fallbackLessonTitle(filename) : pLesson.title
         let n = 2
@@ -412,7 +417,7 @@ async function persistParseResult(
             classId: options.classId ?? null,
             teacherId: user.id,
             order: nextOrder++,
-            status: titleMissing ? "draft" : "ready",
+            status: "ready",
             originalFileKey: filename,
           })
           .returning({ id: lessons.id })

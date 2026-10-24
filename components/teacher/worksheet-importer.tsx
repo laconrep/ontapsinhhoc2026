@@ -114,12 +114,17 @@ export function WorksheetImporter({
   assignToClass,
   intoLesson,
   chapterOptions,
+  resumeJob,
+  resumeDraft,
 }: {
   assignToClass?: { id: string; name: string } | null
   /** §18: nạp cộng thêm vào bài này thay vì tạo bài mới. */
   intoLesson?: { id: string; title: string; chapterTitle: string } | null
   /** §18: các chương hiện có của GV cho ô chọn chương đích. */
   chapterOptions?: { id: string; title: string }[]
+  /** §21: mở lại việc AI / việc nạp dở từ thẻ đỏ giữ chỗ. */
+  resumeJob?: string | null
+  resumeDraft?: string | null
 }) {
   const chapters = chapterOptions ?? []
   const router = useRouter()
@@ -146,6 +151,10 @@ export function WorksheetImporter({
   // §16: id job AI của bản xem trước hiện tại — giữ lại sau khi aiJob
   // đã đóng, để gắn từ nhiễu vào bài ngay sau khi lưu.
   const aiJobIdRef = useRef<string | null>(null)
+  // §21: id dòng import_drafts của phiên nạp hiện tại (thẻ đỏ giữ chỗ).
+  // Nạp cộng thêm (intoLesson) không có dòng này — bài đích đã có thẻ.
+  const draftIdRef = useRef<string | null>(null)
+  const resumeHandledRef = useRef(false)
   // --- Đích lưu (§18) ---
   // Ngữ cảnh thường: chương đích ("" = theo chương trong file). Mặc
   // định chọn sẵn chương đầu tiên để file form mới (không ghi chương)
@@ -212,6 +221,20 @@ export function WorksheetImporter({
 
   function reset() {
     savedRef.current = true
+    // §21: bỏ file ở đường nạp thường = bỏ luôn việc dở (thẻ đỏ biến
+    // mất). Việc AI thì giữ nguyên job + thẻ đỏ — GV mở lại được từ
+    // panel "Việc AI trước đó chưa lưu" hoặc từ thẻ đỏ ở lớp.
+    if (draftIdRef.current && !previewIsAiResult) {
+      const id = draftIdRef.current
+      draftIdRef.current = null
+      void fetch("/api/import-drafts", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      }).catch(() => {})
+    } else {
+      draftIdRef.current = null
+    }
     setFile(null)
     setPreview(null)
     setDraftText("")
@@ -230,6 +253,29 @@ export function WorksheetImporter({
         setPreview(res)
         setDraftText(res.sourceText)
         setOriginalSource(res.sourceText)
+        // §21: bản xem trước đã có = việc dở -> ghi thẻ đỏ giữ chỗ
+        // (lớp bắt đầu nạp, hoặc nhóm "Chưa lưu" ở tab Bài giảng).
+        // Nạp cộng thêm thì không ghi — bài đích đã có thẻ của nó.
+        if (!intoLesson) {
+          try {
+            const r = await fetch("/api/import-drafts", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                kind: "upload",
+                filename: file.name,
+                sourceText: res.sourceText,
+                images: res.images ?? [],
+                tables: res.tables ?? [],
+                classId: assignToClass?.id ?? null,
+              }),
+            })
+            const d = (await r.json().catch(() => ({}))) as { id?: string }
+            if (d.id) draftIdRef.current = d.id
+          } catch {
+            // Thẻ đỏ là phụ trợ — không chặn luồng nạp chính.
+          }
+        }
         if (res.isValid) toast.success("Tài liệu hợp lệ, sẵn sàng để lưu")
         else toast.error(`Phát hiện ${res.errors.length} lỗi cần sửa`)
       } catch (e) {
@@ -246,6 +292,26 @@ export function WorksheetImporter({
     try {
       const res = await postWorksheet<{ jobId: string }>("/api/ai/jobs", file)
       aiJobIdRef.current = res.jobId
+      // §21: việc AI đã tạo = việc dở -> ghi thẻ đỏ giữ chỗ (trừ nạp
+      // cộng thêm — bài đích đã có thẻ). Lỗi ghi thẻ không chặn luồng AI.
+      if (!intoLesson) {
+        try {
+          const r = await fetch("/api/import-drafts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              kind: "ai",
+              jobId: res.jobId,
+              filename: file.name,
+              classId: assignToClass?.id ?? null,
+            }),
+          })
+          const d = (await r.json().catch(() => ({}))) as { id?: string }
+          if (d.id) draftIdRef.current = d.id
+        } catch {
+          // Thẻ đỏ là phụ trợ — không chặn luồng AI.
+        }
+      }
       setAiJob({
         id: res.jobId,
         status: "pending",
@@ -375,6 +441,94 @@ export function WorksheetImporter({
 
   useEffect(() => {
     void refreshMyAiJobs()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // §21: mở lại từ thẻ đỏ giữ chỗ (lớp / tab Bài giảng). Chạy đúng một
+  // lần khi vào trang bằng ?resumeJob= / ?resumeDraft=, rồi dọn tham
+  // số khỏi URL để F5 không mở lại từ đầu.
+  useEffect(() => {
+    if (resumeHandledRef.current) return
+    if (!resumeJob && !resumeDraft) return
+    resumeHandledRef.current = true
+    const cleanUrl = assignToClass
+      ? `/teacher/lessons/import?assignToClass=${assignToClass.id}`
+      : "/teacher/lessons/import"
+    const finish = () => router.replace(cleanUrl)
+    if (resumeJob) {
+      void (async () => {
+        try {
+          const res = await fetch(`/api/ai/jobs?id=${resumeJob}`)
+          const data = (await res.json()) as {
+            status?: AiJobStatus["status"]
+            progress?: number
+            stage?: string | null
+            error?: string | null
+            filename?: string
+          }
+          if (!res.ok) throw new Error("Không tải được việc")
+          const item: AiJobListItem = {
+            id: resumeJob,
+            filename: data.filename ?? "Tài liệu AI",
+            createdAt: new Date().toISOString(),
+            status: data.status ?? "pending",
+            progress: data.progress ?? 0,
+            stage: data.stage ?? null,
+            error: data.error ?? null,
+            consumedAt: null,
+          }
+          if (data.status === "ready") await resumeReadyJob(item)
+          else trackJob(item)
+        } catch {
+          toast.error("Không mở được việc AI từ thẻ đỏ — thử mở lại từ panel ở trang nạp")
+        } finally {
+          finish()
+        }
+      })()
+    } else if (resumeDraft) {
+      void (async () => {
+        try {
+          const res = await fetch(`/api/import-drafts?id=${resumeDraft}`)
+          const d = (await res.json()) as {
+            filename?: string
+            sourceText?: string | null
+            images?: string[]
+            tables?: string[]
+          }
+          if (!res.ok || !d.sourceText) throw new Error("Không tải được việc")
+          // Dựng lại bản xem trước từ văn bản đã ghi — cùng cách mà
+          // applyAiReady dựng từ resultText (không qua validate lại,
+          // để giữ nguyên ảnh/bảng đã trích từ file gốc).
+          const parsed = parseTextContent(d.sourceText)
+          const images = d.images ?? []
+          const tables = d.tables ?? []
+          if (images.length > 0 || tables.length > 0) {
+            attachBodyHtml(parsed, images, tables)
+            attachOptionBodyHtml(parsed, images, tables)
+          }
+          const validation = validateDocument(parsed)
+          savedRef.current = false
+          setFile(new File([d.sourceText], d.filename ?? "tai-lieu.txt", { type: "text/plain" }))
+          draftIdRef.current = resumeDraft
+          setDraftText(d.sourceText)
+          setOriginalSource(d.sourceText)
+          setPreview({
+            parseResult: parsed,
+            errors: validation.errors,
+            warnings: validation.warnings,
+            isValid: validation.isValid,
+            summary: summarize(parsed),
+            sourceText: d.sourceText,
+            images,
+            tables,
+          })
+        } catch {
+          toast.error("Không mở được việc nạp dở — thử nạp lại file")
+        } finally {
+          finish()
+        }
+      })()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -576,10 +730,14 @@ export function WorksheetImporter({
         } else if (plainChapterId) {
           fd.append("targetChapterId", plainChapterId)
         }
-        // §18: tên bài do AI đặt -> server ép các bài đó sang nháp.
+        // §18: tên bài do AI đặt -> server gán tên thay thế. §21: lưu
+        // xong là sẵn sàng luôn, không ép nháp nữa.
         if (previewIsAiResult && aiMeta?.draftLessonIndexes?.length) {
           fd.append("draftLessonIndexes", JSON.stringify(aiMeta.draftLessonIndexes))
         }
+        // §21: dọn thẻ đỏ giữ chỗ sau khi lưu thành công (server xoá).
+        if (draftIdRef.current) fd.append("draftId", draftIdRef.current)
+        if (aiJobIdRef.current) fd.append("aiJobId", aiJobIdRef.current)
         const res = await postForm<SaveResult>("/api/worksheet/save", fd)
         savedRef.current = true
         // §16: bản xem trước là kết quả AI -> gắn từ nhiễu kéo thả của
@@ -638,16 +796,10 @@ export function WorksheetImporter({
           }
           router.push(`/teacher/classes/${assignToClass.id}?tab=assignments`)
         } else {
-          const draftCount = preview
-            ? preview.parseResult.chapters
-                .flatMap((c) => c.lessons)
-                .filter((l) => l.titleMissing).length +
-              (previewIsAiResult ? (aiMeta?.draftLessonIndexes?.length ?? 0) : 0)
-            : 0
+          // §21: lưu xong là sẵn sàng luôn — không còn "bài nháp chờ
+          // duyệt tên" nữa, GV không cần chuyển trạng thái tay.
           toast.success(
-            `Đã lưu: ${res.createdLessons} bài, ${res.createdKps} kiến thức, ${res.createdQuestions} câu hỏi${
-              draftCount > 0 ? ` — ${draftCount} bài ở trạng thái Nháp chờ duyệt tên` : ""
-            }`,
+            `Đã lưu: ${res.createdLessons} bài, ${res.createdKps} kiến thức, ${res.createdQuestions} câu hỏi`,
           )
           router.push("/teacher/lessons")
         }
@@ -951,7 +1103,7 @@ export function WorksheetImporter({
               .forEach((l, i) => {
                 if (l.titleMissing) {
                   notes.push(
-                    `Bài ${i + 1} chưa có tên trong file — sẽ dùng tên file "${file?.name ?? ""}" và để ở trạng thái Nháp chờ bạn duyệt tên.`,
+                    `Bài ${i + 1} chưa có tên trong file — sẽ dùng tên file "${file?.name ?? ""}". Kiểm tra lại tên trước khi lưu (lưu xong bài ở trạng thái Sẵn sàng).`,
                   )
                 }
               })
@@ -962,7 +1114,7 @@ export function WorksheetImporter({
               for (const idx of aiMeta?.draftLessonIndexes ?? []) {
                 if (titles[idx]) {
                   notes.push(
-                    `Tên bài "${titles[idx]}" do AI đặt — bài sẽ ở trạng thái Nháp chờ bạn duyệt tên.`,
+                    `Tên bài "${titles[idx]}" do AI đặt — kiểm tra lại tên trước khi lưu (lưu xong bài ở trạng thái Sẵn sàng).`,
                   )
                 }
               }
@@ -971,7 +1123,7 @@ export function WorksheetImporter({
             return (
               <Card className="border-sky-300 bg-sky-50 dark:border-sky-800 dark:bg-sky-950/40">
                 <CardContent className="space-y-1 pt-4 text-sm text-sky-800 dark:text-sky-300">
-                  <p className="font-medium">Tên bài chờ duyệt:</p>
+                  <p className="font-medium">Tên bài cần kiểm tra trước khi lưu:</p>
                   <ul className="list-inside list-disc space-y-1">
                     {notes.map((n, i) => (
                       <li key={i}>{n}</li>

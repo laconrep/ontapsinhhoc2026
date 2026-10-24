@@ -50,6 +50,7 @@ import {
 } from "@/app/actions/assignments"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { EmptyState } from "@/components/shared/empty-state"
+import { UnsavedDrafts } from "@/components/teacher/unsaved-drafts"
 import type { ChapterDto } from "@/types"
 
 const STATUS_LABEL: Record<string, string> = {
@@ -270,6 +271,10 @@ export function LessonManager({ initialChapters }: { initialChapters: ChapterDto
         </div>
       </div>
 
+      {/* §21: việc nạp thường chưa bấm Lưu (thẻ đỏ giữ chỗ) — nằm trên
+          mọi chương vì nó chưa thuộc chương nào. */}
+      <UnsavedDrafts classId={null} />
+
       {chapters.length === 0 ? (
         <EmptyState
           className="rounded-lg border border-dashed"
@@ -344,7 +349,11 @@ export function LessonManager({ initialChapters }: { initialChapters: ChapterDto
                       {chapter.lessons.map((lesson) => (
                         <li
                           key={lesson.id}
-                          className="flex items-center gap-3 px-6 py-3 hover:bg-secondary/40"
+                          className={`flex items-center gap-3 px-6 py-3 ${
+                            lesson.status === "draft"
+                              ? "bg-red-50 hover:bg-red-100 dark:bg-red-950/30 dark:hover:bg-red-950/50"
+                              : "hover:bg-secondary/40"
+                          }`}
                         >
                           <BookOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
                           <Link
@@ -356,9 +365,17 @@ export function LessonManager({ initialChapters }: { initialChapters: ChapterDto
                           <span className="text-xs text-muted-foreground">
                             {lesson.knowledgePointCount ?? 0} KT
                           </span>
-                          <Badge variant={STATUS_VARIANT[lesson.status]}>
-                            {STATUS_LABEL[lesson.status]}
-                          </Badge>
+                          {/* §21: bài nháp = thẻ đỏ + dòng chữ đỏ (thay
+                              cho huy hiệu "Nháp" xám trước đây). */}
+                          {lesson.status === "draft" ? (
+                            <span className="text-xs font-medium text-red-600 dark:text-red-400">
+                              bài nháp chưa lưu
+                            </span>
+                          ) : (
+                            <Badge variant={STATUS_VARIANT[lesson.status]}>
+                              {STATUS_LABEL[lesson.status]}
+                            </Badge>
+                          )}
                           <Link
                             href={`/teacher/lessons/import?intoLesson=${lesson.id}`}
                             className={buttonVariants({ variant: "outline", size: "sm" })}
