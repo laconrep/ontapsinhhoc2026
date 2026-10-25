@@ -38,6 +38,9 @@ function SolutionBlock({ solution }: { solution: string }) {
 
 const TYPE_LABEL: Record<string, string> = { MC: "Trắc nghiệm", TF: "Đúng/Sai", SA: "Trả lời ngắn" }
 
+/** §26: ngưỡng cảnh báo bài nặng theo tổng byte ảnh raster. */
+const IMAGE_WEIGHT_WARN_BYTES = 5 * 1024 * 1024
+
 type HighlightTerm = {
   text: string
   slotIndex?: number
@@ -159,6 +162,7 @@ export function PreviewDocument({
   highlightLine,
   errorLines,
   onSelectBlock,
+  totalImageBytes,
   aiMeta,
 }: {
   parseResult: ParseResult
@@ -168,6 +172,9 @@ export function PreviewDocument({
   highlightLine?: number
   errorLines?: Set<number>
   onSelectBlock?: (line: number) => void
+  /** §26: tổng byte ảnh raster (chỉ đường validate thường mới có) — vượt
+   * ngưỡng thì hiện cảnh báo, không chặn lưu. */
+  totalImageBytes?: number
   /** §15.2 chốt 5: nhãn truy vết cho nội dung AI sinh/điền. */
   aiMeta?: AiResultMeta | null
 }) {
@@ -245,6 +252,15 @@ export function PreviewDocument({
         <Badge variant="secondary">{summary.kps} kiến thức</Badge>
         <Badge variant="secondary">{summary.questions} câu hỏi</Badge>
       </div>
+      {/* §26: cảnh báo bài nặng — không chặn lưu, chỉ để giáo viên nén
+      hoặc tách bớt ảnh trước khi cả lớp phải tải. */}
+      {totalImageBytes != null && totalImageBytes > IMAGE_WEIGHT_WARN_BYTES ? (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
+          Bài này có tổng ảnh {(totalImageBytes / 1024 / 1024).toFixed(1)} MB — học sinh sẽ tải nặng
+          mỗi lần mở bài lần đầu. Nên nén ảnh hoặc tách bớt ảnh trước khi lưu. Cảnh báo này
+          không chặn lưu.
+        </div>
+      ) : null}
 
       <div className="space-y-3">
         {parseResult.chapters.map((c, ci) => (

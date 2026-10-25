@@ -2,6 +2,7 @@
 
 import DOMPurify from "dompurify"
 import { cn } from "@/lib/utils"
+import { addLazyLoading } from "@/lib/lazy-images"
 import {
   SANITIZE_ALLOWED_TAGS,
   isAllowedImgSrc,
@@ -78,7 +79,7 @@ export function KpMedia({
         "mt-2 leading-relaxed text-foreground [&_img]:max-w-full [&_img.eq-inline]:inline-block [&_img.eq-inline]:align-middle [&_img.eq-inline]:mx-1 [&_img.eq-inline]:my-0 [&_img.eq-inline]:h-[2.5em] [&_img.eq-inline]:w-auto [&_img:not(.eq-inline)]:mx-auto [&_img:not(.eq-inline)]:my-2 [&_img:not(.eq-inline)]:max-h-48 [&_table]:my-2 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-border [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-border [&_th]:px-2 [&_th]:py-1",
         className,
       )}
-      dangerouslySetInnerHTML={{ __html: html }}
+      dangerouslySetInnerHTML={{ __html: addLazyLoading(html) }}
     />
   )
 }
@@ -104,7 +105,7 @@ export function QuestionStem({
             "leading-relaxed text-foreground [&_img]:max-w-full [&_img.eq-inline]:inline-block [&_img.eq-inline]:align-middle [&_img.eq-inline]:mx-1 [&_img.eq-inline]:my-0 [&_img.eq-inline]:h-[2.5em] [&_img.eq-inline]:w-auto [&_img:not(.eq-inline)]:mx-auto [&_img:not(.eq-inline)]:my-2 [&_img:not(.eq-inline)]:max-h-48 [&_table]:my-2 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-border [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-border [&_th]:px-2 [&_th]:py-1",
             className,
           )}
-          dangerouslySetInnerHTML={{ __html: html }}
+          dangerouslySetInnerHTML={{ __html: addLazyLoading(html) }}
         />
       ) : (
         <p className={cn("whitespace-pre-wrap leading-relaxed text-foreground", className)}>{content}</p>

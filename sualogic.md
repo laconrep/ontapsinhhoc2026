@@ -1770,5 +1770,50 @@ mẫu báo cáo chỉ khớp khung sửa màn hình nạp file.)
   đỏ vì lesson dựng tay thiếu trường questions — đã khỏi nhờ `?? []`;
   sau cập nhật, phien8 trở lại đúng thông điệp lỗi cũ ("qua nhieu loi
   gia 11") như bản gốc.
-- Chưa push: code mới ở local (master = 2d439bb + thay đổi §25 chưa
+- Đã push: commit b632dbf lên master (Vercel tự deploy).
+
+## §26 — Giảm băng thông ảnh khi học sinh mở bài (user chốt 25/10, cả 3 cách)
+
+- Bối cảnh: ảnh là phần nặng nhất (chữ/JSON nhỏ); đường Blob trước đây
+  upload nguyên kích thước gốc trong khi ngoài màn hình ảnh chỉ hiện
+  khung max-h-48. Giới hạn cần giữ là Blob 10 GB/tháng (vượt là chặn).
+  Lượt xem lại đã rẻ nhờ URL sha256 bất biến + cache dài nên §26 chỉ
+  đánh vào byte tải lần đầu và ảnh chưa cần xem.
+- Cách 1 — nén + resize lúc nạp: thêm sharp 0.35.5 (pnpm add; chạy
+  bằng pnpm 10 vì node_modules hiện link từ store v10, lockfile v9 vẫn
+  tương thích). lib/blob-media.ts thêm optimizeRaster: PNG/JPEG ->
+  WebP q80, rộng tối đa 1200 (không phóng to ảnh nhỏ); GIF giữ nguyên
+  để không mất ảnh động; WebP đã <= 1200 giữ nguyên tránh nén lại
+  giảm chất lượng; mọi lỗi (kể cả thiếu sharp) trả về bytes gốc —
+  tối ưu không bao giờ được làm hỏng việc nạp. uploadRasterToBlob
+  đổi trả {url, bytes} (byte THỰC đã upload); tên file băm từ bytes
+  cuối nên hai ảnh gốc khác nhau nén ra cùng file thì dedupe một URL;
+  put thêm cacheControlMaxAge 31536000. Giới hạn: fallback base64
+  (mất token / lỗi upload) vẫn giữ ảnh gốc — chỉ đường Blob được tối ưu.
+- Cách 2 — lazy load: lib/lazy-images.ts mới, hàm thuần addLazyLoading
+  thêm loading="lazy" cho thẻ img thường, trừ ảnh công thức inline
+  (class eq-inline, tí hon, cần hiện cùng chữ) và img đã có loading=.
+  KpMedia + QuestionStem áp sau sanitizeStemHtml nên mọi nơi hiện
+  bodyHtml (Tab 1, thân câu hỏi, xem trước, live) đều được hưởng.
+- Cách 3 — cảnh báo bài nặng: ExtractResult thêm imageBytes (docx:
+  URL Blob trùng chỉ tính một lần, fallback base64 tính theo lần xuất
+  hiện vì dữ liệu nằm trong trang; .txt/.pdf = 0; SVG công thức không
+  tính vì nhỏ). WorksheetPreview (server + interface local của
+  importer) thêm totalImageBytes?; ImportErrorFix chuyển tiếp cho
+  PreviewDocument; vượt 5 MB thì hiện banner vàng "tổng ảnh X,X MB —
+  nên nén hoặc tách bớt ảnh trước khi lưu", KHÔNG chặn lưu. Giới hạn:
+  đường AI và bản nháp dựng lại từ text không có số này nên không
+  hiện cảnh báo; ảnh không đổi khi sửa text nên số giữ nguyên qua các
+  lần kiểm tra lại trong cùng phiên.
+- Kiểm chứng: test mới ~/workspace/.epg/test-bandwidth-26.mjs 19/19
+  (PNG 2000 -> WebP 1200 và nhỏ hơn gốc; ảnh nhỏ không bị phóng to;
+  GIF / byte hỏng / WebP nhỏ passthrough; upload nhận đúng webp +
+  cache 1 năm + byte thực, put lỗi -> null; lazy 4 trường hợp; trích
+  docx Bài 1: imageBytes = 2.621.441 > 0, có ảnh raster). tsc sạch;
+  next build exit 0; suite 35/42, đúng 7 lỗi cũ. Lưu ý khi đối chiếu:
+  imageBytes có thể lớn hơn cỡ file .docx vì docx là zip nén — ảnh
+  gốc giải nén vốn lớn hơn file zip (không phải lỗi đếm).
+- Chưa push: code mới ở local (master = b632dbf + thay đổi §26 chưa
   commit) — chờ GV đưa PAT mới rồi mới commit + push như mọi lần.
+  Lưu ý: bài đã nạp trước §26 vẫn giữ ảnh gốc — chỉ bài nạp MỚI sau
+  khi deploy mới được nén; muốn bài cũ nhẹ lại phải nạp lại.

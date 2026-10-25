@@ -41,6 +41,9 @@ interface ImportErrorFixProps {
   summary: { chapters: number; lessons: number; kps: number; questions: number }
   images?: string[]
   tables?: string[]
+  /** §26: tổng byte ảnh raster từ lần validate — ảnh không đổi khi sửa
+   * text nên số này vẫn đúng sau các lần kiểm tra lại. */
+  totalImageBytes?: number
   /** §15: siêu dữ liệu truy vết khi bản xem trước đến từ việc AI. */
   aiMeta?: AiResultMeta | null
   onSourceChange?: (text: string) => void
@@ -58,6 +61,7 @@ export function ImportErrorFix({
   summary,
   images = [],
   tables = [],
+  totalImageBytes,
   aiMeta,
   onSourceChange,
   onRevalidated,
@@ -325,6 +329,7 @@ export function ImportErrorFix({
                 highlightLine={highlightLine}
                 errorLines={errorLines}
                 onSelectBlock={(line) => openBlock(line)}
+                totalImageBytes={totalImageBytes}
                 aiMeta={aiMeta}
               />
             </div>

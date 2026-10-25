@@ -50,6 +50,10 @@ export interface ExtractResult {
   sourceText: string
   images: string[]
   tables: string[]
+  /** §26: tổng byte ảnh raster học sinh sẽ tải (sau tối ưu, ảnh Blob
+   * trùng URL chỉ tính một lần; fallback base64 tính theo lần xuất
+   * hiện vì dữ liệu nằm trong trang). 0 với .txt/.pdf (không trích ảnh). */
+  imageBytes: number
 }
 
 /** Nhận diện loại file bằng magic bytes + phần mở rộng, không tin tên file tuyệt đối. */
@@ -108,11 +112,15 @@ async function extractAndParseInner(buffer: Buffer, filename: string): Promise<E
     const sourceText = buffer.toString("utf8")
     // §25: đường nạp thường — trắc nghiệm tách riêng ở cấp bài học,
     // không gắn vào KP cuối (áp dụng cho cả 3 loại file).
-    return { parseResult: parseTextContent(sourceText, { questionScope: "lesson" }), sourceText, images: [], tables: [] }
+    return { parseResult: parseTextContent(sourceText, { questionScope: "lesson" }), sourceText, images: [], tables: [], imageBytes: 0 }
   }
 
   if (kind === "docx") {
     const { buffer: buf2, maths } = await preprocessOmml(buffer)
+    // §26: cộng dồn byte ảnh để cảnh báo bài nặng — URL Blob trùng chỉ
+    // tính một lần (trình duyệt tải một lần nhờ cache/dedupe).
+    let imageBytes = 0
+    const seenBlobUrls = new Set<string>()
     const { value: rawHtml } = await mammoth.convertToHtml(
       { buffer: buf2 },
       {
@@ -128,8 +136,15 @@ async function extractAndParseInner(buffer: Buffer, filename: string): Promise<E
           // cấu hình hoặc upload lỗi -> giữ nguyên base64 như trước (xem
           // lib/blob-media.ts). SVG công thức KHÔNG đi qua nhánh này.
           const raw = await image.read()
-          const blobUrl = await uploadRasterToBlob(raw, image.contentType)
-          if (blobUrl) return { src: blobUrl }
+          const uploaded = await uploadRasterToBlob(raw, image.contentType)
+          if (uploaded) {
+            if (!seenBlobUrls.has(uploaded.url)) {
+              seenBlobUrls.add(uploaded.url)
+              imageBytes += uploaded.bytes
+            }
+            return { src: uploaded.url }
+          }
+          imageBytes += raw.length
           return { src: `data:${image.contentType};base64,${raw.toString("base64")}` }
         }),
       },
@@ -138,7 +153,7 @@ async function extractAndParseInner(buffer: Buffer, filename: string): Promise<E
       const src = maths[+n]
       return src ? `<img src="${src}" class="eq-inline" alt="">` : "[công thức]"
     })
-    return parseHtmlToResultAndText(tagEquationImages(html), { questionScope: "lesson" })
+    return { ...parseHtmlToResultAndText(tagEquationImages(html), { questionScope: "lesson" }), imageBytes }
   }
 
   const { PDFParse } = await import("pdf-parse")
@@ -146,7 +161,7 @@ async function extractAndParseInner(buffer: Buffer, filename: string): Promise<E
   try {
     const res = await parser.getText()
     const sourceText = res.text
-    return { parseResult: parseTextContent(sourceText, { questionScope: "lesson" }), sourceText, images: [], tables: [] }
+    return { parseResult: parseTextContent(sourceText, { questionScope: "lesson" }), sourceText, images: [], tables: [], imageBytes: 0 }
   } finally {
     await parser.destroy()
   }

@@ -40,6 +40,10 @@ export interface WorksheetPreview {
   sourceText: string
   images: string[]
   tables: string[]
+  /** §26: tổng byte ảnh raster (đường validate thường). Đường AI / bản
+   * nháp dựng lại từ text không có số này — để trống thì không hiện
+   * cảnh báo (không chặn lưu). */
+  totalImageBytes?: number
 }
 
 export interface SaveResult {
@@ -108,7 +112,7 @@ export async function bufferFromFormData(formData: FormData): Promise<{ buffer: 
 }
 
 export async function validateWorksheetBuffer(buffer: Buffer, filename: string): Promise<WorksheetPreview> {
-  const { parseResult, sourceText, images, tables } = await extractAndParse(buffer, filename)
+  const { parseResult, sourceText, images, tables, imageBytes } = await extractAndParse(buffer, filename)
   const validation = validateDocument(parseResult)
   return {
     parseResult: previewParseResult(parseResult),
@@ -119,6 +123,7 @@ export async function validateWorksheetBuffer(buffer: Buffer, filename: string):
     sourceText,
     images,
     tables,
+    totalImageBytes: imageBytes,
   }
 }
 

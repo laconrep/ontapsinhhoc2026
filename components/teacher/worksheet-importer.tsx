@@ -80,6 +80,8 @@ interface WorksheetPreview {
   sourceText: string
   images?: string[]
   tables?: string[]
+  /** §26: tổng byte ảnh raster (chỉ đường validate thường mới có). */
+  totalImageBytes?: number
 }
 
 interface SaveResult {
@@ -1194,6 +1196,7 @@ export function WorksheetImporter({
           summary={preview.summary}
           images={preview.images}
           tables={preview.tables}
+          totalImageBytes={preview.totalImageBytes}
           aiMeta={aiMeta}
           onSourceChange={setDraftText}
           onRevalidated={handleRevalidated}
