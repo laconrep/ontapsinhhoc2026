@@ -1813,7 +1813,6 @@ mẫu báo cáo chỉ khớp khung sửa màn hình nạp file.)
   next build exit 0; suite 35/42, đúng 7 lỗi cũ. Lưu ý khi đối chiếu:
   imageBytes có thể lớn hơn cỡ file .docx vì docx là zip nén — ảnh
   gốc giải nén vốn lớn hơn file zip (không phải lỗi đếm).
-- Chưa push: code mới ở local (master = b632dbf + thay đổi §26 chưa
-  commit) — chờ GV đưa PAT mới rồi mới commit + push như mọi lần.
+- Đã push: commit 0de3c6f lên master (Vercel tự deploy).
   Lưu ý: bài đã nạp trước §26 vẫn giữ ảnh gốc — chỉ bài nạp MỚI sau
   khi deploy mới được nén; muốn bài cũ nhẹ lại phải nạp lại.

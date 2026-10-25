@@ -715,20 +715,28 @@ export function LessonDetail({
           </section>
 
           <section className="flex min-h-0 flex-col rounded-lg border bg-card">
-            <div className="flex shrink-0 items-center justify-between border-b p-4">
-              <h2 className="font-heading text-lg font-semibold text-foreground">
-                Điểm kiến thức ({kps.length})
-              </h2>
-              <Button
-                size="sm"
-                onClick={() => {
-                  setKpDialog({ mode: "create" })
-                  setRawContent("")
-                }}
-              >
-                <Plus className="h-4 w-4" />
-                Thêm điểm kiến thức
-              </Button>
+            <div className="shrink-0 space-y-1 border-b p-4">
+              <div className="flex items-center justify-between">
+                <h2 className="font-heading text-lg font-semibold text-foreground">
+                  Điểm kiến thức ({kps.length})
+                </h2>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setKpDialog({ mode: "create" })
+                    setRawContent("")
+                  }}
+                >
+                  <Plus className="h-4 w-4" />
+                  Thêm điểm kiến thức
+                </Button>
+              </div>
+              {/* Gợi ý cho GV mới: nút sửa nằm ở dấu ba chấm dọc trên mỗi thẻ. */}
+              <p className="text-xs text-red-600 dark:text-red-400">
+                Bấm vào dấu{" "}
+                <MoreVertical className="inline h-3 w-3" aria-hidden="true" />{" "}
+                trên thẻ để sửa điểm kiến thức.
+              </p>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
               {kps.length === 0 ? (
