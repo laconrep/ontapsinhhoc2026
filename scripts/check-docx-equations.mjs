@@ -34,7 +34,7 @@ console.log("wmf con lai:", wmf.length)
 console.log("png:", png.length)
 
 const questions = result.parseResult.chapters.flatMap((c) =>
-  c.lessons.flatMap((l) => l.knowledgePoints.flatMap((k) => k.questions)),
+  c.lessons.flatMap((l) => [...l.knowledgePoints.flatMap((k) => k.questions), ...(l.questions ?? [])]),
 )
 
 function dumpQuestion(label, pred) {

@@ -59,7 +59,7 @@ assertCase(["A+G", "4", "T+C", "="], [">A+G<", ">T+C<", ">4<", ">=</"], "A+G 4 T
 const DOCX = "BAI 1 - GENE VA SU TAI BAN DNA.docx"
 const extracted = await extractAndParse(readFileSync(DOCX), DOCX)
 const allQ = extracted.parseResult.chapters.flatMap((c) =>
-  c.lessons.flatMap((l) => l.knowledgePoints.flatMap((k) => k.questions)),
+  c.lessons.flatMap((l) => [...l.knowledgePoints.flatMap((k) => k.questions), ...(l.questions ?? [])]),
 )
 const mc = allQ.filter((q) => q.type === "MC")
 if (mc.length !== 35) {

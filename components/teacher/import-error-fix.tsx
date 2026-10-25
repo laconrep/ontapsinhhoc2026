@@ -85,7 +85,9 @@ export function ImportErrorFix({
 
   function applyRevalidate(text: string) {
     setChecking(false)
-    const nextParse = parseTextContent(text)
+    // §25: bản xem trước từ AI (aiMeta có) giữ cách gán theo KP + chỉ
+    // thị; bản thường tách trắc nghiệm ra cấp bài học như lúc validate.
+    const nextParse = parseTextContent(text, aiMeta ? undefined : { questionScope: "lesson" })
     attachBodyHtml(nextParse, images, tables)
     attachOptionBodyHtml(nextParse, images, tables)
     const { isValid, errors: next } = validateDocument(nextParse)

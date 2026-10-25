@@ -185,7 +185,12 @@ export function WorksheetImporter({
         const incoming = preview.parseResult.chapters.flatMap((c) =>
           c.lessons.flatMap((l) => l.knowledgePoints),
         )
-        setAppendPlan(computeAppendPlan(snap.kps, snap.questions, incoming))
+        // §25: bản xem trước nạp cộng thêm cũng chống trùng cho câu
+        // hỏi cấp bài học (server tính lại lúc lưu làm chính thức).
+        const incomingLessonQuestions = preview.parseResult.chapters.flatMap((c) =>
+          c.lessons.flatMap((l) => l.questions),
+        )
+        setAppendPlan(computeAppendPlan(snap.kps, snap.questions, incoming, incomingLessonQuestions))
       })
       .catch(() => {
         if (!cancelled) setAppendPlan(null)
@@ -499,7 +504,9 @@ export function WorksheetImporter({
           // Dựng lại bản xem trước từ văn bản đã ghi — cùng cách mà
           // applyAiReady dựng từ resultText (không qua validate lại,
           // để giữ nguyên ảnh/bảng đã trích từ file gốc).
-          const parsed = parseTextContent(d.sourceText)
+          // §25: bản nháp thường (kind upload) dựng từ văn bản file gốc
+          // nên dùng lesson mode như đường validate — khớp với lúc lưu.
+          const parsed = parseTextContent(d.sourceText, { questionScope: "lesson" })
           const images = d.images ?? []
           const tables = d.tables ?? []
           if (images.length > 0 || tables.length > 0) {
@@ -717,6 +724,10 @@ export function WorksheetImporter({
           fd.append("filename", file.name)
           fd.append("images", JSON.stringify(preview.images ?? []))
           fd.append("tables", JSON.stringify(preview.tables ?? []))
+          // §25: đường text — bản nháp AI giữ cách gán theo KP (chỉ thị
+          // trong text); bản nháp thường đã sửa thì tách trắc nghiệm
+          // ra cấp bài học như đường file.
+          if (!previewIsAiResult) fd.append("questionScope", "lesson")
         } else {
           fd.append("file", file)
         }

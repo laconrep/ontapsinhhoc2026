@@ -24,8 +24,11 @@ function norm(s: string): string {
 function flattenQuestions(parse: ParseResult): ParsedQuestion[] {
   const out: ParsedQuestion[] = []
   for (const c of parse.chapters)
-    for (const l of c.lessons)
+    for (const l of c.lessons) {
       for (const kp of l.knowledgePoints) out.push(...kp.questions)
+      // §25: câu hỏi cấp bài học cũng phải qua cùng các bước đối chiếu.
+      out.push(...(l.questions ?? []))
+    }
   return out
 }
 
@@ -166,6 +169,27 @@ export function verifyAiResult(
           }
         }
       }
+
+  // 6) §25: vị trí câu hỏi — số câu dựng lại theo từng bài (câu trong KP
+  //    + câu cấp bài học) phải bằng số câu worker khai báo trong JSON
+  //    cho bài đó. Lệch = chỉ thị @@LESSON-QUESTIONS@@ bị rơi hoặc một
+  //    KP bị bỏ khi dựng, khiến câu hỏi dồn sai chỗ.
+  const renderedLessons = renderedParse.chapters.flatMap((c) => c.lessons)
+  const jsonLessons = result.chapters.flatMap((c) => c.lessons)
+  if (renderedLessons.length === jsonLessons.length) {
+    jsonLessons.forEach((jl, i) => {
+      const rl = renderedLessons[i]
+      const jsonCount =
+        jl.knowledgePoints.reduce((s, kp) => s + kp.questions.length, 0) + (jl.lessonQuestions?.length ?? 0)
+      const renderedCount =
+        rl.knowledgePoints.reduce((s, kp) => s + kp.questions.length, 0) + (rl.questions ?? []).length
+      if (jsonCount !== renderedCount) {
+        problems.push(
+          `Bài "${jl.title}": số câu hỏi dựng lại (${renderedCount}) khác số câu worker khai báo (${jsonCount}) — kiểm tra lại vị trí câu hỏi (KP / cấp bài học).`,
+        )
+      }
+    })
+  }
 
   return problems
 }

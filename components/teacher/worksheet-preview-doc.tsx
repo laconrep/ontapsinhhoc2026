@@ -5,7 +5,7 @@ import { BookOpenText, ChevronDown } from "lucide-react"
 import { QuestionStem, KpMedia } from "@/components/question/question-stem"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import type { ParseResult, ValidationError } from "@/lib/worksheet-parser"
+import type { ParseResult, ParsedQuestion, ValidationError } from "@/lib/worksheet-parser"
 import type { AiResultMeta } from "@/lib/ai/types"
 
 /** §15.3: lời giải của một câu ở bản xem trước — mặc định THU GỌN sau
@@ -182,6 +182,61 @@ export function PreviewDocument({
       active && (hasError ? "ring-2 ring-destructive" : "ring-2 ring-primary"),
     )
   }
+  // §25: một khối câu hỏi dùng chung cho câu trong KP và câu cấp bài
+  // học — cùng bố cục, cùng đánh số "Câu N" nối tiếp toàn tài liệu.
+  function renderQuestion(q: ParsedQuestion, key: number) {
+    qIndex += 1
+    return (
+      <div
+        key={key}
+        id={`preview-line-${q.line}`}
+        data-line={q.line}
+        className={cn("rounded-md border bg-background p-2", blockTone(q.line))}
+        onClick={(ev) => {
+          ev.stopPropagation()
+          onSelectBlock?.(q.line)
+        }}
+      >
+        <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+          <Badge variant="outline" className="text-xs">
+            Câu {qIndex}
+          </Badge>
+          <Badge variant="outline" className="text-xs">
+            {TYPE_LABEL[q.type] ?? q.type}
+          </Badge>
+          {filledAnswerLines.has(q.line) ? (
+            <Badge className="bg-amber-500/15 text-xs text-amber-700 hover:bg-amber-500/15 dark:text-amber-400">
+              AI điền đáp án
+            </Badge>
+          ) : null}
+        </div>
+        <QuestionStem
+          content={q.content}
+          bodyHtml={q.bodyHtml}
+          className="text-sm"
+          maxHeightClass="max-h-64"
+        />
+        {q.options.length > 0 && (
+          <ul className="mt-2 space-y-1 text-sm">
+            {q.options.map((o, oi) => (
+              <li key={oi} className={o.isCorrect ? "font-medium text-primary" : "text-foreground"}>
+                <QuestionStem
+                  content={o.content}
+                  bodyHtml={o.bodyHtml}
+                  className="text-sm"
+                  maxHeightClass="max-h-32"
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+        {q.type === "SA" && q.correctAnswer ? (
+          <p className="mt-1 text-sm text-muted-foreground">Đáp án: {q.correctAnswer}</p>
+        ) : null}
+        {q.solution ? <SolutionBlock solution={q.solution} /> : null}
+      </div>
+    )
+  }
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
@@ -222,72 +277,21 @@ export function PreviewDocument({
                         <KpMedia bodyHtml={kp.bodyHtml} />
                         {kp.questions.length > 0 && (
                           <div className="mt-2 space-y-3">
-                            {kp.questions.map((q, qi) => {
-                              qIndex += 1
-                              return (
-                                <div
-                                  key={qi}
-                                  id={`preview-line-${q.line}`}
-                                  data-line={q.line}
-                                  className={cn(
-                                    "rounded-md border bg-background p-2",
-                                    blockTone(q.line),
-                                  )}
-                                  onClick={(ev) => {
-                                    ev.stopPropagation()
-                                    onSelectBlock?.(q.line)
-                                  }}
-                                >
-                                  <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-                                    <Badge variant="outline" className="text-xs">
-                                      Câu {qIndex}
-                                    </Badge>
-                                    <Badge variant="outline" className="text-xs">
-                                      {TYPE_LABEL[q.type] ?? q.type}
-                                    </Badge>
-                                    {filledAnswerLines.has(q.line) ? (
-                                      <Badge className="bg-amber-500/15 text-xs text-amber-700 hover:bg-amber-500/15 dark:text-amber-400">
-                                        AI điền đáp án
-                                      </Badge>
-                                    ) : null}
-                                  </div>
-                                  <QuestionStem
-                                    content={q.content}
-                                    bodyHtml={q.bodyHtml}
-                                    className="text-sm"
-                                    maxHeightClass="max-h-64"
-                                  />
-                                  {q.options.length > 0 && (
-                                    <ul className="mt-2 space-y-1 text-sm">
-                                      {q.options.map((o, oi) => (
-                                        <li
-                                          key={oi}
-                                          className={o.isCorrect ? "font-medium text-primary" : "text-foreground"}
-                                        >
-                                          <QuestionStem
-                                            content={o.content}
-                                            bodyHtml={o.bodyHtml}
-                                            className="text-sm"
-                                            maxHeightClass="max-h-32"
-                                          />
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  )}
-                                  {q.type === "SA" && q.correctAnswer ? (
-                                    <p className="mt-1 text-sm text-muted-foreground">
-                                      Đáp án: {q.correctAnswer}
-                                    </p>
-                                  ) : null}
-                                  {q.solution ? <SolutionBlock solution={q.solution} /> : null}
-                                </div>
-                              )
-                            })}
+                            {kp.questions.map((q, qi) => renderQuestion(q, qi))}
                           </div>
                         )}
                       </li>
                     ))}
                   </ul>
+                  {/* §25: trắc nghiệm chung của bài — hiển thị sau khối
+                  điểm kiến thức, đúng bố cục "KP trên, trắc nghiệm
+                  dưới" mà giáo viên thấy ở bản nháp AI. */}
+                  {l.questions.length > 0 && (
+                    <div className="mt-3 space-y-3">
+                      <p className="text-sm font-medium text-foreground">Trắc nghiệm chung của bài</p>
+                      {l.questions.map((q, qi) => renderQuestion(q, qi))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

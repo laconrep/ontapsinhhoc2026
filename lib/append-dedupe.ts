@@ -67,6 +67,13 @@ export interface AppendPlan {
   addedKps: number
   addedQuestions: number
   skippedQuestions: number
+  /** §25: câu hỏi cấp bài học trong file nạp thêm — chống trùng cùng
+   * một bộ `seen` với câu trong KP (trùng nội dung là trùng, không
+   * phân biệt chỗ gắn), lưu với KP null ở bước persist. */
+  lessonQuestions: {
+    addQuestions: ParsedQuestion[]
+    duplicateQuestions: ParsedQuestion[]
+  }
 }
 
 function shortLabel(text: string, max = 60): string {
@@ -78,6 +85,7 @@ export function computeAppendPlan(
   existingKps: ExistingKpRef[],
   existingQuestions: ExistingQuestionRef[],
   incoming: ParsedKnowledgePoint[],
+  incomingLessonQuestions: ParsedQuestion[] = [],
 ): AppendPlan {
   const kpByKey = new Map<string, string>()
   for (const kp of existingKps) {
@@ -117,11 +125,32 @@ export function computeAppendPlan(
     actions.push({ source: kp, targetKpId, addQuestions, duplicateQuestions })
   }
 
+  // §25: câu hỏi cấp bài học trong file nạp thêm — chống trùng bằng
+  // cùng bộ `seen` (đã gồm câu trong KP của bài đích + câu đã cộng
+  // trong lượt này), để một câu không chui vào hai chỗ.
+  const lessonAdd: ParsedQuestion[] = []
+  const lessonDup: ParsedQuestion[] = []
+  for (const q of incomingLessonQuestions) {
+    const fp = parsedQuestionFingerprint(q)
+    if (seen.has(fp)) {
+      lessonDup.push(q)
+    } else {
+      seen.add(fp)
+      lessonAdd.push(q)
+    }
+  }
+  addedQuestions += lessonAdd.length
+  skippedQuestions += lessonDup.length
+  for (const q of lessonDup) {
+    warnings.push(`Câu hỏi trùng, đã bỏ qua: "${shortLabel(q.content)}"`)
+  }
+
   return {
     actions,
     warnings,
     addedKps: actions.filter((a) => a.targetKpId === null).length,
     addedQuestions,
     skippedQuestions,
+    lessonQuestions: { addQuestions: lessonAdd, duplicateQuestions: lessonDup },
   }
 }

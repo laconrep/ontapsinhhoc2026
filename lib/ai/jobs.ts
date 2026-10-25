@@ -313,7 +313,14 @@ export async function submitJobResult(
       if (jkp.generatedByAi && parsedKps[i]) meta.generatedKpLines.push(parsedKps[i].line)
     })
     const flatLines: number[] = []
-    for (const kp of parsedKps) for (const q of kp.questions) flatLines.push(q.line)
+    // §25: thứ tự phẳng hoá = thứ tự dựng (câu trong KP theo từng KP,
+    // rồi câu cấp bài học cuối bài) — khớp filledAnswers đánh số toàn
+    // cục và khớp thứ tự persist tạo bài.
+    for (const c of parsed.chapters)
+      for (const l of c.lessons) {
+        for (const kp of l.knowledgePoints) for (const q of kp.questions) flatLines.push(q.line)
+        for (const q of l.questions ?? []) flatLines.push(q.line)
+      }
     for (const idx of result.filledAnswers ?? []) {
       const line = flatLines[idx - 1]
       if (line != null) meta.filledAnswerLines.push(line)

@@ -1704,3 +1704,71 @@ mẫu báo cáo chỉ khớp khung sửa màn hình nạp file.)
   19 KP, 56 câu, 0 lỗi; check-parser phien 3/4/5/7 OK, phien 6/8 vẫn
   lỗi cũ y hệt bản gốc (đã đối chiếu bằng git stash);
   check-ai-pipeline OK.
+
+## 25. Câu hỏi cấp bài học: AI gắn theo KP, nạp thường tách riêng (GV chốt 2026-10-25)
+- Chốt: (a) Đường AI (GV upload + bấm "Sử dụng AI"): worker gắn mỗi
+  câu hỏi vào KP mà nó kiểm tra (khớp theo nghĩa, cùng chuẩn như gắn
+  lời giải); câu nào không map được vào đúng một KP thì để ở cấp bài
+  học, KHÔNG dồn về KP cuối. (b) Đường nạp thường: phần trắc nghiệm
+  tách riêng ở cấp bài học, không gắn vào KP cuối nữa. (c) Bản xem
+  trước vốn đã trình bày KP ở trên, trắc nghiệm ở dưới — đúng mô hình
+  này nên không vỡ giao diện. Tab 4: bài toàn câu cấp bài học thì hiện
+  đủ theo thứ tự MC → TF → trả lời ngắn (đúng thứ tự tài liệu), không
+  lấy mẫu ngẫu nhiên; câu cấp bài học bỏ qua spaced repetition vì
+  không có KP để ghi.
+- Dữ liệu: ParsedLesson thêm `questions: ParsedQuestion[]` (lưu với
+  knowledgePointId NULL; schema đã cho phép null từ trước). KP giữ
+  `questions` riêng cho câu gắn KP (đường AI + tài liệu xen kẽ).
+- Parser (lib/worksheet-parser.ts): `parseTextContent(text, opts)` với
+  `questionScope: "kp" | "lesson"` (mặc định "kp" = hành vi cũ).
+  Chỉ thị `@@LESSON-QUESTIONS@@` trong văn bản chuyển các câu sau nó
+  sang cấp bài học, tắt khi gặp dòng KP / bài / chương mới (đường AI
+  xen kẽ được: câu gắn KP rồi câu chung rồi lại câu gắn KP). Đường
+  thường dùng questionScope "lesson": mọi câu đều cấp bài học.
+  validateDocument kiểm tra CÙNG LUẬT cho cả hai loại câu (BUG-09,
+  BUG-07, đủ 4 lựa chọn, đúng 1 đáp án, SA có đáp án) — vòng kiểm tra
+  dời ra ngoài vòng KP để mỗi câu kiểm tra đúng một lần; summarize,
+  attachBodyHtml/attachOptionBodyHtml cộng cả câu cấp bài học. Các hàm
+  này chịu được lesson dựng tay thiếu trường questions (`?? []`).
+- Đường thường (khớp nhau ở mọi cửa, tránh xem trước một đằng lưu
+  một nẻo): extract-file.ts (cả .txt/.docx/.pdf) dùng lesson mode —
+  bao cả validate preview lẫn save từ file; importer (draft resume,
+  error-fix khi không phải AI) dùng lesson mode; save route nhận cờ
+  questionScope từ client (bản nháp thường đã sửa -> lesson; bản AI
+  -> mặc định theo chỉ thị trong text). Đường AI (jobs.ts, importer
+  resultText) giữ mặc định kp + chỉ thị.
+- Đường AI: AiLesson thêm `lessonQuestions?: AiQuestion[]`; render.ts
+  dựng câu chung sau chỉ thị (dùng chung hàm dựng câu với câu trong
+  KP); verify.ts đối chiếu cả câu chung (flatten + kiểm tra số câu
+  theo từng bài) — thứ tự phẳng hoá = câu trong KP rồi câu chung,
+  khớp filledAnswers và thứ tự persist. Skill ai_worker_processing
+  thêm luật §25: gắn theo nghĩa, cấm dồn về KP cuối, lessonQuestions
+  chỉ là ngoại lệ cho câu không map được, merge và duplicate-shortcut
+  giữ nguyên vị trí.
+- Lưu (lib/worksheet-import.ts): insertParsedQuestion nhận kpId null;
+  tạo bài mới lưu câu chung sau câu trong KP (nối tiếp qOrder);
+  nạp cộng thêm: computeAppendPlan thêm tham số câu chung, chống trùng
+  cùng bộ seen với câu trong KP, lưu với KP null. Preview-doc: khối
+  "Trắc nghiệm chung của bài" sau khối KP, dùng chung khối hiển thị
+  câu hỏi (đánh số Câu N nối tiếp). Trang chi tiết bài của GV không
+  cần sửa: getLessonQuestions đã lấy đủ câu theo lessonId, câu null-KP
+  vốn đã hiện ở khung câu hỏi "chưa gắn" và kéo-thả được vào KP.
+- Tab 4 (lib/quiz-selection.ts): thêm mode "lesson" — khi không câu
+  nào gắn KP mà bài có câu hỏi thì trả đủ, xếp theo order. Nhánh
+  random cũ (mẫu 18 MC + 4 TF + 6 SA) chỉ còn cho đầu vào rỗng (caller
+  đã chặn bài không có câu hỏi từ trước). Nộp bài đã lọc
+  knowledgePointId null khỏi seed SR từ trước nên không cần sửa SR.
+- Kiểm chứng: tsc sạch; test mới ~/workspace/.epg/test-lesson-questions-25.mjs
+  25/25 (lesson scope, kp mặc định, AI xen kẽ + verify, tắt chỉ thị ở
+  KP mới, BUG-09 cho câu chung, Tab 4 lesson/mixed, dedupe nạp thêm);
+  sim Bài 1 PASS (19 KP, 56 câu, verify sạch — đường mặc định không
+  đổi); suite 35/42, đúng 7 lỗi cũ (class-phien1/2/3/6, parser-phien6/8,
+  preview-phien3). Lưu ý khi đối chiếu: 6 script (parser-phien4/5/7,
+  preview-phien1/6, scoring-phien2) ban đầu đỏ vì đếm câu chỉ qua
+  kp.questions — đã cập nhật phần flatten sau extractAndParse sang
+  cộng cả câu cấp bài học (đúng hợp đồng mới), riêng scoring-phien2
+  đỏ vì lesson dựng tay thiếu trường questions — đã khỏi nhờ `?? []`;
+  sau cập nhật, phien8 trở lại đúng thông điệp lỗi cũ ("qua nhieu loi
+  gia 11") như bản gốc.
+- Chưa push: code mới ở local (master = 2d439bb + thay đổi §25 chưa
+  commit) — chờ GV đưa PAT mới rồi mới commit + push như mọi lần.

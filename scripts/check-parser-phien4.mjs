@@ -56,7 +56,7 @@ if (!q6 || !q6.options[0].isCorrect || q6.options.slice(1).some((o) => o.isCorre
 const DOCX = "BAI 1 - GENE VA SU TAI BAN DNA.docx"
 const extracted = await extractAndParse(readFileSync(DOCX), DOCX)
 const allQ = extracted.parseResult.chapters.flatMap((c) =>
-  c.lessons.flatMap((l) => l.knowledgePoints.flatMap((k) => k.questions)),
+  c.lessons.flatMap((l) => [...l.knowledgePoints.flatMap((k) => k.questions), ...(l.questions ?? [])]),
 )
 const mc = allQ.filter((q) => q.type === "MC")
 console.log("summarize", summarize(extracted.parseResult))

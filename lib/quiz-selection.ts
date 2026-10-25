@@ -9,7 +9,7 @@ export interface SelectableQuestion {
 
 export interface SelectionResult {
   chosen: string[]
-  mode: "by-kp" | "random"
+  mode: "by-kp" | "random" | "lesson"
 }
 
 export function selectQuizQuestions(
@@ -40,6 +40,17 @@ export function selectQuizQuestions(
     const unassigned = qRows.filter((q) => !isAssigned(q)).sort((a, b) => a.order - b.order)
     chosen.push(...unassigned.map((q) => q.id))
     return { chosen, mode: "by-kp" }
+  }
+
+  // §25: bài toàn câu hỏi cấp bài học (không câu nào gắn KP) thì HIỆN
+  // ĐỦ theo thứ tự trong bài (MC rồi TF rồi trả lời ngắn, đúng thứ tự
+  // tài liệu) — KHÔNG rơi về chế độ ngẫu nhiên lấy mẫu như trước
+  // (BUG-02: mẫu 18 MC + 4 TF + 6 SA làm mất câu hỏi và mất seed SR).
+  // Spaced repetition vẫn bỏ qua các câu này vì không có KP để ghi
+  // (bên nộp bài đã lọc knowledgePointId null từ trước).
+  if (qRows.length > 0) {
+    const ordered = [...qRows].sort((a, b) => a.order - b.order)
+    return { chosen: ordered.map((q) => q.id), mode: "lesson" }
   }
 
   const byType = (t: string) => qRows.filter((q) => q.type === t)

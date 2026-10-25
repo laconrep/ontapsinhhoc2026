@@ -9,7 +9,7 @@ const summary = summarize(parseResult)
 const val = validateDocument(parseResult)
 
 const allQ = parseResult.chapters.flatMap((c) =>
-  c.lessons.flatMap((l) => l.knowledgePoints.flatMap((k) => k.questions)),
+  c.lessons.flatMap((l) => [...l.knowledgePoints.flatMap((k) => k.questions), ...(l.questions ?? [])]),
 )
 const mc = allQ.filter((q) => q.type === "MC")
 const tf = allQ.filter((q) => q.type === "TF")

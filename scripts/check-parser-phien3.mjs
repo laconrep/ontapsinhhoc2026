@@ -61,7 +61,7 @@ console.log("doi chieu errors", extracted.parseResult.errors.length)
 console.log("doi chieu first errors", extracted.parseResult.errors.slice(0, 12))
 
 const allQ = extracted.parseResult.chapters.flatMap((c) =>
-  c.lessons.flatMap((l) => l.knowledgePoints.flatMap((k) => k.questions)),
+  c.lessons.flatMap((l) => [...l.knowledgePoints.flatMap((k) => k.questions), ...(l.questions ?? [])]),
 )
 const byType = { MC: 0, TF: 0, SA: 0 }
 for (const q of allQ) byType[q.type]++

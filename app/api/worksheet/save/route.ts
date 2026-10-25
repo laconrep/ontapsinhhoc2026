@@ -76,7 +76,12 @@ export async function POST(req: Request) {
       const filename = typeof rawName === "string" && rawName ? rawName : "draft.txt"
       const images = parseMediaArray(formData.get("images"))
       const tables = parseMediaArray(formData.get("tables"))
-      const result = await saveWorksheetFromText(user, text, filename, images, tables, options)
+      // §25: đường text — bản nháp AI giữ nguyên cách gán theo KP
+      // (chỉ thị trong text); bản nháp thường đã sửa thì tách trắc
+      // nghiệm ra cấp bài học như đường file.
+      const scope = strField("questionScope")
+      const parseOpts = scope === "lesson" ? { questionScope: "lesson" as const } : undefined
+      const result = await saveWorksheetFromText(user, text, filename, images, tables, options, parseOpts)
       await clearImportDrafts(user.id, draftId, aiJobId)
       return NextResponse.json(result)
     }

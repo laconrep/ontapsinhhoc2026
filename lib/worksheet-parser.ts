@@ -39,6 +39,10 @@ export interface ParsedKnowledgePoint {
 export interface ParsedLesson {
   title: string
   knowledgePoints: ParsedKnowledgePoint[]
+  /** §25: câu hỏi cấp bài học — không gắn vào KP nào (trắc nghiệm
+   * chung của bài: đường nạp thường tách riêng, hoặc câu hỏi AI không
+   * map được vào KP nào). Lưu với knowledgePointId NULL. */
+  questions: ParsedQuestion[]
   line: number
   /** §18: dòng [bài] có nhưng để trống tên — khi lưu, hệ thống gán tên
    * thay thế (AI/tên file) và để bài ở trạng thái nháp chờ GV duyệt. */
@@ -602,7 +606,24 @@ function canAppendStem(q: ParsedQuestion, buffering: boolean): boolean {
 
 // ============ Parser văn bản thuần ============
 
-export function parseTextContent(text: string): ParseResult {
+/** §25: cách gán câu hỏi khi parse.
+ * - "kp" (mặc định, giữ nguyên hành vi cũ): câu hỏi gắn vào KP hiện tại;
+ *   cộng thêm chỉ thị @@LESSON-QUESTIONS@@ để chuyển các câu sau nó
+ *   sang cấp bài học (đường AI: câu hỏi không map được vào KP nào).
+ * - "lesson" (đường nạp thường): mọi câu hỏi đều ở cấp bài học, không
+ *   gắn vào KP nào — trắc nghiệm và điểm kiến thức tách riêng. */
+export interface ParseOptions {
+  questionScope?: "kp" | "lesson"
+}
+
+/** §25: dòng chỉ thị chuyển các câu hỏi sau nó sang cấp bài học. Chỉ
+ * renderAiResult mới sinh ra dòng này (cho câu hỏi AI không map được);
+ * giáo viên viết tay dòng này trong file thường cũng có tác dụng tương
+ * tự — và đó là hành vi đúng theo nghĩa của nó. */
+export const LESSON_QUESTIONS_MARKER = "@@LESSON-QUESTIONS@@"
+
+export function parseTextContent(text: string, opts?: ParseOptions): ParseResult {
+  const questionScope = opts?.questionScope ?? "kp"
   text = normalizeParseText(text)
   const errors: ParseError[] = []
   const chapters: ParsedChapter[] = []
@@ -615,6 +636,9 @@ export function parseTextContent(text: string): ParseResult {
   let inTail = false
   let sawStructure = false
   let optionBuffer: string | null = null
+  // §25: true = các câu hỏi từ đây thuộc cấp bài học (sau chỉ thị
+  // @@LESSON-QUESTIONS@@), cho tới khi gặp dòng KP / bài / chương mới.
+  let lessonQuestionMode = false
 
   const ensureChapter = (): ParsedChapter => {
     if (!curChapter) {
@@ -670,6 +694,17 @@ export function parseTextContent(text: string): ParseResult {
 
   const startQuestion = (type: ParsedQuestionType, content: string, lineNo: number) => {
     closeQuestion()
+    // §25: câu hỏi cấp bài học = không gắn KP (chỉ thị @@LESSON-QUESTIONS@@
+    // hoặc toàn bộ file ở questionScope "lesson" của đường nạp thường).
+    if (lessonQuestionMode || questionScope === "lesson") {
+      if (!curLesson) {
+        errors.push({ line: lineNo, message: "Câu hỏi phải nằm trong một bài [Tên bài]" })
+        return
+      }
+      curQuestion = { type, content, options: [], line: lineNo }
+      curLesson.questions.push(curQuestion)
+      return
+    }
     if (!curKp) {
       errors.push({ line: lineNo, message: "Câu hỏi phải nằm trong một điểm kiến thức (bắt đầu bằng '-')" })
       return
@@ -720,6 +755,7 @@ export function parseTextContent(text: string): ParseResult {
       chapters.push(curChapter)
       curLesson = null
       curKp = null
+      lessonQuestionMode = false
       return
     }
 
@@ -732,17 +768,33 @@ export function parseTextContent(text: string): ParseResult {
       curLesson = {
         title: lessonTitle,
         knowledgePoints: [],
+        questions: [],
         line: lineNo,
         // §18: [] hoặc [ ] = GV bỏ trống tên bài.
         titleMissing: lessonTitle === "" || undefined,
       }
       chap.lessons.push(curLesson)
       curKp = null
+      lessonQuestionMode = false
+      return
+    }
+
+    // §25: chỉ thị chuyển các câu hỏi sau nó sang cấp bài học (đường AI
+    // sinh ra cho câu hỏi không map được vào KP nào). Đặt trước nhánh
+    // KP để dòng này không bị hiểu thành nội dung điểm kiến thức.
+    if (line === LESSON_QUESTIONS_MARKER) {
+      closeQuestion()
+      if (!curLesson) {
+        errors.push({ line: lineNo, message: "Trắc nghiệm chung phải nằm trong một bài [Tên bài]" })
+        return
+      }
+      lessonQuestionMode = true
       return
     }
 
     if (line.startsWith("-")) {
       closeQuestion()
+      lessonQuestionMode = false
       let body = line.slice(1).trim()
       body = body.replace(/^Ý kiến thức\s*:\s*/i, "").replace(/^Y kien thuc\s*:\s*/i, "")
       if (!curLesson) {
@@ -881,10 +933,13 @@ export function parseTextContent(text: string): ParseResult {
       // một điểm kiến thức KHÔNG còn gộp vào điểm đó nữa, mà mở một
       // điểm kiến thức mới; gạch chân trên chính dòng này thành ô
       // trống của điểm mới, đúng như một dòng bắt đầu bằng "-".
+      // §25: dòng KP mới cũng tắt chế độ câu hỏi cấp bài học (câu hỏi
+      // sau nó lại gắn vào KP này, như đường AI xen kẽ).
       const { content, underlinedTerms } = extractBlanks(line)
       if (content) {
         curKp = { content, underlinedTerms, questions: [], line: lineNo }
         curLesson.knowledgePoints.push(curKp)
+        lessonQuestionMode = false
       }
       return
     }
@@ -1117,6 +1172,14 @@ export function attachBodyHtml(result: ParseResult, images: string[], tables: st
           q.content = stripRichTokens(q.content)
         }
       }
+      // §25: câu hỏi cấp bài học cũng mang token ảnh/bảng như câu hỏi
+      // trong KP — xử lý stem giống hệt để không rơi token ra ngoài.
+      for (const q of lesson.questions ?? []) {
+        if (!q.content.includes("@@IMG") && !q.content.includes("@@TBL")) continue
+        const lines = q.content.split("\n")
+        q.bodyHtml = lines.map((ln) => lineWithRichToHtml(ln, images, tables)).join("<br>\n")
+        q.content = stripRichTokens(q.content)
+      }
     }
   }
 }
@@ -1135,6 +1198,15 @@ export function attachOptionBodyHtml(result: ParseResult, images: string[], tabl
           }
         }
       }
+      // §25: phương án của câu hỏi cấp bài học — cùng luật như trên.
+      for (const q of lesson.questions ?? []) {
+        for (const o of q.options) {
+          if (!o.content.includes("@@IMG") && !o.content.includes("@@TBL")) continue
+          const lines = o.content.split("\n")
+          o.bodyHtml = lines.map((ln) => lineWithRichToHtml(ln, images, tables)).join("<br>\n")
+          o.content = stripRichTokens(o.content)
+        }
+      }
     }
   }
 }
@@ -1151,7 +1223,7 @@ export function sourceTextToPreviewHtml(text: string, images: string[], tables: 
  * "..." để đánh dấu hoán đổi, rồi tái sử dụng parseTextContent.
  * Thẻ <img> / <table> giữ qua placeholder rồi gắn `bodyHtml` trên câu hỏi.
  */
-export function parseHtmlToResultAndText(html: string): {
+export function parseHtmlToResultAndText(html: string, opts?: ParseOptions): {
   parseResult: ParseResult
   sourceText: string
   images: string[]
@@ -1170,14 +1242,14 @@ export function parseHtmlToResultAndText(html: string): {
   const withUnderline = withBreaks.replace(/<u>([\s\S]*?)<\/u>/gi, "__$1__")
   const stripped = withUnderline.replace(/<[^>]+>/g, "")
   const sourceText = normalizeParseText(decodeEntities(stripped))
-  const parseResult = parseTextContent(sourceText)
+  const parseResult = parseTextContent(sourceText, opts)
   attachBodyHtml(parseResult, images, tables)
   attachOptionBodyHtml(parseResult, images, tables)
   return { parseResult, sourceText, images, tables }
 }
 
-export function parseHtmlContent(html: string): ParseResult {
-  return parseHtmlToResultAndText(html).parseResult
+export function parseHtmlContent(html: string, opts?: ParseOptions): ParseResult {
+  return parseHtmlToResultAndText(html, opts).parseResult
 }
 
 /**
@@ -1290,7 +1362,16 @@ export function validateDocument(result: ParseResult): ValidationResult {
           })
         }
       }
-      for (const q of kp.questions) {
+    }
+    // §25: kiểm tra câu hỏi — CÙNG LUẬT cho câu trong KP và câu cấp bài
+    // học (BUG-09, BUG-07, đủ 4 lựa chọn, đúng 1 đáp án, SA có đáp án);
+    // chỉ khác chỗ gắn, không khác luật. Vòng lặp đặt ngoài vòng KP để
+    // mỗi câu chỉ kiểm tra đúng một lần. `?? []` = chịu được kết quả
+    // dựng tay thiếu trường questions (vd test) mà không vỡ.
+    for (const q of [
+      ...lesson.knowledgePoints.flatMap((kp) => kp.questions),
+      ...(lesson.questions ?? []),
+    ]) {
         if (q.type === "MC" || q.type === "TF") {
           // BUG-09: gạch chân chỉ bao MỘT PHẦN phương án -> chặn cứng. Gạch
           // chân trong phương án chỉ để chỉ định đáp án khi bao trọn phương
@@ -1355,7 +1436,6 @@ export function validateDocument(result: ParseResult): ValidationResult {
           }
         }
       }
-    }
   }
 
   return { isValid: errors.length === 0, errors, warnings }
@@ -1374,7 +1454,9 @@ export function summarize(result: ParseResult) {
     (s, c) =>
       s +
       c.lessons.reduce(
-        (s2, l) => s2 + l.knowledgePoints.reduce((s3, kp) => s3 + kp.questions.length, 0),
+        // §25: cộng cả câu hỏi cấp bài học, không chỉ câu trong KP.
+        (s2, l) =>
+          s2 + l.knowledgePoints.reduce((s3, kp) => s3 + kp.questions.length, 0) + (l.questions ?? []).length,
         0,
       ),
     0,

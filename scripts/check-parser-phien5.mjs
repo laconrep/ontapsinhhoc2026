@@ -96,7 +96,7 @@ if (!sa3 || sa3.correctAnswer !== "5") {
 const DOCX = "BAI 1 - GENE VA SU TAI BAN DNA.docx"
 const extracted = await extractAndParse(readFileSync(DOCX), DOCX)
 const allQ = extracted.parseResult.chapters.flatMap((c) =>
-  c.lessons.flatMap((l) => l.knowledgePoints.flatMap((k) => k.questions)),
+  c.lessons.flatMap((l) => [...l.knowledgePoints.flatMap((k) => k.questions), ...(l.questions ?? [])]),
 )
 const tfQ = allQ.filter((q) => q.type === "TF")
 const saQ = allQ.filter((q) => q.type === "SA")

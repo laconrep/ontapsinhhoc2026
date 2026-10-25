@@ -106,7 +106,9 @@ async function extractAndParseInner(buffer: Buffer, filename: string): Promise<E
 
   if (kind === "txt") {
     const sourceText = buffer.toString("utf8")
-    return { parseResult: parseTextContent(sourceText), sourceText, images: [], tables: [] }
+    // §25: đường nạp thường — trắc nghiệm tách riêng ở cấp bài học,
+    // không gắn vào KP cuối (áp dụng cho cả 3 loại file).
+    return { parseResult: parseTextContent(sourceText, { questionScope: "lesson" }), sourceText, images: [], tables: [] }
   }
 
   if (kind === "docx") {
@@ -136,7 +138,7 @@ async function extractAndParseInner(buffer: Buffer, filename: string): Promise<E
       const src = maths[+n]
       return src ? `<img src="${src}" class="eq-inline" alt="">` : "[công thức]"
     })
-    return parseHtmlToResultAndText(tagEquationImages(html))
+    return parseHtmlToResultAndText(tagEquationImages(html), { questionScope: "lesson" })
   }
 
   const { PDFParse } = await import("pdf-parse")
@@ -144,7 +146,7 @@ async function extractAndParseInner(buffer: Buffer, filename: string): Promise<E
   try {
     const res = await parser.getText()
     const sourceText = res.text
-    return { parseResult: parseTextContent(sourceText), sourceText, images: [], tables: [] }
+    return { parseResult: parseTextContent(sourceText, { questionScope: "lesson" }), sourceText, images: [], tables: [] }
   } finally {
     await parser.destroy()
   }

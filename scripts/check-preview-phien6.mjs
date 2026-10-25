@@ -54,7 +54,7 @@ function stripLeftoverAd(block) {
 
 function allQuestions(result) {
   return result.chapters.flatMap((c) =>
-    c.lessons.flatMap((l) => l.knowledgePoints.flatMap((k) => k.questions)),
+    c.lessons.flatMap((l) => [...l.knowledgePoints.flatMap((k) => k.questions), ...(l.questions ?? [])]),
   )
 }
 

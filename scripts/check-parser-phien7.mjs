@@ -37,7 +37,7 @@ if (q.options[1].bodyHtml || q.options[3].bodyHtml) {
 const DOCX = "BAI 1 - GENE VA SU TAI BAN DNA.docx"
 const extracted = await extractAndParse(readFileSync(DOCX), DOCX)
 const allQ = extracted.parseResult.chapters.flatMap((c) =>
-  c.lessons.flatMap((l) => l.knowledgePoints.flatMap((k) => k.questions)),
+  c.lessons.flatMap((l) => [...l.knowledgePoints.flatMap((k) => k.questions), ...(l.questions ?? [])]),
 )
 const mc = allQ.filter((q) => q.type === "MC")
 const c5 = mc[4]

@@ -20,6 +20,7 @@ import {
   attachBodyHtml,
   attachOptionBodyHtml,
   splitSaAcceptedAnswers,
+  type ParseOptions,
   type ParseResult,
   type ParsedKnowledgePoint,
   type ParsedQuestion,
@@ -131,7 +132,7 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 async function insertParsedQuestion(
   tx: Tx,
   lessonId: string,
-  kpId: string,
+  kpId: string | null,
   pQ: ParsedQuestion,
   order: number,
 ): Promise<void> {
@@ -141,6 +142,9 @@ async function insertParsedQuestion(
       lessonId,
       // BUG-02: câu hỏi thuộc về KP chứa nó (trước đây gán cứng null
       // làm Tab 4 rơi vào chế độ ngẫu nhiên và mất seed spaced repetition).
+      // §25: ngoại lệ duy nhất cho null là câu hỏi CẤP BÀI HỌC (trắc
+      // nghiệm chung tách riêng / câu AI không map được vào KP nào) —
+      // Tab 4 có luật riêng cho chúng (xem lib/quiz-selection.ts).
       knowledgePointId: kpId,
       order,
       type: pQ.type,
@@ -289,10 +293,14 @@ async function persistParseResult(
       const incoming: ParsedKnowledgePoint[] = parseResult.chapters.flatMap((c) =>
         c.lessons.flatMap((l) => l.knowledgePoints),
       )
+      const incomingLessonQuestions: ParsedQuestion[] = parseResult.chapters.flatMap((c) =>
+        c.lessons.flatMap((l) => l.questions),
+      )
       const plan = computeAppendPlan(
         existingKps.map((k) => ({ id: k.id, content: k.content })),
         existingRefs,
         incoming,
+        incomingLessonQuestions,
       )
       // Thứ tự câu hỏi là bộ đếm toàn bài (như đường tạo mới) — câu
       // cộng thêm nối tiếp sau câu cuối hiện có.
@@ -317,6 +325,11 @@ async function persistParseResult(
         for (const pQ of action.addQuestions) {
           await insertParsedQuestion(tx, targetId, kpId, pQ, qOrder++)
         }
+      }
+      // §25: câu hỏi cấp bài học nạp thêm — lưu với KP null, nối tiếp
+      // thứ tự sau câu trong KP (cùng bộ đếm toàn bài).
+      for (const pQ of plan.lessonQuestions.addQuestions) {
+        await insertParsedQuestion(tx, targetId, null, pQ, qOrder++)
       }
       await tx
         .update(lessons)
@@ -447,6 +460,12 @@ async function persistParseResult(
             result.createdQuestions += 1
           }
         }
+        // §25: câu hỏi cấp bài học của bài mới — lưu với KP null, nối
+        // tiếp thứ tự sau câu hỏi trong KP (thứ tự toàn bài).
+        for (const pQ of pLesson.questions) {
+          await insertParsedQuestion(tx, lessonId, null, pQ, qOrder++)
+          result.createdQuestions += 1
+        }
       }
     }
 
@@ -514,8 +533,9 @@ export function parseWorksheetText(
   text: string,
   images?: string[],
   tables?: string[],
+  opts?: ParseOptions,
 ): ParseResult {
-  const parseResult = parseTextContent(text)
+  const parseResult = parseTextContent(text, opts)
   const imgs = images ?? []
   const tbls = tables ?? []
   if (imgs.length > 0 || tbls.length > 0) {
@@ -532,7 +552,8 @@ export async function saveWorksheetFromText(
   images?: string[],
   tables?: string[],
   options: PersistOptions = {},
+  parseOpts?: ParseOptions,
 ): Promise<SaveResult> {
-  const parseResult = parseWorksheetText(text, images, tables)
+  const parseResult = parseWorksheetText(text, images, tables, parseOpts)
   return persistParseResult(user, parseResult, toTxtFilename(filename), options)
 }

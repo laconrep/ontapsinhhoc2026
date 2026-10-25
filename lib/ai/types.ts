@@ -47,6 +47,12 @@ export interface AiLesson {
    * khi GV lưu, bài bị để ở trạng thái nháp chờ duyệt tên. */
   titleGeneratedByAi?: boolean
   knowledgePoints: AiKnowledgePoint[]
+  /** §25: câu hỏi cấp bài học — worker KHÔNG map được vào KP nào (không
+   * gắn nghĩa rõ ràng với đúng một KP). Khi dựng, render.ts đặt chúng
+   * sau chỉ thị @@LESSON-QUESTIONS@@ để parser giữ ở cấp bài học thay
+   * vì dồn về KP cuối. Đây là trường hợp ngoại lệ, không phải mặc định:
+   * câu hỏi map được thì worker phải gắn vào KP đó. */
+  lessonQuestions?: AiQuestion[]
 }
 
 export interface AiChapter {

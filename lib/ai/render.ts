@@ -4,7 +4,8 @@
 // mau-cau-hoi.txt): __từ__ = ô cố định, __"từ"__ = ô hoán đổi, đáp án
 // MC/TF gạch chân cả dòng, SA dùng "dap an:".
 
-import type { AiResult } from "./types"
+import type { AiQuestion, AiResult } from "./types"
+import { LESSON_QUESTIONS_MARKER } from "../worksheet-parser"
 
 const MC_LETTERS = ["A", "B", "C", "D"]
 const TF_LETTERS = ["a", "b", "c", "d"]
@@ -69,6 +70,37 @@ export interface RenderOutcome {
   problems: string[]
 }
 
+/** Dựng một câu hỏi thành các dòng worksheet (dùng chung cho câu hỏi
+ * trong KP và câu hỏi cấp bài học — cùng một form, chỉ khác vị trí). */
+function renderQuestion(q: AiQuestion, out: string[]) {
+  if (q.type === "MC") {
+    out.push("#")
+    out.push(`cau: ${q.content}`)
+    q.options.forEach((o, i) => {
+      const letter = MC_LETTERS[i] ?? String(i + 1)
+      const text = stripOptionPrefix(o.content, letter)
+      out.push(o.isCorrect ? underlineOption(letter, text) : plainOption(letter, text))
+    })
+  } else if (q.type === "TF") {
+    out.push("##")
+    out.push(`cau: ${q.content}`)
+    q.options.forEach((o, i) => {
+      const letter = TF_LETTERS[i] ?? String(i + 1)
+      const text = stripOptionPrefix(o.content, letter)
+      out.push(o.isCorrect ? underlineOption(letter, text) : plainOption(letter, text))
+    })
+  } else {
+    out.push("###")
+    out.push(`cau: ${q.content}`)
+    out.push(`dap an: ${q.correctAnswer ?? ""}`)
+  }
+  if (q.solution && q.solution.trim()) {
+    const solLines = q.solution.trim().split("\n")
+    out.push(`Giải chi tiết: ${solLines[0]}`)
+    for (const extra of solLines.slice(1)) out.push(extra)
+  }
+}
+
 export function renderAiResult(result: AiResult): RenderOutcome {
   const problems: string[] = []
   const out: string[] = []
@@ -93,34 +125,15 @@ export function renderAiResult(result: AiResult): RenderOutcome {
           continue
         }
         out.push(`- ${rendered.text}`)
-        for (const q of kp.questions) {
-          if (q.type === "MC") {
-            out.push("#")
-            out.push(`cau: ${q.content}`)
-            q.options.forEach((o, i) => {
-              const letter = MC_LETTERS[i] ?? String(i + 1)
-              const text = stripOptionPrefix(o.content, letter)
-              out.push(o.isCorrect ? underlineOption(letter, text) : plainOption(letter, text))
-            })
-          } else if (q.type === "TF") {
-            out.push("##")
-            out.push(`cau: ${q.content}`)
-            q.options.forEach((o, i) => {
-              const letter = TF_LETTERS[i] ?? String(i + 1)
-              const text = stripOptionPrefix(o.content, letter)
-              out.push(o.isCorrect ? underlineOption(letter, text) : plainOption(letter, text))
-            })
-          } else {
-            out.push("###")
-            out.push(`cau: ${q.content}`)
-            out.push(`dap an: ${q.correctAnswer ?? ""}`)
-          }
-          if (q.solution && q.solution.trim()) {
-            const solLines = q.solution.trim().split("\n")
-            out.push(`Giải chi tiết: ${solLines[0]}`)
-            for (const extra of solLines.slice(1)) out.push(extra)
-          }
-        }
+        for (const q of kp.questions) renderQuestion(q, out)
+      }
+      // §25: câu hỏi cấp bài học (worker không map được vào KP nào) —
+      // đặt sau chỉ thị để parser giữ ở cấp bài học, không dồn về KP
+      // cuối. Thứ tự trong bài: KP trước, trắc nghiệm chung sau — đúng
+      // bố cục bản xem trước (KP trên, trắc nghiệm dưới).
+      if (lesson.lessonQuestions && lesson.lessonQuestions.length > 0) {
+        out.push(LESSON_QUESTIONS_MARKER)
+        for (const q of lesson.lessonQuestions) renderQuestion(q, out)
       }
     }
   }
