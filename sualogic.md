@@ -1682,3 +1682,25 @@ mẫu báo cáo chỉ khớp khung sửa màn hình nạp file.)
   role admin trong code); đã onboard rồi thì không tự đổi vai trò qua
   đường này; đăng ký luôn tạo student, client không tự gửi role.
 - Kiểm chứng: tsc sạch; suite 35/42 (nguyên 7 lỗi cũ).
+
+## 24. Sửa takeFirstTfBlock: "a." giữa dòng không phải mốc ý mới (2026-10-25)
+- Triệu chứng: việc AI Bài 1 (job 9ae1fe5f) — câu TF P2 Câu 8 có ý a
+  "Genee A có chiều dài lớn hơn genee a." bị đọc thành 1 ý + báo
+  leftover, chặn nộp (validate errors ở dòng 409).
+- Nguyên nhân: takeFirstTfBlock tìm "a." thứ hai trong khối ý để tách
+  câu thừa, với regex /(^|[\s\u00A0])\s*([aA][.)])/ — "genee a." (tên
+  allele a + dấu chấm cuối ý) bị nhận nhầm thành mốc ý mới.
+- Sửa (lib/worksheet-parser.ts): regex thành /(^|\n)\s*([aA][.)])/ —
+  chỉ tính "a." ở đầu dòng. Các ý luôn bắt đầu ở đầu dòng (renderer
+  viết mỗi ý một dòng, optionBuffer nối bằng \n) nên trường hợp câu
+  thừa thật (ý của câu sau bắt đầu ở đầu dòng) vẫn tách đúng; "a."
+  giữa dòng không còn cắt oan.
+- Không sửa isTailHeading trong đợt này: dòng "Đáp án cần chọn là: C"
+  đứng riêng cuối lời giải Câu 35 cũng từng làm TF/SA biến mất
+  (isTailHeading tưởng là tiêu đề phần đáp án) — đã xử lý ở bước gộp
+  của việc (nối dòng, giữ nguyên chữ); sửa code cho điểm này để dành
+  đợt sau nếu GV chốt.
+- Kiểm chứng: mô phỏng Bài 1 (render→parse→validate→verify) PASS:
+  19 KP, 56 câu, 0 lỗi; check-parser phien 3/4/5/7 OK, phien 6/8 vẫn
+  lỗi cũ y hệt bản gốc (đã đối chiếu bằng git stash);
+  check-ai-pipeline OK.

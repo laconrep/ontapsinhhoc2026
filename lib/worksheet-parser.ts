@@ -432,7 +432,11 @@ function isTfChoiceStart(line: string): boolean {
 
 function takeFirstTfBlock(block: string): { first: string; leftover: boolean } {
   const searchable = block.replace(/__/g, "  ")
-  const re = /(^|[\s\u00A0])\s*([aA][.)])/g
+  // Mốc "a." của câu thừa chỉ tính khi ở ĐẦU DÒNG: các ý của một câu
+  // luôn bắt đầu ở đầu dòng, còn "a." giữa dòng (ví dụ tên allele
+  // "genee a." cuối một ý) không phải mốc ý mới — nhận nhầm nó sẽ
+  // cắt câu thành 1 ý và báo leftover oan.
+  const re = /(^|\n)\s*([aA][.)])/g
   let found = 0
   let secondStart = -1
   let m: RegExpExecArray | null
