@@ -429,12 +429,6 @@ export function LessonDetail({
     return map
   }, [questions, kpIds])
   const activeQuestion = questions.find((q) => q.id === activeId) ?? null
-  const liveExtract = useMemo(() => extractBlanks(rawContent), [rawContent])
-  const liveHasOffsets =
-    liveExtract.underlinedTerms.length > 0 &&
-    liveExtract.underlinedTerms.every(
-      (t) => typeof t.start === "number" && typeof t.end === "number" && Number.isInteger(t.start) && Number.isInteger(t.end),
-    )
   const editingNeedsReview =
     kpDialog?.mode === "edit" &&
     kpDialog.kp != null &&
@@ -453,10 +447,9 @@ export function LessonDetail({
   function submitKp() {
     if (!rawContent.trim()) return
     const { content, underlinedTerms } = extractBlanks(rawContent)
-    if (underlinedTerms.length === 0) {
-      toast.error("Điểm kiến thức cần ít nhất 1 ô trống (__từ__ hoặc __\"từ\"__).")
-      return
-    }
+    // §27: cho lưu cả khi không còn ô trống — điểm không gạch chân vẫn
+    // hợp lệ (điểm chỉ đọc, §19); server chỉ chặn nội dung rỗng và
+    // offset lệch (prepareKpTermsForSave), không chặn 0 term.
     startTransition(async () => {
       try {
         if (kpDialog?.mode === "create") {
@@ -824,7 +817,7 @@ export function LessonDetail({
             <Button variant="outline" onClick={() => setKpDialog(null)}>
               Huỷ
             </Button>
-            <Button onClick={submitKp} disabled={isPending || !liveHasOffsets}>
+            <Button onClick={submitKp} disabled={isPending}>
               {kpDialog?.mode === "create" ? "Thêm" : "Lưu"}
             </Button>
           </DialogFooter>

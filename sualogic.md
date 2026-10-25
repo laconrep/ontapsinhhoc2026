@@ -1816,3 +1816,25 @@ mẫu báo cáo chỉ khớp khung sửa màn hình nạp file.)
 - Đã push: commit 0de3c6f lên master (Vercel tự deploy).
   Lưu ý: bài đã nạp trước §26 vẫn giữ ảnh gốc — chỉ bài nạp MỚI sau
   khi deploy mới được nén; muốn bài cũ nhẹ lại phải nạp lại.
+
+## §27 — Dialog sửa điểm kiến thức cho lưu dù không còn ô trống (user chốt tối 25/10)
+
+- Bệnh: mở "Chỉnh sửa" trên thẻ điểm kiến thức, nút Lưu mờ đi bấm
+  không được (người dùng thấy như "không có nút lưu") khi nội dung
+  đang sửa không còn ô trống nào — ví dụ chỉ xoá một từ thừa không
+  gạch chân ở điểm vốn đã không có gạch chân. Nguyên nhân là luật
+  cũ từ trước §19: nút Lưu bị disabled khi liveHasOffsets sai và
+  submitKp chặn 0 term bằng toast lỗi; trong khi §19 đã cho điểm
+  không gạch chân hợp lệ (điểm chỉ đọc). Phía server vốn không chặn
+  0 term (create/updateKnowledgePoint chỉ chặn nội dung rỗng và
+  offset lệch qua prepareKpTermsForSave) nên chỉ cần sửa client.
+- Sửa (chỉ components/teacher/lesson-detail.tsx): bỏ liveHasOffsets
+  và liveExtract; nút Lưu chỉ còn disabled khi isPending; bỏ guard
+  0 term trong submitKp. Áp dụng cả tạo mới lẫn sửa vì cùng một
+  dialog — điểm tạo/sửa không gạch chân sẽ thành điểm chỉ đọc
+  (Tab 1 + tự đánh giá). Lưu ý BUG-12: chữ ký chấm chỉ gồm term +
+  đáp án chấp nhận + phân hoạch nhóm hoán đổi, nên sửa thân bài
+  ngoài ô trống không làm đổi chữ ký và không reset tiến độ học sinh.
+- Kiểm chứng: tsc sạch, next build exit 0. Không chạy lại suite vì
+  thay đổi chỉ nằm ở một component client mà không script kiểm tra
+  nào phủ. Chưa push — chờ GV đưa PAT mới như mọi lần.
