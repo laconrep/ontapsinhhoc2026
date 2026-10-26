@@ -2269,3 +2269,48 @@ còn nợ: nạp lại big-test.txt 4,6MB trên production — qua được tớ
 bản xem trước thì ĐẠT, kẹt lại với lỗi hoàn tất thì CHƯA.
 
 Kiểm chứng: tsc sạch, next build exit 0.
+
+## §37 — Parser: file không mốc vẫn thành 1 bài thiếu tên (26/10, phát hiện lúc test)
+
+PHÁT HIỆN: nạp thường file Bài 4 (sách giáo khoa thật, 391KB) cho bản
+xem trước 0 chương / 0 bài / 0 kiến thức / 0 câu hỏi với 67 lỗi, toàn
+"Điểm kiến thức phải nằm trong một bài [Tên bài]" và "Câu hỏi phải nằm
+sau mốc #/##/###". Tái hiện đúng ở local bằng extractAndParse trên
+chính file đó (66 lỗi: 13 KP mồ côi + 53 câu không mốc).
+
+NGUYÊN NHÂN: parser chỉ nhận bài từ dòng [...] và chương từ dòng {...}
+(định dạng mẫu của app). Dòng tiêu đề thường "BÀI 4 – ĐỘT BIẾN GENE."
+không phải mốc bài, nên toàn bộ nội dung thành mồ côi. Đường AI che
+mất lỗi này vì AI tự dựng cấu trúc bài từ văn bản, không qua cơ chế
+nhận mốc. Đồng thời xác minh: đáp án đúng của file này KHÔNG gạch chân
+ở phần câu hỏi (phương án MC không có __...__, TF nằm trong bảng, SA
+không có dòng "Đáp án:") — đáp án nằm ở phần hướng dẫn giải cuối file.
+Vì vậy đường nạp thường vốn dĩ chỉ nhận file theo mẫu; file sách thô
+là việc của đường AI. Phạm vi §37 KHÔNG suy diễn dạng câu hỏi hay đáp
+án (suy diễn sai sẽ ảnh hưởng chấm điểm).
+
+SỬA (lib/worksheet-parser.ts, parseTextContent):
+(1) Nếu toàn file không có mốc {...} / [...] nào thì mở sẵn một bài
+thiếu tên (title "", titleMissing true) trong chương "Chương chưa đặt
+tên" (tiền lệ ensureChapter) và đặt sawStructure = true, trước vòng
+lặp. Bài thiếu tên chỉ là WARNING theo cơ chế §18, khi lưu lấy tên
+file làm tên thay thế (lib/worksheet-import.ts đã làm sẵn cho
+titleMissing). Chỉ kích hoạt khi file hoàn toàn không có mốc, nên mọi
+file đang dùng mẫu đều không đổi hành vi.
+(2) Dòng thường TRƯỚC điểm kiến thức đầu tiên của bài cũng mở điểm
+đầu tiên (nới điều kiện nhánh dòng thường từ curKp && curLesson thành
+chỉ curLesson) — đúng luật dòng §19, và cần cho bài thiếu tên (tiêu đề
+sách thành điểm kiến thức để GV xóa/sửa ở bản xem trước thay vì báo
+lỗi chặn). Chỉ ảnh hưởng cửa sổ trước KP đầu tiên của mỗi bài; các
+file đang dùng mẫu không đổi (nội dung mẫu luôn mở bằng "- ").
+
+KẾT QUẢ trên file Bài 4 (local): 1 chương, 1 bài thiếu tên, 167 KP
+(luật dòng: mọi dòng thành KP, kể cả phương án của câu chưa có mốc —
+ồn nhưng trung thực, không mất dữ liệu), 0 lỗi mồ côi; còn 56 lỗi ở
+đúng ranh giới định dạng (53 câu thiếu mốc # + 3 dòng "+" trong lý
+thuyết) nên file vẫn chưa lưu được ở đường thường — GV dùng đường AI
+cho file này hoặc thêm mốc # theo mẫu. Check mới
+scripts/check-parser-fallback-37.mjs 16/16. Suite 40/47, đúng 7 lỗi cũ
+(class-phien1/2/3/6, parser-phien6/8, preview-phien3), không hồi quy.
+Kiểm chứng sống còn nợ: nạp thường Bài 4 trên production — bản xem
+trước phải hiện 1 bài thiếu tên + điểm kiến thức lý thuyết (không lưu).

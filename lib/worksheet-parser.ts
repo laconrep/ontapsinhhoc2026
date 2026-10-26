@@ -743,6 +743,23 @@ export function parseTextContent(text: string, opts?: ParseOptions): ParseResult
   }
 
   const lines = text.split(/\r?\n/)
+  // §37: file hoàn toàn không có mốc cấu trúc ({...} chương, [...] bài)
+  // vẫn là 1 bài (hứa hẹn "1 file = 1 bài" của §18): mở sẵn một bài
+  // thiếu tên trong chương chưa đặt tên để nội dung có chỗ bám, thay vì
+  // 0 bài + toàn bộ dòng nội dung báo lỗi mồ côi. Bài thiếu tên chỉ là
+  // WARNING (cơ chế §18) và khi lưu lấy tên file làm tên thay thế.
+  // Chỉ kích hoạt khi file không có mốc nào, nên mọi file đang dùng mẫu
+  // [...] / {...} đều không đổi hành vi.
+  const hasStructureMarker = lines.some((l) => {
+    const t = l.trim()
+    return /^\{(.+)\}$/.test(t) || /^\[(.*)\]$/.test(t)
+  })
+  if (!hasStructureMarker) {
+    const chap = ensureChapter()
+    curLesson = { title: "", knowledgePoints: [], questions: [], line: 0, titleMissing: true }
+    chap.lessons.push(curLesson)
+    sawStructure = true
+  }
   lines.forEach((rawLine, idx) => {
     const lineNo = idx + 1
     if (inTail) return
@@ -984,11 +1001,16 @@ export function parseTextContent(text: string, opts?: ParseOptions): ParseResult
       return
     }
 
-    if (!curQuestion && curKp && curLesson) {
+    if (!curQuestion && curLesson) {
       // §19: MỖI DÒNG LÀ MỘT ĐIỂM KIẾN THỨC — dòng chữ thường theo sau
       // một điểm kiến thức KHÔNG còn gộp vào điểm đó nữa, mà mở một
       // điểm kiến thức mới; gạch chân trên chính dòng này thành ô
       // trống của điểm mới, đúng như một dòng bắt đầu bằng "-".
+      // §37: dòng thường TRƯỚC điểm kiến thức đầu tiên của bài cũng mở
+      // điểm đầu tiên (thay vì "Không nhận dạng được cú pháp") — đúng
+      // luật dòng, và cần cho bài thiếu tên của file không mốc (tiêu đề
+      // sách như "BÀI 4 – ..." thành điểm kiến thức để GV xóa/sửa ở bản
+      // xem trước, thay vì báo lỗi chặn cả tài liệu).
       // §25: dòng KP mới cũng tắt chế độ câu hỏi cấp bài học (câu hỏi
       // sau nó lại gắn vào KP này, như đường AI xen kẽ).
       const { content, underlinedTerms } = extractBlanks(line)
