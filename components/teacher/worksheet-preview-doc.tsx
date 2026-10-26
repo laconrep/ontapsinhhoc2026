@@ -9,8 +9,15 @@ import type { ParseResult, ParsedQuestion, ValidationError } from "@/lib/workshe
 import type { AiResultMeta } from "@/lib/ai/types"
 
 /** §15.3: lời giải của một câu ở bản xem trước — mặc định THU GỌN sau
- * nút "Hướng dẫn giải", bấm mới xổ ra để bản xem trước không quá dài. */
-function SolutionBlock({ solution }: { solution: string }) {
+ * nút "Hướng dẫn giải", bấm mới xổ ra để bản xem trước không quá dài.
+ * §29: lời giải mang ảnh/bảng render qua QuestionStem như đề. */
+function SolutionBlock({
+  solution,
+  solutionBodyHtml,
+}: {
+  solution: string
+  solutionBodyHtml?: string | null
+}) {
   const [open, setOpen] = useState(false)
   return (
     <div className="mt-2">
@@ -28,8 +35,8 @@ function SolutionBlock({ solution }: { solution: string }) {
         <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
       </button>
       {open ? (
-        <div className="mt-1.5 rounded-md bg-muted/50 p-2 text-sm whitespace-pre-wrap text-foreground">
-          {solution}
+        <div className="mt-1.5 rounded-md bg-muted/50 p-2 text-sm text-foreground">
+          <QuestionStem content={solution} bodyHtml={solutionBodyHtml ?? null} className="text-sm" maxHeightClass="max-h-none" />
         </div>
       ) : null}
     </div>
@@ -240,7 +247,7 @@ export function PreviewDocument({
         {q.type === "SA" && q.correctAnswer ? (
           <p className="mt-1 text-sm text-muted-foreground">Đáp án: {q.correctAnswer}</p>
         ) : null}
-        {q.solution ? <SolutionBlock solution={q.solution} /> : null}
+        {q.solution ? <SolutionBlock solution={q.solution} solutionBodyHtml={q.solutionBodyHtml} /> : null}
       </div>
     )
   }

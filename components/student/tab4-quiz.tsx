@@ -16,6 +16,13 @@ import { Award, BookOpenText, Check, ChevronDown, Lock, RotateCcw, X } from "luc
 import type { QuizQuestionSubmitResult, QuizResultDto } from "@/types"
 import { QuestionStem } from "@/components/question/question-stem"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
+import { stripOptionPrefix, stripOptionPrefixHtml } from "@/lib/option-prefix"
+
+/** §29: nhãn vị trí A/B/C/D — Tab 4 xáo trộn phương án MC theo từng
+ * học sinh (startQuiz/seededShuffle) nên nhãn gốc "A. ..." trong nội
+ * dung phương án sẽ hiện lộn xộn; bỏ nhãn gốc và gắn nhãn theo vị trí
+ * hiển thị, giống luồng live đã làm từ trước. */
+const OPTION_LETTERS = ["A", "B", "C", "D", "E", "F"]
 
 type Draft = {
   quizId: string
@@ -34,6 +41,37 @@ type QuizQuestion = {
 }
 
 type Answer = string | Record<string, "D" | "S">
+
+/** §29: nộp bài Tab 4 — tự thử lại khi gặp lỗi thoáng qua (mạng chập
+ * chờn, DB vừa ngủ dậy...). An toàn vì cả hai action nộp đều lũy đẳng:
+ * nộp lại câu đã nộp trả kết quả đã lưu, nộp lại bài đã nộp xong báo
+ * "Bài kiểm tra đã nộp" (doSubmit khôi phục kết quả trong trường hợp
+ * đó thay vì báo lỗi). */
+const QUIZ_SUBMIT_RETRIES = 2
+const quizSleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+async function withQuizRetry<T>(fn: () => Promise<T>): Promise<T> {
+  let last: unknown
+  for (let attempt = 0; attempt <= QUIZ_SUBMIT_RETRIES; attempt++) {
+    try {
+      return await fn()
+    } catch (err) {
+      last = err
+      if (attempt < QUIZ_SUBMIT_RETRIES) await quizSleep(400 * (attempt + 1))
+    }
+  }
+  throw last
+}
+
+/** §29: thông báo nộp bài — lỗi kỹ thuật khó hiểu (vd. "Minified React
+ * error", lỗi mạng) dịch thành câu học sinh hiểu được + khẳng định đáp
+ * án vẫn được giữ; lỗi nghiệp vụ (vd. "Bài kiểm tra đã nộp") giữ nguyên. */
+function quizSubmitErrorMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : "Không thể nộp bài"
+  if (/Minified React error|Failed to fetch|NetworkError|fetch failed|network|timed? ?out/i.test(raw)) {
+    return "Không gửi được bài do mạng/máy chủ chập chờn. Đáp án của em vẫn được giữ — bấm nộp lại nhé."
+  }
+  return raw
+}
 
 export function Tab4Quiz({
   lessonId,
@@ -206,13 +244,25 @@ export function Tab4Quiz({
     setConfirmOpen(false)
     startTransition(async () => {
       try {
-        const res = await submitQuiz(quizId, answers)
+        const res = await withQuizRetry(() => submitQuiz(quizId, answers))
         clearDraft()
         setResult(res)
         setPhase("result")
         onFinished?.()
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Không thể nộp bài")
+        // Lượt đầu có thể đã nộp xong nhưng mất phản hồi — lần thử lại
+        // báo "đã nộp": khôi phục kết quả thay vì báo lỗi.
+        if (err instanceof Error && err.message.includes("Bài kiểm tra đã nộp")) {
+          const recovered = await getLatestQuizResult(lessonId).catch(() => null)
+          if (recovered) {
+            clearDraft()
+            setResult(recovered)
+            setPhase("result")
+            onFinished?.()
+            return
+          }
+        }
+        toast.error(quizSubmitErrorMessage(err))
       }
     })
   }
@@ -267,14 +317,16 @@ export function Tab4Quiz({
     setConfirmQuestionOpen(false)
     startTransition(async () => {
       try {
-        const res = await submitQuizQuestion(
-          quizId,
-          question.id,
-          (answers[question.id] ?? (question.type === "TF" ? {} : "")) as Answer,
+        const res = await withQuizRetry(() =>
+          submitQuizQuestion(
+            quizId,
+            question.id,
+            (answers[question.id] ?? (question.type === "TF" ? {} : "")) as Answer,
+          ),
         )
         setSubmitted((prev) => ({ ...prev, [question.id]: res }))
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Không thể nộp câu hỏi")
+        toast.error(quizSubmitErrorMessage(err))
       }
     })
   }
@@ -454,7 +506,7 @@ function LockedQuestionView({
 
       {question.type === "MC" && (
         <div className="flex flex-col gap-2">
-          {question.options.map((o) => {
+          {question.options.map((o, i) => {
             const chosen = result.studentAnswer === o.content
             const correct = result.correctAnswer === o.content
             return (
@@ -467,7 +519,21 @@ function LockedQuestionView({
                   !chosen && !correct && "border-border text-muted-foreground",
                 )}
               >
-                <span className="flex-1">{o.content}</span>
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-bold text-secondary-foreground">
+                  {OPTION_LETTERS[i] ?? ""}
+                </span>
+                <span className="flex-1">
+                  {o.bodyHtml ? (
+                    <QuestionStem
+                      content={stripOptionPrefix(o.content)}
+                      bodyHtml={stripOptionPrefixHtml(o.bodyHtml)}
+                      className="text-sm"
+                      maxHeightClass="max-h-24"
+                    />
+                  ) : (
+                    stripOptionPrefix(o.content)
+                  )}
+                </span>
                 {correct && (
                   <span className="flex items-center gap-1 text-xs font-medium text-primary">
                     <Check className="size-3.5" aria-hidden /> Đáp án đúng
@@ -501,7 +567,7 @@ function LockedQuestionView({
         </div>
       )}
 
-      {result.solution ? <SolutionGuide solution={result.solution} /> : null}
+      {result.solution ? <SolutionGuide solution={result.solution} solutionBodyHtml={result.solutionBodyHtml} /> : null}
     </div>
   )
 }
@@ -526,7 +592,7 @@ function MCInput({
 }) {
   return (
     <div className="flex flex-col gap-2">
-      {question.options.map((o) => (
+      {question.options.map((o, i) => (
         <button
           key={o.id}
           type="button"
@@ -546,10 +612,18 @@ function MCInput({
           >
             {value === o.id && <span className="h-2 w-2 rounded-full bg-primary" />}
           </span>
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-bold text-secondary-foreground">
+            {OPTION_LETTERS[i] ?? ""}
+          </span>
           {o.bodyHtml ? (
-            <QuestionStem content={o.content} bodyHtml={o.bodyHtml} className="text-sm" maxHeightClass="max-h-24" />
+            <QuestionStem
+              content={stripOptionPrefix(o.content)}
+              bodyHtml={stripOptionPrefixHtml(o.bodyHtml)}
+              className="text-sm"
+              maxHeightClass="max-h-24"
+            />
           ) : (
-            o.content
+            stripOptionPrefix(o.content)
           )}
         </button>
       ))}
@@ -680,7 +754,7 @@ function QuizResult({
                 </>
               )}
               {d.questionType === "TF" && <TFDetail raw={d.studentAnswer} />}
-              {d.solution ? <SolutionGuide solution={d.solution} /> : null}
+              {d.solution ? <SolutionGuide solution={d.solution} solutionBodyHtml={d.solutionBodyHtml} /> : null}
             </div>
           ))}
         </div>
@@ -700,8 +774,17 @@ function QuizResult({
 }
 
 /** §15.3: hướng dẫn giải của một câu — chỉ tồn tại trong kết quả SAU
- * khi nộp bài (đúng/sai đã hiện), mặc định thu gọn, bấm mới xem. */
-function SolutionGuide({ solution }: { solution: string }) {
+ * khi nộp bài (đúng/sai đã hiện), mặc định thu gọn, bấm mới xem.
+ * §29: lời giải mang ảnh/bảng (solutionBodyHtml) render qua QuestionStem
+ * (lọc DOMPurify + lazy load + cỡ eq-inline) thay vì text thuần — trước
+ * đây token @@IMG@@ hiện nguyên chữ trước mặt học sinh. */
+function SolutionGuide({
+  solution,
+  solutionBodyHtml,
+}: {
+  solution: string
+  solutionBodyHtml?: string | null
+}) {
   const [open, setOpen] = useState(false)
   return (
     <div className="mt-2">
@@ -716,8 +799,8 @@ function SolutionGuide({ solution }: { solution: string }) {
         <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
       </button>
       {open ? (
-        <div className="mt-1.5 rounded-md bg-background/70 p-2.5 text-sm whitespace-pre-wrap text-foreground">
-          {solution}
+        <div className="mt-1.5 rounded-md bg-background/70 p-2.5 text-sm text-foreground">
+          <QuestionStem content={solution} bodyHtml={solutionBodyHtml ?? null} className="text-sm" maxHeightClass="max-h-none" />
         </div>
       ) : null}
     </div>

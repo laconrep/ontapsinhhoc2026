@@ -1858,4 +1858,55 @@ mẫu báo cáo chỉ khớp khung sửa màn hình nạp file.)
   server không cần sửa. Lưu ý: học sinh nào đã thử sai nhiều lần có
   thể còn bị khóa trong cửa sổ 10 phút, hết cửa sổ là vào lại được.
 - Kiểm chứng: tsc sạch, next build exit 0, check-invite-code PASS
-  (SEC-05). Chưa push — chờ GV đưa PAT mới như mọi lần.
+  (SEC-05). Đã push: commit 676f05b lên master (Vercel tự deploy).
+
+## §29 — 4 lỗi luồng học sinh làm bài trên điện thoại (user báo 26/10, chốt sửa tất cả)
+
+1. Phương án trắc nghiệm hiện lộn xộn, sai thứ tự A/B/C/D: `startQuiz`
+   xáo trộn phương án MC theo từng học sinh (`seededShuffle`, cố ý chống
+   chép bài) nhưng Tab 4 render nguyên văn nội dung phương án — vốn chứa
+   nhãn "A. ..." từ tài liệu — nên nhãn đi theo nội dung và hiện lộn
+   xộn. Chỉ MC bị (TF không xáo, SA không có phương án). Sửa (chỉ
+   `tab4-quiz.tsx`): MCInput + LockedQuestionView bỏ nhãn gốc bằng
+   `stripOptionPrefix`/`stripOptionPrefixHtml` và gắn badge A/B/C/D theo
+   vị trí hiển thị, đúng mẫu luồng live đã làm từ trước. So sánh/chấm
+   vẫn dùng id + content gốc nên không đổi; LockedQuestionView trước
+   đây còn bỏ qua bodyHtml của phương án, nay render qua QuestionStem
+   như lúc làm bài.
+2+3. Hướng dẫn giải không hiện ảnh/công thức: `SolutionGuide` render
+   text thuần; lời giải chứa token ảnh (Bài 1: 6/55 lời giải chứa
+   `@@IMG@@`) hiện nguyên chữ thay vì ảnh, công thức dạng ảnh cũng
+   không render được. Sửa: parser `attachBodyHtml` dựng thêm
+   `solutionBodyHtml` cho câu hỏi (trong KP + cấp bài) khi lời giải mang
+   token ảnh/bảng (giữ nguyên solution text để giáo viên sửa); cột mới
+   `questions.solutionBodyHtml` (schema + ensureSchema ADD COLUMN IF
+   NOT EXISTS — cùng mẫu bodyHtml); `insertParsedQuestion` lưu qua
+   sanitizeBodyHtml; các action Tab 4 (`submitQuizQuestion`,
+   `submitQuiz`, `getOpenQuizState` qua `detailFromStored` /
+   `gradeOneFromSnapshot`) trả thêm `solutionBodyHtml`;
+   `SolutionGuide` + `SolutionBlock` (preview) render qua QuestionStem
+   (DOMPurify + lazy load + cỡ eq-inline) khi có HTML, giữ text thuần
+   khi không. Lưu ý: bài ĐÃ lưu trước §29 có solution chứa token nhưng
+   không có solutionBodyHtml → vẫn hiện text cũ (kèm token); muốn có
+   ảnh trong lời giải thì nạp lại bài (đường AI: mở lại job và lưu lại;
+   đường thường: nạp lại file).
+4. Lỗi khi nộp câu Đúng/Sai (báo liên tục, nhiều câu, bấm nộp là lỗi,
+   lựa chọn vẫn giữ): tái hiện KHÔNG thành công — E2E §16 (P5 nộp TF,
+   P7 nộp bài) và dữ liệu AI thật Bài 1 (11 câu TF, nộp từng câu + nộp
+   bài) đều pass; code chấm (`gradeTF`) / nộp / render TF đều có guard
+   chống dữ liệu thiếu/lệch; constraint quiz_answers (mc_sa/tf) và
+   spaced_repetition đều đủ trong SQL production. Không tìm thấy lỗi
+   xác định trong code nộp. Sửa theo hướng chống lỗi thoáng qua:
+   `submitQuizQuestion` + `submitQuiz` ở client tự thử lại tối đa 3 lần
+   (nghỉ 400/800ms) — an toàn vì lũy đẳng (nộp lại câu trả kết quả đã
+   lưu); thông báo lỗi kỹ thuật khó hiểu (#441, lỗi mạng) dịch thành
+   câu học sinh hiểu được + khẳng định đáp án vẫn được giữ; trường hợp
+   nộp bài đã xong nhưng mất phản hồi thì lần thử lại báo "đã nộp" và
+   client khôi phục kết quả qua `getLatestQuizResult` thay vì báo lỗi.
+   Nếu sau deploy vẫn lỗi ở cùng một câu cụ thể thì đó là dữ liệu của
+   câu đó — cần tên bài/câu để tái hiện theo đúng dữ liệu đó.
+- Kiểm chứng: tsc sạch, next build exit 0, test-solution-29 ALL PASS
+  (parser + DB + action), E2E perquestion ALL PASS,
+  lesson-questions-25 25/25, bandwidth-26 19/19, suite 35/42 đúng 7 lỗi
+  nền cũ (class-phien1/2/3/6, parser-phien6/8, preview-phien3). Chưa
+  push — chờ GV đưa PAT mới như mọi lần.

@@ -157,6 +157,9 @@ async function insertParsedQuestion(
       // §15.3: giải chi tiết đi cùng câu (text thuần, render dạng
       // text phía client nên không qua sanitize HTML).
       solution: pQ.solution?.trim() ? pQ.solution.trim() : null,
+      // §29: HTML render của lời giải (khi mang token ảnh/bảng) —
+      // sanitize như bodyHtml; null khi lời giải không có media.
+      solutionBodyHtml: sanitizeBodyHtml(pQ.solutionBodyHtml),
       // SEC-02: bodyHtml (kể cả từ images/tables client gửi) phải
       // qua sanitize phía server trước khi lưu.
       bodyHtml: sanitizeBodyHtml(pQ.bodyHtml),

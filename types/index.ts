@@ -146,6 +146,8 @@ export interface QuizAnswerDetail {
   correctAnswer: string
   /** §15.3: giải chi tiết của câu — chỉ đưa xuống SAU khi nộp bài. */
   solution?: string | null
+  /** §29: HTML render của lời giải khi mang ảnh/bảng (null khi không có). */
+  solutionBodyHtml?: string | null
 }
 
 /** §16: kết quả nộp TỪNG câu (Tab 4 chấm từng câu) — như QuizAnswerDetail,

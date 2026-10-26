@@ -157,6 +157,9 @@ export const questions = pgTable("questions", {
   // Giải chi tiết của câu (tính năng AI §15.3 sualogic): text thuần, có
   // thể do GV viết trong file (dòng "Giải chi tiết:") hoặc AI gắn/sinh.
   solution: text("solution"),
+  // §29: HTML render của lời giải khi mang ảnh/bảng (song song với
+  // bodyHtml của đề) — null khi lời giải không có media.
+  solutionBodyHtml: text("solutionBodyHtml"),
   bodyHtml: text("bodyHtml"),
   difficulty: integer("difficulty").notNull().default(1),
   timeLimitSec: integer("timeLimitSec"),

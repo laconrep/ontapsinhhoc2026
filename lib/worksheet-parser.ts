@@ -21,6 +21,10 @@ export interface ParsedQuestion {
   correctAnswer?: string
   /** Giải chi tiết của câu (dòng "Giải chi tiết:" ngay sau câu) — §15.3. */
   solution?: string
+  /** §29: HTML render của lời giải khi nó mang token ảnh/bảng (dựng
+   * bởi attachBodyHtml, song song với bodyHtml của đề) — solution text
+   * giữ nguyên để giáo viên vẫn sửa/xem dạng text. */
+  solutionBodyHtml?: string
   /** HTML de (anh/bang); phien 3+ moi gan */
   bodyHtml?: string
   line: number
@@ -1166,19 +1170,36 @@ export function attachBodyHtml(result: ParseResult, images: string[], tables: st
           }
         }
         for (const q of kp.questions) {
-          if (!q.content.includes("@@IMG") && !q.content.includes("@@TBL")) continue
-          const lines = q.content.split("\n")
-          q.bodyHtml = lines.map((ln) => lineWithRichToHtml(ln, images, tables)).join("<br>\n")
-          q.content = stripRichTokens(q.content)
+          if (q.content.includes("@@IMG") || q.content.includes("@@TBL")) {
+            const lines = q.content.split("\n")
+            q.bodyHtml = lines.map((ln) => lineWithRichToHtml(ln, images, tables)).join("<br>\n")
+            q.content = stripRichTokens(q.content)
+          }
+          // §29: lời giải cũng mang token ảnh/bảng — dựng HTML render
+          // riêng, giữ nguyên solution text.
+          if (q.solution && (q.solution.includes("@@IMG") || q.solution.includes("@@TBL"))) {
+            q.solutionBodyHtml = q.solution
+              .split("\n")
+              .map((ln) => lineWithRichToHtml(ln, images, tables))
+              .join("<br>\n")
+          }
         }
       }
       // §25: câu hỏi cấp bài học cũng mang token ảnh/bảng như câu hỏi
       // trong KP — xử lý stem giống hệt để không rơi token ra ngoài.
       for (const q of lesson.questions ?? []) {
-        if (!q.content.includes("@@IMG") && !q.content.includes("@@TBL")) continue
-        const lines = q.content.split("\n")
-        q.bodyHtml = lines.map((ln) => lineWithRichToHtml(ln, images, tables)).join("<br>\n")
-        q.content = stripRichTokens(q.content)
+        if (q.content.includes("@@IMG") || q.content.includes("@@TBL")) {
+          const lines = q.content.split("\n")
+          q.bodyHtml = lines.map((ln) => lineWithRichToHtml(ln, images, tables)).join("<br>\n")
+          q.content = stripRichTokens(q.content)
+        }
+        // §29: lời giải cấp bài học — như trên.
+        if (q.solution && (q.solution.includes("@@IMG") || q.solution.includes("@@TBL"))) {
+          q.solutionBodyHtml = q.solution
+            .split("\n")
+            .map((ln) => lineWithRichToHtml(ln, images, tables))
+            .join("<br>\n")
+        }
       }
     }
   }

@@ -1107,6 +1107,7 @@ function gradeOneFromSnapshot(
   snap: QuizPaperSnapshot,
   raw: string | Record<string, "D" | "S"> | undefined,
   solution: string | null,
+  solutionBodyHtml: string | null,
 ): {
   rows: { questionId: string; optionId: string | null; studentAnswer: string | null; isCorrect: boolean }[]
   detail: QuizAnswerDetail
@@ -1129,6 +1130,7 @@ function gradeOneFromSnapshot(
         isCorrect,
         correctAnswer: correctOpt?.content ?? "",
         solution,
+        solutionBodyHtml,
       },
       correctCount: isCorrect ? 1 : 0,
     }
@@ -1155,6 +1157,7 @@ function gradeOneFromSnapshot(
         isCorrect,
         correctAnswer: accepted[0] ?? "",
         solution,
+        solutionBodyHtml,
       },
       correctCount: isCorrect ? 1 : 0,
     }
@@ -1190,6 +1193,7 @@ function gradeOneFromSnapshot(
       isCorrect: perYy.length > 0 && perYy.every((p) => p.isCorrect),
       correctAnswer: "",
       solution,
+      solutionBodyHtml,
     },
     correctCount,
     tfChoices,
@@ -1202,6 +1206,7 @@ function detailFromStored(
   snap: QuizPaperSnapshot,
   rows: StoredAnswerRow[],
   solution: string | null,
+  solutionBodyHtml: string | null,
 ): { detail: QuizAnswerDetail; correctCount: number; tfChoices?: Record<string, "D" | "S"> } {
   const type = snap?.type ?? "MC"
   const opts = snap?.options ?? []
@@ -1225,6 +1230,7 @@ function detailFromStored(
         isCorrect: perYy.length > 0 && perYy.every((p) => p.isCorrect),
         correctAnswer: "",
         solution,
+        solutionBodyHtml,
       },
       correctCount,
       tfChoices,
@@ -1242,6 +1248,7 @@ function detailFromStored(
         isCorrect,
         correctAnswer: accepted[0] ?? "",
         solution,
+        solutionBodyHtml,
       },
       correctCount: isCorrect ? 1 : 0,
     }
@@ -1256,6 +1263,7 @@ function detailFromStored(
       isCorrect,
       correctAnswer: correctOpt?.content ?? "",
       solution,
+      solutionBodyHtml,
     },
     correctCount: isCorrect ? 1 : 0,
   }
@@ -1308,6 +1316,7 @@ export async function submitQuiz(
               id: questions.id,
               knowledgePointId: questions.knowledgePointId,
               solution: questions.solution,
+              solutionBodyHtml: questions.solutionBodyHtml,
             })
             .from(questions)
             .where(inArray(questions.id, paperIds))
@@ -1315,6 +1324,7 @@ export async function submitQuiz(
     const kpByQ = new Map(liveQs.map((q) => [q.id, q.knowledgePointId]))
     // §15.3: lời giải chỉ xuất hiện trong kết quả SAU khi nộp bài.
     const solByQ = new Map(liveQs.map((q) => [q.id, q.solution]))
+    const solBodyByQ = new Map(liveQs.map((q) => [q.id, q.solutionBodyHtml]))
 
     // §16: các câu học sinh ĐÃ nộp riêng lẻ (nút "Nộp câu hỏi") đã có
     // dòng trong quiz_answers — dựng lại kết quả từ đó, KHÔNG chấm lại
@@ -1343,6 +1353,7 @@ export async function submitQuiz(
           snap as QuizPaperSnapshot,
           stored,
           solByQ.get(row.questionId) ?? null,
+          solBodyByQ.get(row.questionId) ?? null,
         )
         correctSlots += correctCount
         details.push(detail)
@@ -1371,6 +1382,7 @@ export async function submitQuiz(
           isCorrect,
           correctAnswer: correctOpt?.content ?? "",
           solution: solByQ.get(row.questionId) ?? null,
+          solutionBodyHtml: solBodyByQ.get(row.questionId) ?? null,
         })
       } else if (type === "SA") {
         const raw = answers[row.questionId]
@@ -1396,6 +1408,7 @@ export async function submitQuiz(
           isCorrect,
           correctAnswer: accepted[0] ?? "",
           solution: solByQ.get(row.questionId) ?? null,
+          solutionBodyHtml: solBodyByQ.get(row.questionId) ?? null,
         })
       } else if (type === "TF") {
         const map = (typeof answers[row.questionId] === "object" && answers[row.questionId] != null
@@ -1428,6 +1441,7 @@ export async function submitQuiz(
           isCorrect: perYy.length > 0 && perYy.every((p) => p.isCorrect),
           correctAnswer: "",
           solution: solByQ.get(row.questionId) ?? null,
+          solutionBodyHtml: solBodyByQ.get(row.questionId) ?? null,
         })
       }
     }
@@ -1516,11 +1530,12 @@ export async function submitQuizQuestion(
     if (!paperRow) throw new Error("Câu hỏi không thuộc bài kiểm tra này")
 
     const [liveQ] = await tx
-      .select({ solution: questions.solution })
+      .select({ solution: questions.solution, solutionBodyHtml: questions.solutionBodyHtml })
       .from(questions)
       .where(eq(questions.id, questionId))
       .limit(1)
     const solution = liveQ?.solution ?? null
+    const solutionBodyHtml = liveQ?.solutionBodyHtml ?? null
     const snap = paperRow.snapshot as QuizPaperSnapshot
 
     const existing = await tx
@@ -1528,11 +1543,11 @@ export async function submitQuizQuestion(
       .from(quizAnswers)
       .where(and(eq(quizAnswers.attemptId, quizId), eq(quizAnswers.questionId, questionId)))
     if (existing.length > 0) {
-      const { detail, tfChoices } = detailFromStored(questionId, snap, existing, solution)
+      const { detail, tfChoices } = detailFromStored(questionId, snap, existing, solution, solutionBodyHtml)
       return { ...detail, tfChoices }
     }
 
-    const { rows, detail, tfChoices } = gradeOneFromSnapshot(questionId, snap, answer, solution)
+    const { rows, detail, tfChoices } = gradeOneFromSnapshot(questionId, snap, answer, solution, solutionBodyHtml)
     if (rows.length > 0) {
       await tx.insert(quizAnswers).values(rows.map((r) => ({ attemptId: quizId, ...r })))
     }
@@ -1595,11 +1610,12 @@ export async function getOpenQuizState(lessonId: string): Promise<{
   const liveQs =
     paperIds.length > 0
       ? await db
-          .select({ id: questions.id, solution: questions.solution })
+          .select({ id: questions.id, solution: questions.solution, solutionBodyHtml: questions.solutionBodyHtml })
           .from(questions)
           .where(inArray(questions.id, paperIds))
       : []
   const solByQ = new Map(liveQs.map((q) => [q.id, q.solution]))
+  const solBodyByQ = new Map(liveQs.map((q) => [q.id, q.solutionBodyHtml]))
   const storedByQ = new Map<string, typeof stored>()
   for (const r of stored) {
     const list = storedByQ.get(r.questionId) ?? []
@@ -1616,6 +1632,7 @@ export async function getOpenQuizState(lessonId: string): Promise<{
       row.snapshot as QuizPaperSnapshot,
       rows,
       solByQ.get(row.questionId) ?? null,
+      solBodyByQ.get(row.questionId) ?? null,
     )
     submitted.push({ ...detail, tfChoices })
   }

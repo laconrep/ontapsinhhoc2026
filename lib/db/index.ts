@@ -23,6 +23,7 @@ export function ensureSchema(): Promise<void> {
     schemaReady = pool
       .query(`ALTER TABLE questions ADD COLUMN IF NOT EXISTS "bodyHtml" text`)
       .then(() => pool.query(`ALTER TABLE question_options ADD COLUMN IF NOT EXISTS "bodyHtml" text`))
+      .then(() => pool.query(`ALTER TABLE questions ADD COLUMN IF NOT EXISTS "solutionBodyHtml" text`))
       .then(() =>
         pool.query(`ALTER TABLE questions ADD COLUMN IF NOT EXISTS "order" integer NOT NULL DEFAULT 0`),
       )
