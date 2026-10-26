@@ -2047,3 +2047,52 @@ bản render cũ còn tách nhãn/nội dung thành 2 dòng — đúng với b�
 không phải lỗi mới). Suite: 37 pass / 7 fail — đúng 7 lỗi nền cũ
 (class-phien1/2/3/6, parser-phien6/8, preview-phien3), không hồi quy;
 tsc sạch, next build exit 0.
+
+## §30 — File lớn bị 413: tải thẳng lên Blob thay vì qua function (2026-10-26)
+
+Vấn đề: file Bài 2 docx 4.553.175 byte bị gateway Vercel trả 413 trước
+khi code của app chạy — Vercel giới hạn mỗi request tới serverless
+function ở ~4,5MB, trong khi app cho phép 10MB và giao diện ghi "tối đa
+10MB". Cả ba chỗ nhận file đều gửi nguyên file qua multipart nên đều
+dính: /api/worksheet/validate, /api/ai/jobs, và /api/worksheet/save
+(đường thường chưa sửa bản xem trước thì lưu gửi lại file). Lần thử
+lại sau khi tải lại trang còn "lặng im" vì file đã mất theo reload mà
+nút "Sử dụng AI" early-return không báo gì.
+
+Sửa:
+- Mới lib/blob-transport.ts (server): ngưỡng 4MB — file trên ngưỡng đi
+  qua Blob, file nhỏ giữ đường multipart cũ. fetchTransportBuffer kiểm
+  tra URL (bắt buộc https + host *.public.blob.vercel-storage.com,
+  chống SSRF), đuôi file, content-length + độ dài buffer (tối đa
+  10MB), rồi XOÁ object Blob ngay sau khi tải về (chỉ là phương tiện
+  vận chuyển; xoá lỗi chỉ log, không hỏng việc nạp).
+- Mới app/api/blob/upload/route.ts: cấp token client-upload qua
+  handleUpload (chỉ giáo viên đã onboard, rate limit riêng 30/giờ,
+  allowedContentTypes txt/pdf/docx, tối đa 10MB, addRandomSuffix).
+  Thiếu BLOB_READ_WRITE_TOKEN -> 501 để client báo rõ.
+- validate + ai/jobs nhận thêm JSON { blobUrl, filename } (giới hạn
+  body riêng 64KB); rate limit 10/giờ giữ nguyên cho cả hai đường.
+- Importer: postWorksheetSmart — file ≤ 4MB đi multipart cũ, file lớn
+  tải thẳng lên Blob bằng upload() của @vercel/blob/client rồi gửi JSON.
+  Lỗi cấp token (gồm 501) và lỗi PUT được báo bằng câu riêng, vì
+  upload() không lộ status route. postForm dịch 413 thành câu rõ ràng.
+  Bản xem trước từ file lớn lúc lưu gửi bằng text (đường đã có cho bản
+  nháp đã sửa/AI) thay vì gửi lại file — tránh 413 lần nữa ở save, và
+  vẫn giữ originalFileKey (đường text cũng ghi tên file) nên thẻ bài
+  vẫn hiện "Đã nạp file".
+- Không lặng im nữa: doValidate / startAiFlow / doSave khi chưa có
+  file thì toast "Hãy chọn file trước..." thay vì early-return lặng.
+- Danh sách chương trong importer thành state: chương tạo trong lúc
+  lưu (fork/tạo mới) được thêm vào picker ngay trong phiên, tránh lần
+  lưu sau (khi lần trước lỗi) không thấy chương mới.
+- Chữ "tối đa 10MB" trên giao diện giữ nguyên — sau sửa này nó ĐÚNG
+  thật (giới hạn thật của app), không còn là quảng cáo vượt giới hạn
+  máy chủ nữa.
+
+Kiểm chứng: test mới scripts/check-blob-transport.mjs 15/15 (ngưỡng,
+host, đuôi file, chặn trước fetch); tsc sạch, next build exit 0; suite
+38 pass / 7 fail — đúng 7 lỗi nền cũ (class-phien1/2/3/6,
+parser-phien6/8, preview-phien3), không hồi quy. Kiểm chứng sống còn
+nợ: GV Test nạp lại đúng file Bài 2 4,55MB qua "Sử dụng AI" trên
+production — phải tạo được job (hết 413); xử lý AI trọn vẹn Bài 2 là
+việc riêng, không nằm trong §30.

@@ -2,6 +2,11 @@ import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth-helpers"
 import { bufferFromFormData } from "@/lib/worksheet-import"
 import { createAiJob, getAiJobForTeacher, listAiJobsForTeacher } from "@/lib/ai/jobs"
+import {
+  BLOB_JSON_BODY_LIMIT,
+  fetchTransportBuffer,
+  isAllowedUploadFilename,
+} from "@/lib/blob-transport"
 import { hitRateLimit } from "@/lib/rate-limit"
 import { safeErrorMessage } from "@/lib/api-error"
 
@@ -11,6 +16,9 @@ export const dynamic = "force-dynamic"
 // AI-MCP (§15): tạo việc AI từ file GV upload (chế độ 2 của luồng nạp).
 // Cùng ngưỡng chống lạm dụng với route worksheet: body tối đa 32MB và
 // giới hạn 10 lượt tải/giờ theo tài khoản (dùng chung key rate limit).
+// §30: file lớn (> 4MB) đi qua Blob — client tải thẳng lên Blob rồi chỉ
+// gửi JSON { blobUrl, filename }; nhánh JSON có giới hạn riêng nhỏ và
+// không chịu giới hạn request ~4,5MB của Vercel.
 const MAX_BODY_BYTES = 32 * 1024 * 1024
 
 export async function POST(req: Request) {
@@ -19,8 +27,14 @@ export async function POST(req: Request) {
   if (user.role !== "teacher") return NextResponse.json({ error: "Chỉ giáo viên được nạp file" }, { status: 403 })
   if (!user.isOnboarded) return NextResponse.json({ error: "Cần hoàn tất đăng ký" }, { status: 403 })
 
+  const contentType = req.headers.get("content-type") ?? ""
   const contentLength = Number(req.headers.get("content-length") ?? 0)
-  if (contentLength > MAX_BODY_BYTES) {
+  const isBlobJson = contentType.includes("application/json")
+  if (isBlobJson) {
+    if (contentLength > BLOB_JSON_BODY_LIMIT) {
+      return NextResponse.json({ error: "Dữ liệu tải lên vượt quá giới hạn" }, { status: 413 })
+    }
+  } else if (contentLength > MAX_BODY_BYTES) {
     return NextResponse.json({ error: "Dữ liệu tải lên vượt quá giới hạn" }, { status: 413 })
   }
   if (!(await hitRateLimit(`worksheet-upload:${user.id}`, 10, 60 * 60_000))) {
@@ -28,6 +42,21 @@ export async function POST(req: Request) {
   }
 
   try {
+    if (isBlobJson) {
+      const { blobUrl, filename } = (await req.json()) as {
+        blobUrl?: unknown
+        filename?: unknown
+      }
+      if (typeof blobUrl !== "string" || typeof filename !== "string") {
+        return NextResponse.json({ error: "Thiếu đường dẫn file" }, { status: 400 })
+      }
+      if (!isAllowedUploadFilename(filename)) {
+        return NextResponse.json({ error: "Chỉ chấp nhận file .txt, .docx hoặc .pdf" }, { status: 400 })
+      }
+      const buffer = await fetchTransportBuffer(blobUrl, filename)
+      const { jobId } = await createAiJob(user, buffer, filename)
+      return NextResponse.json({ jobId })
+    }
     const formData = await req.formData()
     const { buffer, filename } = await bufferFromFormData(formData)
     const { jobId } = await createAiJob(user, buffer, filename)

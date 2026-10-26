@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
+import { upload } from "@vercel/blob/client"
 import { toast } from "sonner"
 import { assignLessons } from "@/app/actions/assignments"
 import { applyAiDistractors } from "@/app/actions/worksheet"
@@ -100,7 +101,15 @@ type SaveFork = { kind: "library"; chapterId: string } | { kind: "class" }
 async function postForm<T>(url: string, fd: FormData): Promise<T> {
   const res = await fetch(url, { method: "POST", body: fd })
   const data = (await res.json().catch(() => ({}))) as T & { error?: string }
-  if (!res.ok) throw new Error(data.error || `Lỗi server (${res.status})`)
+  if (!res.ok) {
+    // §30: 413 từ gateway nghĩa là body vượt giới hạn request của máy
+    // chủ — nói rõ thay vì mã số khô khan (đường file lớn đã đi qua
+    // Blob nên 413 này chỉ còn là trường hợp lạ, vẫn cần báo rõ).
+    if (res.status === 413) {
+      throw new Error(data.error || "File quá lớn cho đường tải trực tiếp của máy chủ — hãy thử file nhỏ hơn")
+    }
+    throw new Error(data.error || `Lỗi server (${res.status})`)
+  }
   return data
 }
 
@@ -108,6 +117,58 @@ async function postWorksheet<T>(url: string, file: File): Promise<T> {
   const fd = new FormData()
   fd.append("file", file)
   return postForm<T>(url, fd)
+}
+
+/** §30: ngưỡng file lớn — giữ đồng bộ với BLOB_TRANSPORT_THRESHOLD
+ * trong lib/blob-transport.ts (module đó chỉ chạy ở server nên không
+ * import trực tiếp vào component client này được). */
+const BLOB_TRANSPORT_THRESHOLD = 4 * 1024 * 1024
+
+/**
+ * §30: gửi file lên validate / ai/jobs. File nhỏ đi đường multipart cũ;
+ * file lớn (> 4MB) được tải thẳng lên Blob rồi chỉ gửi URL Blob dạng
+ * JSON — tránh giới hạn request ~4,5MB của Vercel (file Bài 2 4,55MB
+ * từng bị 413 ở đây). Trả kèm viaBlob để bước lưu biết mà lưu bằng
+ * text thay vì gửi lại file (tránh 413 lần nữa ở /api/worksheet/save).
+ */
+async function postWorksheetSmart<T>(
+  url: string,
+  file: File,
+): Promise<{ data: T; viaBlob: boolean }> {
+  if (file.size <= BLOB_TRANSPORT_THRESHOLD) {
+    return { data: await postWorksheet<T>(url, file), viaBlob: false }
+  }
+  let blobUrl: string
+  try {
+    const blob = await upload(file.name, file, {
+      access: "public",
+      handleUploadUrl: "/api/blob/upload",
+    })
+    blobUrl = blob.url
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : ""
+    // upload() của @vercel/blob không lộ status route cấp token — lỗi
+    // "client token" là lỗi ở bước cấp quyền (gồm cả 501 Blob chưa cấu
+    // hình), còn lại là lỗi ở bước PUT file. Báo rõ cả hai khả năng
+    // thay vì lỗi chung chung.
+    if (/client token/i.test(msg)) {
+      throw new Error("Không lấy được quyền tải file lớn lên Blob — có thể Blob chưa được cấu hình hoặc mạng đang lỗi; hãy thử lại, hoặc dùng file nhỏ hơn 4MB")
+    }
+    throw new Error("Tải file lớn lên Blob bị gián đoạn — hãy thử lại")
+  }
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ blobUrl, filename: file.name }),
+  })
+  const data = (await res.json().catch(() => ({}))) as T & { error?: string }
+  if (!res.ok) {
+    if (res.status === 413) {
+      throw new Error(data.error || "File quá lớn cho đường tải trực tiếp của máy chủ — hãy thử file nhỏ hơn")
+    }
+    throw new Error(data.error || `Lỗi server (${res.status})`)
+  }
+  return { data, viaBlob: true }
 }
 
 const ACCEPT = ".txt,.docx,.pdf"
@@ -128,7 +189,10 @@ export function WorksheetImporter({
   resumeJob?: string | null
   resumeDraft?: string | null
 }) {
-  const chapters = chapterOptions ?? []
+  const [chapters, setChapters] = useState(chapterOptions ?? [])
+  // §30: bản xem trước từ file lớn đi qua Blob — lúc lưu gửi text thay
+  // vì gửi lại file (tránh 413 lần nữa ở /api/worksheet/save).
+  const blobValidatedRef = useRef(false)
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
@@ -217,6 +281,7 @@ export function WorksheetImporter({
       return
     }
     savedRef.current = false
+    blobValidatedRef.current = false
     setFile(f)
     setPreview(null)
     setDraftText("")
@@ -228,6 +293,7 @@ export function WorksheetImporter({
 
   function reset() {
     savedRef.current = true
+    blobValidatedRef.current = false
     // §21: bỏ file ở đường nạp thường = bỏ luôn việc dở (thẻ đỏ biến
     // mất). Việc AI thì giữ nguyên job + thẻ đỏ — GV mở lại được từ
     // panel "Việc AI trước đó chưa lưu" hoặc từ thẻ đỏ ở lớp.
@@ -253,10 +319,20 @@ export function WorksheetImporter({
   }
 
   function doValidate() {
-    if (!file) return
+    if (!file) {
+      // §30: nút bấm khi chưa chọn file trước đây lặng im (early return
+      // không báo gì) — đúng kiểu "bấm mà không thấy gì xảy ra" mà GV
+      // gặp ở lần thử lại Bài 2 sau khi tải lại trang (file đã mất).
+      toast.error("Hãy chọn file trước khi kiểm tra")
+      return
+    }
     startValidate(async () => {
       try {
-        const res = await postWorksheet<WorksheetPreview>("/api/worksheet/validate", file)
+        const { data: res, viaBlob } = await postWorksheetSmart<WorksheetPreview>(
+          "/api/worksheet/validate",
+          file,
+        )
+        blobValidatedRef.current = viaBlob
         setPreview(res)
         setDraftText(res.sourceText)
         setOriginalSource(res.sourceText)
@@ -293,11 +369,16 @@ export function WorksheetImporter({
 
   // --- Luồng AI (§15): tạo việc -> chờ worker -> bản dựng về làm preview ---
   async function startAiFlow() {
-    if (!file || startingAi) return
+    if (!file) {
+      // §30: như doValidate — không lặng im khi chưa có file.
+      toast.error("Hãy chọn file trước khi dùng AI")
+      return
+    }
+    if (startingAi) return
     setModeOpen(false)
     setStartingAi(true)
     try {
-      const res = await postWorksheet<{ jobId: string }>("/api/ai/jobs", file)
+      const { data: res } = await postWorksheetSmart<{ jobId: string }>("/api/ai/jobs", file)
       aiJobIdRef.current = res.jobId
       // §21: việc AI đã tạo = việc dở -> ghi thẻ đỏ giữ chỗ (trừ nạp
       // cộng thêm — bài đích đã có thẻ). Lỗi ghi thẻ không chặn luồng AI.
@@ -657,7 +738,12 @@ export function WorksheetImporter({
   }, [hasUnsavedWork])
 
   function doSave() {
-    if (!file || !preview?.isValid) return
+    if (!file) {
+      // §30: như doValidate — không lặng im khi chưa có file.
+      toast.error("Hãy chọn file trước khi lưu")
+      return
+    }
+    if (!preview?.isValid) return
     // §18: đi từ tab Lớp học -> hỏi trước: lưu vào thư viện hay tại lớp.
     if (assignToClass && !intoLesson) {
       setForkKind("library")
@@ -685,6 +771,10 @@ export function WorksheetImporter({
       try {
         const created = await createChapter(forkNewChapterName.trim())
         chapterId = created.id
+        // §30: chương vừa tạo phải vào danh sách chọn ngay trong phiên
+        // này — trước đây picker dùng props tĩnh nên lần lưu sau (khi
+        // lưu trước đó lỗi) không thấy chương mới.
+        setChapters((prev) => [...prev, { id: created.id, title: forkNewChapterName.trim() }])
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Không tạo được chương")
         return
@@ -709,7 +799,10 @@ export function WorksheetImporter({
           return
         }
         try {
-          plainChapterId = (await createChapter(newChapterName.trim())).id
+          const created = await createChapter(newChapterName.trim())
+          plainChapterId = created.id
+          // §30: như hộp thoại fork — cập nhật danh sách chọn ngay.
+          setChapters((prev) => [...prev, { id: created.id, title: newChapterName.trim() }])
         } catch (e) {
           toast.error(e instanceof Error ? e.message : "Không tạo được chương")
           return
@@ -721,7 +814,9 @@ export function WorksheetImporter({
     startSave(async () => {
       try {
         const fd = new FormData()
-        if (draftDirty || previewIsAiResult) {
+        // §30: bản xem trước từ file lớn (qua Blob) lưu bằng text thay
+        // vì gửi lại file — gửi lại file là 413 lần nữa ở save.
+        if (draftDirty || previewIsAiResult || blobValidatedRef.current) {
           fd.append("text", draftText)
           fd.append("filename", file.name)
           fd.append("images", JSON.stringify(preview.images ?? []))
