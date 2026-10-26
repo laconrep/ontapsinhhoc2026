@@ -2140,3 +2140,57 @@ Kiểm chứng: tsc sạch, next build exit 0. Kiểm chứng sống còn nợ:
 GV Test nạp lại đúng file Bài 2 4,55MB qua "Sử dụng AI" trên
 production và đọc đúng nút bấm: % tải lên chạy tới đâu, job có tạo
 được không, hay toast lỗi nào hiện ra — không cần DevTools.
+
+## §34b — Công thức hiển thị tràn sang câu sau + số "Câu 6." trong thân câu SA + thông báo bỏ qua Tab 3 (26/10, từ đợt kiểm thử học sinh)
+
+Triệu chứng (học sinh chạy Bài 1): phân số của Q21 hiện trên đầu Q22;
+tỉ lệ (A+T)/(G+C) của Q54 mất khỏi thân Q54; thân câu SA ghi "Câu 6."
+trong khi thẻ bài ghi "Câu 52/56"; thông báo bỏ qua Tab 3 không nói rõ
+vì sao. Ba lỗi khác nhau, cùng một đợt sửa.
+
+NGUYÊN NHÂN 1 — TRÍCH XUẤT (lib/docx-omml.ts): công thức hiển thị
+(block-level <m:oMathPara>) bị thay bằng run trần <w:r> ngoài mọi
+<w:p>; mammoth gán run mồ côi đó vào ĐẦU đoạn tiếp theo. Tái hiện bằng
+docx tổng hợp (dbg-math-displace.mjs): trước sửa, sourceText có
+"@@IMG0@@A. …" và "@@IMG1@@Câu 22." — đúng y triệu chứng học sinh.
+Đối chứng: oMath nội tuyến trong run thì giữ đúng vị trí giữa dòng
+(dbg-math-inline.mjs). SỬA: replacement của OMATH_PARA_RE bọc trong
+<w:p> riêng của nó; OMATH_RE nội tuyến giữ run trần như cũ. Sau sửa,
+mỗi công thức hiển thị thành một dòng token riêng của nó.
+
+NGUYÊN NHÂN 2 — PARSER (lib/worksheet-parser.ts): dòng chỉ có token
+ảnh/bảng trong vùng câu hỏi trước đây (a) lọt vào đệm phương án rồi
+dính vào phương án cuối, hoặc (b) bị bỏ rơi khi thân câu đã đóng
+(phương án đã bắt đầu / đáp án SA đã có). SỬA: chặn dòng media-only
+(/^(@@(IMG|TBL)\d+@@)+$/) TRƯỚC nhánh đệm phương án; đang đệm thì giữ
+chờ (pendingMedia): dòng sau còn vào đệm → media thuộc phương án
+trước (splitChoiceBlock gán theo mốc chữ cái); câu hỏi đóng lại
+(closeQuestion, bắt đầu lời giải, hết file) → media gắn vào cuối nội
+dung câu này; thân câu còn mở → nối vào thân câu; không có câu hỏi
+thì gắn vào điểm kiến thức hiện tại (§19 giữ nguyên). Không bao giờ
+rơi sang câu sau. Kiểm chứng: check-parser-media-lines.mjs 10/10
+(giữa thân-phương án; hiển thị cuối sau phương án; giữa các dòng
+phương án → phương án trước; dòng nhiều token; không rò câu sau).
+
+NGUYÊN NHÂN 3 — RENDER AI (lib/ai/render.ts): worker giữ nguyên đầu
+dòng "Câu 6." của tài liệu trong content; render ra "cau: Câu 6. ..."
+rồi parse lại — CAU_RE chỉ bóc "cau:" nên "Câu 6." sót lại trong thân
+câu. SỬA: stripLeadingCau bóc đầu dòng "Câu n." khi render (cả 3 loại
+câu), cùng họ với stripOptionPrefix đã bóc "A." ở phương án; thân câu
+còn lại vẫn là chuỗi con nguyên văn nên verifyAiResult (so khớp chuỗi
+con) vẫn đạt. Skill ai_worker_processing thêm quy tắc: content câu hỏi
+không mang số "Câu n."; token đứng một mình trong vùng câu hỏi thuộc
+về câu phía TRÊN nó.
+
+TAB 3 (components/student/tab3-drag-drop.tsx): thông báo khi bỏ qua
+nói rõ cơ chế: bước Kéo thả chỉ ôn những điểm học sinh đánh dấu
+"chưa biết" ở bước Tự đánh giá; không đánh dấu điểm nào thì không có
+gì để kéo-thả nên đi thẳng tới Kiểm tra. (skipped=true đúng khi không
+có KP nào selfAssessment "unknown", hoặc bài không có KP nào.)
+
+PHẠM VI ẢNH HƯỞNG: bài đã lưu trước §34b giữ nguyên dữ liệu cũ (cần
+nạp lại mới hết lệch) — cùng quy ước như §29. Kiểm chứng: tsc sạch,
+next build exit 0, suite 39 pass / 7 fail = đúng 7 lỗi có sẵn từ trước
+(không hồi quy), check mới 10/10. Đẩy lên production: CHỜ sau khi
+xong thí nghiệm đối chứng file txt của §34 (tránh redeploy giữa lúc
+đang quan sát) — commit cục bộ trước, push sau.

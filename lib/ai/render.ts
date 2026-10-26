@@ -15,6 +15,21 @@ function stripOptionPrefix(content: string, letter: string): string {
   return content.replace(re, "").trim()
 }
 
+/**
+ * §34b: nội dung câu hỏi của worker hay giữ nguyên đầu dòng "Câu 6."
+ * của tài liệu (số thứ tự trong PHẦN, không phải số toàn bài). Khi render
+ * ra "cau: Câu 6. ..." rồi parse lại, CAU_RE chỉ bóc "cau:" nên "Câu 6."
+ * còn sót lại trong thân câu — học sinh thấy "Câu 6." trong khi thẻ bài
+ * ghi "Câu 52/56". Số thứ tự là việc của renderer (parse đánh lại),
+ * không phải của nội dung: bóc đầu dòng "Câu n." ở đây, giống như
+ * stripOptionPrefix đã bóc "A." ở phương án. Thân câu còn lại vẫn là
+ * chuỗi con nguyên văn của tài liệu nên verifyAiResult (so khớp chuỗi
+ * con) vẫn đạt.
+ */
+function stripLeadingCau(content: string): string {
+  return content.replace(/^\s*(câu|cau)\s*(?:\d+\s*)?[.:]\s*/i, "")
+}
+
 function underlineOption(letter: string, text: string): string {
   return `__${letter}. ${text}__`
 }
@@ -75,7 +90,7 @@ export interface RenderOutcome {
 function renderQuestion(q: AiQuestion, out: string[]) {
   if (q.type === "MC") {
     out.push("#")
-    out.push(`cau: ${q.content}`)
+    out.push(`cau: ${stripLeadingCau(q.content)}`)
     q.options.forEach((o, i) => {
       const letter = MC_LETTERS[i] ?? String(i + 1)
       const text = stripOptionPrefix(o.content, letter)
@@ -83,7 +98,7 @@ function renderQuestion(q: AiQuestion, out: string[]) {
     })
   } else if (q.type === "TF") {
     out.push("##")
-    out.push(`cau: ${q.content}`)
+    out.push(`cau: ${stripLeadingCau(q.content)}`)
     q.options.forEach((o, i) => {
       const letter = TF_LETTERS[i] ?? String(i + 1)
       const text = stripOptionPrefix(o.content, letter)
@@ -91,7 +106,7 @@ function renderQuestion(q: AiQuestion, out: string[]) {
     })
   } else {
     out.push("###")
-    out.push(`cau: ${q.content}`)
+    out.push(`cau: ${stripLeadingCau(q.content)}`)
     out.push(`dap an: ${q.correctAnswer ?? ""}`)
   }
   if (q.solution && q.solution.trim()) {

@@ -72,11 +72,22 @@ export function ommlToSvgDataUri(ommlFragment: string): string | null {
   }
 }
 
-function replaceOmmlFragments(xml: string, maths: (string | null)[], re: RegExp): string {
+function replaceOmmlFragments(
+  xml: string,
+  maths: (string | null)[],
+  re: RegExp,
+  wrapInParagraph: boolean,
+): string {
   return xml.replace(re, (fragment) => {
     const i = maths.length
     maths.push(ommlToSvgDataUri(fragment))
-    return `<w:r><w:t xml:space="preserve">@@MATH${i}@@</w:t></w:r>`
+    const run = `<w:r><w:t xml:space="preserve">@@MATH${i}@@</w:t></w:r>`
+    // §34b: oMathPara là khối (block) — thay bằng run trần ngoài mọi
+    // <w:p> sẽ làm mammoth gán token vào ĐẦU đoạn sau (tái hiện: công
+    // thức hiển thị của câu trước rơi lên đầu câu sau, vd phân số của
+    // Q21 hiện trên đầu Q22). Khối phải thành đoạn riêng của nó.
+    // oMath nội tuyến thì ngược lại: run trần trong đoạn là đúng vị trí.
+    return wrapInParagraph ? `<w:p>${run}</w:p>` : run
   })
 }
 
@@ -138,8 +149,8 @@ export async function preprocessOmml(buffer: Buffer): Promise<{ buffer: Buffer; 
     if (!xml.includes("oMath")) return { buffer, maths: [] }
 
     const maths: (string | null)[] = []
-    let next = replaceOmmlFragments(xml, maths, OMATH_PARA_RE)
-    next = replaceOmmlFragments(next, maths, OMATH_RE)
+    let next = replaceOmmlFragments(xml, maths, OMATH_PARA_RE, true)
+    next = replaceOmmlFragments(next, maths, OMATH_RE, false)
     if (maths.length === 0) return { buffer, maths: [] }
 
     zip.file("word/document.xml", next)

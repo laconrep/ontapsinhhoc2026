@@ -696,7 +696,22 @@ export function parseTextContent(text: string, opts?: ParseOptions): ParseResult
 
   let inSolution = false
 
+  // §34b: ảnh/bảng đứng một mình trong lúc đang đệm phương án (MC/TF)
+  // thì chưa biết nó thuộc phương án trước hay thuộc câu hỏi (hiển thị
+  // cuối) — giữ lại chờ dòng sau quyết định: dòng sau còn vào đệm
+  // phương án thì nó thuộc phương án trước; câu hỏi đóng lại thì nó
+  // thuộc câu này. Không bao giờ rơi sang câu sau.
+  let pendingMedia: string[] = []
+  const isMediaOnlyLine = (s: string) => /^(@@(IMG|TBL)\d+@@)+$/.test(s)
+
   const closeQuestion = () => {
+    // §34b: media đang chờ mà câu hỏi đóng lại thì gắn vào cuối nội
+    // dung câu này (attachBodyHtml sẽ render nó trong thân câu hỏi),
+    // trước khi flushChoiceBuffer (đừng để nó lọt vào phương án cuối).
+    if (curQuestion && pendingMedia.length > 0) {
+      for (const m of pendingMedia) appendStem(curQuestion, m)
+      pendingMedia = []
+    }
     flushChoiceBuffer()
     inSolution = false
     if (curQuestion?.solution != null) curQuestion.solution = curQuestion.solution.trim()
@@ -875,6 +890,12 @@ export function parseTextContent(text: string, opts?: ParseOptions): ParseResult
     // thường tiếp theo (chưa gặp mốc cấu trúc nào) là phần tiếp của lời giải.
     const solBody = parseSolutionLine(line)
     if (solBody != null && curQuestion) {
+      // §34b: lời giải bắt đầu nghĩa là phương án đã xong — media đang
+      // chờ thuộc về câu hỏi (hiển thị cuối), không thuộc phương án.
+      if (pendingMedia.length > 0) {
+        for (const m of pendingMedia) appendStem(curQuestion, m)
+        pendingMedia = []
+      }
       flushChoiceBuffer()
       curQuestion.solution = solBody
       inSolution = true
@@ -892,7 +913,34 @@ export function parseTextContent(text: string, opts?: ParseOptions): ParseResult
       return
     }
 
+    // §34b: dòng chỉ có token ảnh/bảng — chặn TRƯỚC nhánh đệm phương
+    // án để nó không bị nuốt vào phương án rồi (tệ hơn) trôi sang câu
+    // sau. Đang đệm phương án thì giữ chờ (xem pendingMedia); thân câu
+    // còn mở thì nối vào thân câu; thân câu đã đóng (đáp án SA đã có,
+    // phương án đã flush) thì nối thẳng vào cuối nội dung câu này;
+    // không có câu hỏi thì gắn vào điểm kiến thức hiện tại (§19).
+    if (isMediaOnlyLine(line)) {
+      if (curQuestion && (curQuestion.type === "MC" || curQuestion.type === "TF") && optionBuffer != null) {
+        pendingMedia.push(line)
+        return
+      }
+      if (curQuestion) {
+        appendStem(curQuestion, line)
+        return
+      }
+      if (curKp) {
+        curKp.content = curKp.content ? `${curKp.content}\n${line}` : line
+      }
+      return
+    }
+
     if ((curQuestion?.type === "MC" || curQuestion?.type === "TF") && optionBuffer != null) {
+      // §34b: dòng sau vẫn vào đệm phương án → media đang chờ thuộc
+      // phương án trước nó (splitChoiceBlock gán theo mốc chữ cái).
+      if (pendingMedia.length > 0) {
+        optionBuffer += pendingMedia.map((m) => `\n${m}`).join("")
+        pendingMedia = []
+      }
       optionBuffer += `\n${line}`
       return
     }
@@ -928,16 +976,6 @@ export function parseTextContent(text: string, opts?: ParseOptions): ParseResult
         line: lineNo,
         message: "Không dùng dấu *. Gạch chân đáp án đúng (MC/TF) hoặc dùng cau: / dap an: (SA)",
       })
-      return
-    }
-
-    if (/^@@(IMG|TBL)\d+@@$/.test(line) && !(curQuestion && canAppendStem(curQuestion, optionBuffer != null))) {
-      // §19: token ảnh/bảng đứng một mình trong vùng lý thuyết thì gắn
-      // vào điểm kiến thức hiện tại (thay vì biến mất như trước) để
-      // attachBodyHtml chuyển thành hình/bảng thật của điểm đó.
-      if (!curQuestion && curKp) {
-        curKp.content = curKp.content ? `${curKp.content}\n${line}` : line
-      }
       return
     }
 
