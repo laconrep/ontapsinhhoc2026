@@ -1908,5 +1908,94 @@ mẫu báo cáo chỉ khớp khung sửa màn hình nạp file.)
 - Kiểm chứng: tsc sạch, next build exit 0, test-solution-29 ALL PASS
   (parser + DB + action), E2E perquestion ALL PASS,
   lesson-questions-25 25/25, bandwidth-26 19/19, suite 35/42 đúng 7 lỗi
-  nền cũ (class-phien1/2/3/6, parser-phien6/8, preview-phien3). Chưa
-  push — chờ GV đưa PAT mới như mọi lần.
+  nền cũ (class-phien1/2/3/6, parser-phien6/8, preview-phien3). Đã
+  push: commit 236a01c (remote master = 236a01c).
+
+## §31 — Lỗi nộp câu Đúng/Sai do index production thiếu cột (2026-10-26, sửa bằng DDL, không đổi code)
+
+(Chú thích số thứ tự: §30 dành cho sửa lỗi 413 file lớn, chưa làm; §31 này
+ghi trước vì đã sửa xong trong ngày.)
+
+Triệu chứng: học sinh nộp câu Đúng/Sai (Tab 4) quay 10–20s rồi trở lại như
+cũ, không toast, câu vẫn chưa nộp; nộp toàn bài cũng đổ theo. Trắc nghiệm
+và trả lời ngắn nộp bình thường. Lần test 26/10: lượt làm bài faee02da
+dừng ở 37/56 (35 MC + 2 SA), 0 dòng TF nào vào được DB.
+
+Chẩn đoán: nhật ký runtime production 18:44–18:47 cho 12 lỗi HTTP 500,
+toàn bộ là `duplicate key value violates unique constraint
+"quiz_answers_tf_uidx"` (Postgres 23505) trên bảng quiz_answers, theo cụm
+3 lần (client thử lại §29). Chi tiết lỗi chỉ liệt kê (attemptId,
+questionId) — gợi ý index chỉ có 2 cột.
+
+Xác minh: đề thi đã lưu của câu TF đầu tiên (position 35) có đủ 4 đáp án,
+id khác nhau, không thiếu; đáp án hiện tại trong DB khớp đúng 4 id đó.
+Định nghĩa index trên production (pg_indexes): mc_sa_uidx ĐÚNG
+((attemptId, questionId) WHERE optionId IS NULL), nhưng tf_uidx SAI —
+UNIQUE (attemptId, questionId) WHERE optionId IS NOT NULL, THIẾU cột
+optionId. Trong khi code (schema.ts, ensureSchema, tao-database-moi.sql)
+và DB local đều có đủ 3 cột. Cơ chế: một câu TF chèn 4 dòng cùng cặp
+(attemptId, questionId) — index thiếu optionId coi dòng thứ 2 trở đi là
+trùng → cả giao dịch rollback; MC/SA chèn 1 dòng và optionId NULL (bị
+loại bởi WHERE) nên vẫn qua. Index sai tồn tại từ trước; ensureSchema
+dùng IF NOT EXISTS nên thấy tên index đã có thì bỏ qua, không tự sửa.
+
+Sửa (không đổi code, không deploy lại app): trên Neon production, tắt
+read-only rồi chạy DROP INDEX quiz_answers_tf_uidx; CREATE UNIQUE INDEX
+quiz_answers_tf_uidx ON quiz_answers ("attemptId","questionId","optionId")
+WHERE ("optionId" IS NOT NULL); kiểm chứng bằng pg_indexes — indexdef mới
+đủ 3 cột. An toàn vì 0 dòng TF tồn tại, dòng MC/SA bị loại bởi WHERE.
+ensureSchema KHÔNG sửa (quyết định giữ nguyên của user; định nghĩa trong
+đó vốn đã đúng).
+
+Kiểm chứng cuối: tài khoản HS Test 2610 tiếp tục đúng lượt làm bài đang
+dở sau khi tải lại trang: câu TF 36 nộp ngay lần đầu (37→38), rồi nộp hết
+11 TF + 8 SA còn lại, không lỗi nào, tổng 56/56; nộp toàn bài → kết quả
+8,7/10, đúng 86% số ý. Lỗi đóng.
+
+## §32 — Sửa câu hỏi không tới học sinh: bodyHtml cũ át content mới (2026-10-26)
+
+Phát hiện lúc GV test sửa trực tiếp trên app (giai đoạn 2, Bài 4): sau khi
+sửa câu hỏi và tải lại trang, ô nhập trong hộp sửa hiện chữ ĐÃ sửa, nhưng
+tiêu đề thẻ câu hỏi và khung "Xem trước hình / bảng" vẫn hiện chữ TRƯỚC
+khi sửa. Không có ô nhập nào sửa được bản hiển thị đó.
+
+Nguyên nhân (dual-copy): lúc nhập, parser tách media khỏi content —
+content chỉ còn chữ, ảnh/bảng/công thức nằm trong bodyHtml (câu hỏi và
+từng lựa chọn đều có 2 cột này). QuestionStem render bodyHtml khi có,
+bỏ qua content. Hộp sửa trước đây chỉ sửa content và KHÔNG gửi bodyHtml:
+phía server, updateQuestion bỏ qua bodyHtml khi undefined (giữ nguyên bản
+cũ); bodyHtml của lựa chọn được gửi kèm nhưng là bản cũ nguyên vẹn. Kết
+quả: chữ mới chỉ nằm trong content, mọi chỗ render (thẻ câu hỏi, xem
+trước, và Tab 4 của học sinh ở lượt làm bài MỚI — startQuiz lấy bodyHtml
+hiện tại) đều hiện bản cũ. Lượt làm bài đang dở giữ đề cũ là ĐÚNG theo
+thiết kế (snapshot BUG-11); chỉ lượt mới mới là lỗi. Chấm điểm không ảnh
+hưởng (isCorrect + id được cập nhật đúng).
+
+Cùng gốc rễ, hộp sửa còn mù với lựa chọn dạng công thức: content của lựa
+chọn mang công thức sau khi tách media chỉ còn nhãn ("B."), công thức nằm
+trong bodyHtml — nên hộp sửa hiện "B.." trong khi thẻ câu hỏi render
+phân số thật; giáo viên không thấy/không sửa được công thức, và lựa chọn
+chỉ có ảnh (chữ thuần rỗng) còn bị lọc mất ở bước lọc lựa chọn trống
+khi lưu.
+
+Sửa (lib/editable-html.ts mới + hộp sửa câu hỏi, server không đổi vì
+updateQuestion/createQuestion vốn đã nhận và sanitize bodyHtml):
+- bodyHtmlToEditable: tách bodyHtml thành văn bản khả sửa (chữ + placeholder
+  @@MEDIA-n@@ giữ vị trí ảnh/bảng theo đúng thứ tự) và danh sách media.
+- editableToBodyHtml: dựng lại bodyHtml từ văn bản đã sửa + media cũ
+  (chữ luôn được escape; placeholder bị xóa thì media đó bị bỏ; trả null
+  khi không còn media — khi đó render dùng content thuần như cũ).
+- editableToPlainText: văn bản thuần để lưu content (bỏ placeholder đã
+  biết, cùng ngữ nghĩa stripRichTokens lúc nhập).
+- Hộp sửa: ô nhập đề và từng lựa chọn/ý sửa trên văn bản khả sửa; khung
+  xem trước đề và xem trước từng lựa chọn render TRỰC TIẾP từ văn bản
+  đang gõ (trước đây xem trước dùng bodyHtml cũ); ghi chú giải thích
+  placeholder khi câu có media; lưu gửi cả content và bodyHtml mới;
+  lọc lựa chọn trống giữ lại lựa chọn chỉ có ảnh/bảng.
+- Câu hỏi không media hành xử y như trước (bodyHtml null → null).
+
+Kiểm chứng: test converter 17/17 (round-trip, sửa chữ giữ media, xóa
+placeholder bỏ media, placeholder lạ giữ nguyên chữ, escape XSS, br/block,
+ảnh một mình, entities); tsc sạch; next build exit 0. Kiểm chứng trên
+production (GV sửa câu có bodyHtml, tải lại trang, thẻ hiện chữ mới;
+học sinh làm bài mới thấy chữ mới) thực hiện sau khi push.

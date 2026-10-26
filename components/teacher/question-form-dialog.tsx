@@ -16,6 +16,11 @@ import {
 } from "@/components/ui/dialog"
 import { createQuestion, updateQuestion } from "@/app/actions/questions"
 import { QuestionStem } from "@/components/question/question-stem"
+import {
+  bodyHtmlToEditable,
+  editableToBodyHtml,
+  editableToPlainText,
+} from "@/lib/editable-html"
 import type { QuestionDto } from "@/types"
 
 type QType = "MC" | "TF" | "SA"
@@ -26,28 +31,33 @@ const TYPE_LABEL: Record<QType, string> = {
   SA: "Trả lời ngắn",
 }
 
+// Ô nhập của một lựa chọn/ý: văn bản khả sửa (chữ + placeholder
+// @@MEDIA-n@@ giữ vị trí ảnh/bảng) kèm danh sách media gốc. Khi lưu,
+// content = văn bản thuần (đã bỏ placeholder), bodyHtml = HTML dựng lại
+// từ văn bản + media — nhờ đó chữ giáo viên sửa luôn tới được chỗ render
+// (QuestionStem ưu tiên bodyHtml), thay vì kẹt ở bản bodyHtml cũ như trước.
 interface OptRow {
-  content: string
+  editable: string
+  media: string[]
   isCorrect: boolean
-  bodyHtml?: string | null
 }
 
 function defaultOptions(type: QType): OptRow[] {
   if (type === "MC")
     return [
-      { content: "", isCorrect: true },
-      { content: "", isCorrect: false },
-      { content: "", isCorrect: false },
-      { content: "", isCorrect: false },
+      { editable: "", media: [], isCorrect: true },
+      { editable: "", media: [], isCorrect: false },
+      { editable: "", media: [], isCorrect: false },
+      { editable: "", media: [], isCorrect: false },
     ]
   if (type === "TF")
     return [
-      { content: "", isCorrect: true },
-      { content: "", isCorrect: true },
-      { content: "", isCorrect: true },
-      { content: "", isCorrect: true },
+      { editable: "", media: [], isCorrect: true },
+      { editable: "", media: [], isCorrect: true },
+      { editable: "", media: [], isCorrect: true },
+      { editable: "", media: [], isCorrect: true },
     ]
-  return [{ content: "", isCorrect: true }]
+  return [{ editable: "", media: [], isCorrect: true }]
 }
 
 export function QuestionFormDialog({
@@ -69,7 +79,8 @@ export function QuestionFormDialog({
 }) {
   const [isPending, startTransition] = useTransition()
   const [type, setType] = useState<QType>("MC")
-  const [content, setContent] = useState("")
+  const [stemText, setStemText] = useState("")
+  const [stemMedia, setStemMedia] = useState<string[]>([])
   const [options, setOptions] = useState<OptRow[]>(defaultOptions("MC"))
 
   useEffect(() => {
@@ -77,17 +88,27 @@ export function QuestionFormDialog({
     if (mode === "edit" && question) {
       const t = question.type as QType
       setType(t)
-      setContent(question.content)
+      if (question.bodyHtml) {
+        const e = bodyHtmlToEditable(question.bodyHtml)
+        setStemText(e.text)
+        setStemMedia(e.media)
+      } else {
+        setStemText(question.content)
+        setStemMedia([])
+      }
       setOptions(
-        (question.options ?? []).map((o) => ({
-          content: o.content,
-          isCorrect: o.isCorrect,
-          bodyHtml: o.bodyHtml,
-        })),
+        (question.options ?? []).map((o) => {
+          if (o.bodyHtml) {
+            const e = bodyHtmlToEditable(o.bodyHtml)
+            return { editable: e.text, media: e.media, isCorrect: o.isCorrect }
+          }
+          return { editable: o.content, media: [], isCorrect: o.isCorrect }
+        }),
       )
     } else {
       setType("MC")
-      setContent("")
+      setStemText("")
+      setStemMedia([])
       setOptions(defaultOptions("MC"))
     }
   }, [open, mode, question])
@@ -98,11 +119,22 @@ export function QuestionFormDialog({
   }
 
   function submit() {
-    if (!content.trim()) {
+    const stemPlain = editableToPlainText(stemText, stemMedia)
+    const stemHtml = editableToBodyHtml(stemText, stemMedia)
+    if (!stemPlain.trim() && !stemHtml) {
       toast.error("Nhập nội dung câu hỏi")
       return
     }
-    const cleanOpts = options.filter((o) => o.content.trim() !== "" || type === "TF")
+    // Giữ lại lựa chọn có chữ hoặc có ảnh/bảng; lựa chọn trống hoàn toàn
+    // mới bỏ (trừ TF giữ đủ 4 ý như trước). Trước đây lựa chọn chỉ có
+    // ảnh (chữ thuần rỗng) đã bị lọc mất ở bước này.
+    const cleanOpts = options
+      .map((o) => ({
+        content: editableToPlainText(o.editable, o.media),
+        bodyHtml: editableToBodyHtml(o.editable, o.media),
+        isCorrect: o.isCorrect,
+      }))
+      .filter((o) => o.content.trim() !== "" || o.bodyHtml != null || type === "TF")
     startTransition(async () => {
       try {
         if (mode === "create") {
@@ -110,12 +142,18 @@ export function QuestionFormDialog({
             knowledgePointId: defaultKnowledgePointId,
             lessonId,
             type,
-            content,
+            content: stemPlain,
+            bodyHtml: stemHtml,
             options: cleanOpts,
           })
           toast.success("Đã thêm câu hỏi")
         } else if (question) {
-          await updateQuestion({ id: question.id, content, options: cleanOpts })
+          await updateQuestion({
+            id: question.id,
+            content: stemPlain,
+            bodyHtml: stemHtml,
+            options: cleanOpts,
+          })
           toast.success("Đã cập nhật câu hỏi")
         }
         onClose()
@@ -125,6 +163,9 @@ export function QuestionFormDialog({
       }
     })
   }
+
+  const stemPreviewHtml = editableToBodyHtml(stemText, stemMedia)
+  const hasMedia = stemMedia.length > 0 || options.some((o) => o.media.length > 0)
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -160,17 +201,24 @@ export function QuestionFormDialog({
             <Label htmlFor="q-content">Nội dung câu hỏi</Label>
             <Textarea
               id="q-content"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
+              value={stemText}
+              onChange={(e) => setStemText(e.target.value)}
               rows={6}
               placeholder="Nhập nội dung câu hỏi"
             />
-            {question?.bodyHtml ? (
+            {hasMedia ? (
+              <p className="text-xs text-muted-foreground">
+                Ký hiệu @@MEDIA-1@@, @@MEDIA-2@@… là vị trí ảnh/bảng trong câu — giữ nguyên để
+                giữ ảnh/bảng, xóa để bỏ ảnh/bảng đó. Khung xem trước bên dưới cập nhật theo chữ
+                bạn gõ.
+              </p>
+            ) : null}
+            {stemPreviewHtml ? (
               <div className="space-y-1 rounded-md border bg-muted/40 p-2">
                 <p className="text-xs font-medium text-muted-foreground">Xem trước hình / bảng</p>
                 <QuestionStem
-                  content={content}
-                  bodyHtml={question.bodyHtml}
+                  content={editableToPlainText(stemText, stemMedia)}
+                  bodyHtml={stemPreviewHtml}
                   className="text-sm"
                   maxHeightClass="max-h-48"
                 />
@@ -181,65 +229,95 @@ export function QuestionFormDialog({
           {type === "MC" && (
             <div className="space-y-2">
               <Label>Các lựa chọn (chọn 1 đáp án đúng)</Label>
-              {options.map((opt, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setOptions((prev) => prev.map((o, j) => ({ ...o, isCorrect: j === i })))
-                    }
-                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-                      opt.isCorrect ? "border-primary bg-primary text-primary-foreground" : "border-input"
-                    }`}
-                    aria-label={`Đặt lựa chọn ${i + 1} là đáp án đúng`}
-                  >
-                    {opt.isCorrect && <Check className="h-3 w-3" />}
-                  </button>
-                  <Input
-                    value={opt.content}
-                    onChange={(e) =>
-                      setOptions((prev) =>
-                        prev.map((o, j) => (j === i ? { ...o, content: e.target.value } : o)),
-                      )
-                    }
-                    placeholder={`Lựa chọn ${i + 1}`}
-                  />
-                </div>
-              ))}
+              {options.map((opt, i) => {
+                const optPreviewHtml = editableToBodyHtml(opt.editable, opt.media)
+                return (
+                  <div key={i} className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOptions((prev) => prev.map((o, j) => ({ ...o, isCorrect: j === i })))
+                        }
+                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                          opt.isCorrect ? "border-primary bg-primary text-primary-foreground" : "border-input"
+                        }`}
+                        aria-label={`Đặt lựa chọn ${i + 1} là đáp án đúng`}
+                      >
+                        {opt.isCorrect && <Check className="h-3 w-3" />}
+                      </button>
+                      <Input
+                        value={opt.editable}
+                        onChange={(e) =>
+                          setOptions((prev) =>
+                            prev.map((o, j) => (j === i ? { ...o, editable: e.target.value } : o)),
+                          )
+                        }
+                        placeholder={`Lựa chọn ${i + 1}`}
+                      />
+                    </div>
+                    {optPreviewHtml ? (
+                      <div className="ml-7 rounded-md border bg-muted/40 p-2">
+                        <QuestionStem
+                          content={editableToPlainText(opt.editable, opt.media)}
+                          bodyHtml={optPreviewHtml}
+                          className="text-xs"
+                          maxHeightClass="max-h-24"
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                )
+              })}
             </div>
           )}
 
           {type === "TF" && (
             <div className="space-y-2">
               <Label>Các ý (đánh dấu Đúng/Sai cho từng ý)</Label>
-              {options.map((opt, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <Input
-                    value={opt.content}
-                    onChange={(e) =>
-                      setOptions((prev) =>
-                        prev.map((o, j) => (j === i ? { ...o, content: e.target.value } : o)),
-                      )
-                    }
-                    placeholder={`Ý ${String.fromCharCode(97 + i)})`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setOptions((prev) =>
-                        prev.map((o, j) => (j === i ? { ...o, isCorrect: !o.isCorrect } : o)),
-                      )
-                    }
-                    className={`shrink-0 rounded-md border px-3 py-2 text-xs font-medium ${
-                      opt.isCorrect
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-destructive/40 bg-destructive/10 text-destructive"
-                    }`}
-                  >
-                    {opt.isCorrect ? "Đúng" : "Sai"}
-                  </button>
-                </div>
-              ))}
+              {options.map((opt, i) => {
+                const optPreviewHtml = editableToBodyHtml(opt.editable, opt.media)
+                return (
+                  <div key={i} className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={opt.editable}
+                        onChange={(e) =>
+                          setOptions((prev) =>
+                            prev.map((o, j) => (j === i ? { ...o, editable: e.target.value } : o)),
+                          )
+                        }
+                        placeholder={`Ý ${String.fromCharCode(97 + i)})`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOptions((prev) =>
+                            prev.map((o, j) => (j === i ? { ...o, isCorrect: !o.isCorrect } : o)),
+                          )
+                        }
+                        className={`shrink-0 rounded-md border px-3 py-2 text-xs font-medium ${
+                          opt.isCorrect
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-destructive/40 bg-destructive/10 text-destructive"
+                        }`}
+                      >
+                        {opt.isCorrect ? "Đúng" : "Sai"}
+                      </button>
+                    </div>
+                    {optPreviewHtml ? (
+                      <div className="rounded-md border bg-muted/40 p-2">
+                        <QuestionStem
+                          content={editableToPlainText(opt.editable, opt.media)}
+                          bodyHtml={optPreviewHtml}
+                          className="text-xs"
+                          maxHeightClass="max-h-24"
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                )
+              })}
             </div>
           )}
 
@@ -248,8 +326,16 @@ export function QuestionFormDialog({
               <Label htmlFor="sa-answer">Đáp án đúng</Label>
               <Input
                 id="sa-answer"
-                value={options[0]?.content ?? ""}
-                onChange={(e) => setOptions([{ content: e.target.value, isCorrect: true }])}
+                value={options[0]?.editable ?? ""}
+                onChange={(e) =>
+                  setOptions([
+                    {
+                      editable: e.target.value,
+                      media: options[0]?.media ?? [],
+                      isCorrect: true,
+                    },
+                  ])
+                }
                 placeholder="VD: nucleotide"
               />
               <p className="text-xs text-muted-foreground">
