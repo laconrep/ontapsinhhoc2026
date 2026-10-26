@@ -1837,4 +1837,25 @@ mẫu báo cáo chỉ khớp khung sửa màn hình nạp file.)
   ngoài ô trống không làm đổi chữ ký và không reset tiến độ học sinh.
 - Kiểm chứng: tsc sạch, next build exit 0. Không chạy lại suite vì
   thay đổi chỉ nằm ở một component client mà không script kiểm tra
-  nào phủ. Chưa push — chờ GV đưa PAT mới như mọi lần.
+  nào phủ. Đã push: commit 2c90a1f lên master (Vercel tự deploy).
+
+## §28 — Ô nhập mã lớp của học sinh chặn mã 8 ký tự (user báo 26/10)
+
+- Bệnh: học sinh nhập mã lớp 8 ký tự do giáo viên cấp thì không vào
+  được lớp. Nguyên nhân: từ SEC-05 mã lớp mới dài 8 ký tự (mã cũ 6
+  vẫn được chấp nhận phía server qua isInviteCodeFormat), nhưng
+  components/student/join-class-card.tsx phía client vẫn giữ luật cũ
+  6 ký tự ở 4 chỗ: kiểm tra độ dài (!== 6), slice(0, 6) cắt mã ngay
+  khi gõ, maxLength={6}, và dòng mô tả "Mã gồm 6 ký tự". Hậu quả:
+  mã 8 ký tự bị cắt còn 6 rồi tra cứu thất bại ("Mã mời không hợp
+  lệ"), đồng thời đốt lượt thử sai (giới hạn 5 lần sai / 10 phút).
+- Sửa (chỉ join-class-card.tsx): chấp nhận 6 hoặc 8 ký tự (kiểm tra,
+  slice(0, 8), maxLength={8}, mô tả "6 hoặc 8 ký tự", ví dụ mới
+  "ABCD2345" dùng đúng bảng ký tự hợp lệ). Không import hằng từ
+  lib/invite-code.ts vì file đó dùng node:crypto, không dùng được
+  phía client — ghi chú này trong code. Chỉ có đúng một ô nhập
+  (JoinClassCard dùng chung cả 2 vị trí ở trang học sinh); phía
+  server không cần sửa. Lưu ý: học sinh nào đã thử sai nhiều lần có
+  thể còn bị khóa trong cửa sổ 10 phút, hết cửa sổ là vào lại được.
+- Kiểm chứng: tsc sạch, next build exit 0, check-invite-code PASS
+  (SEC-05). Chưa push — chờ GV đưa PAT mới như mọi lần.
