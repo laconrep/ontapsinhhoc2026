@@ -2194,3 +2194,52 @@ next build exit 0, suite 39 pass / 7 fail = đúng 7 lỗi có sẵn từ trư�
 (không hồi quy), check mới 10/10. Đẩy lên production: CHỜ sau khi
 xong thí nghiệm đối chứng file txt của §34 (tránh redeploy giữa lúc
 đang quan sát) — commit cục bộ trước, push sau.
+
+## §35 — Tải file lớn: đồng hồ hoàn tất + lỗi cố định cạnh nút (26/10, tiếp §34)
+
+CHẨN ĐOÁN ĐÃ SỬA HAI LẦN TRONG NGÀY (ghi rõ để khỏi lặp lại kết luận
+sai): (1) Lần docx 20:35 và tab thật của GV (21:02–21:22) có nhịp
+99%→tụt→99% liên tục — tưởng là retry làm timer reset mãi. (2) Quan
+sát dày lần txt 21:22–21:28 (đọc % mỗi 20 giây, 6 phút) lại KHÔNG thấy
+tụt: 0%→100% trong 20 giây, đứng yên 100% ~2,5–3 phút, rồi nút tự về
+trạng thái chờ vào khoảng phút thứ 4, không bản xem trước, không lưu.
+Nhịp tụt do đó CHỈ XẢY RA THÔI, không phải cơ chế chung. (3) Reset tới
+ở ~3,5 phút, KHÔNG phải 60 giây như timer §34 thiết kế — timer theo
+tiến triển không tạo ra lần reset này đúng hẹn (hoặc sự kiện vẫn tới,
+hoặc abort không dứt được request treo và lần reset tới từ lúc thư
+viện hết lượt thử). "Không thấy toast" trong quan sát dày cũng chưa
+chắc là "không có toast" (nhịp 20 giây dễ bỏ sót toast chỉ hiện vài
+giây). (4) Kho Blob kiểm tra lại 21:30 vẫn 0 object — cú tải CHƯA BAO
+GIỜ hoàn tất (không phải tải xong rồi kẹt ở bước validate sau, vì
+bước đó chỉ chạy khi đã có URL Blob, và object đã commit sẽ còn nằm
+trong kho). Điểm kẹt nằm TRONG bản thân cú tải lên Blob, ở khâu hoàn
+tất (progress đã ~100% mà server không commit).
+
+SỬA (components/teacher/worksheet-importer.tsx, chỉ đường >4MB):
+- Đồng hồ HOÀN TẤT: từ lúc % lần đầu chạm 99%, nếu quá 120 giây mà
+  upload() vẫn chưa xong thì abort + báo lỗi hoàn tất (câu báo kèm
+  đường vòng thật: dùng file dưới 4MB để nạp qua đường trực tiếp,
+  không qua Blob). Đồng hồ này KHÔNG reset theo sự kiện tiến triển —
+  nhịp tụt do thử lại phần lỗi không được tính là tiến triển. Tải
+  chậm nhưng vẫn leo dưới 99% không bị đồng hồ này chạm tới (timer
+  60 giây theo im lặng vẫn giữ cho trường hợp đó).
+- Lỗi tải Blob hiện CỐ ĐỊNH bằng dòng đỏ ngay dưới hàng nút bấm
+  (blobError), tồn tại tới khi chọn file mới hoặc bấm thử lại — thay
+  vì chỉ toast tự ẩn sau vài giây. Cả hai đường (nạp thường + Sử
+  dụng AI) đều ghi dòng này khi file >4MB; đường file nhỏ giữ nguyên
+  chỉ toast.
+- Thứ tự ưu tiên khi upload() bị từ chối: lỗi hoàn tất (120 giây sau
+  99%) trước, rồi mới tới lỗi im lặng 60 giây, rồi tới các lỗi khác.
+
+GIỚI HẠN NÓI RÕ: §35 làm lỗi HIỆN RA NHANH VÀ RÕ (tối đa ~2 phút sau
+khi chạm 99%, thay vì quay vòng lặng 20+ phút), chứ chưa tự nó làm
+cú tải lớn thành công — vì sao khâu hoàn tất của Blob cứ lỗi vẫn
+chưa tìm ra (phần đầu tải tốt, chỉ khâu cuối không commit; mọi lần
+thử docx/txt, đường AI/thường đều kẹt giống nhau). Hướng điều tra
+tiếp: thử file vừa trên ngưỡng (4,1MB) và file 9MB để xem có phụ
+thuộc cỡ không; thử đường tải đơn (single PUT) thay cho multipart
+của thư viện; kiểm tra lại token/phạm vi store. Kiểm chứng sống
+còn nợ: nạp lại big-test.txt trên production và xác nhận lần này
+dừng lại với dòng lỗi đỏ cố định trong ~2–3 phút thay vì quay lặng.
+
+Kiểm chứng: tsc sạch, next build exit 0.

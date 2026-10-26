@@ -145,10 +145,25 @@ async function postWorksheetSmart<T>(
   // Hiện % tải lên, và huỷ nếu 60 giây không có byte nào di chuyển để
   // lỗi hiện ra thay vì quay mãi. % đứng yên ở 0 = PUT không đi;
   // % tăng chậm = mạng chậm (chờ tiếp, đừng tải lại trang).
+  // §35: timer 60 giây theo tiến triển KHÔNG ĐỦ — quan sát dày 26/10
+  // cho thấy lần tải txt 4,6MB lên 100% trong 20 giây rồi đứng yên
+  // ~3 phút mới tự reset, không đúng hẹn 60 giây (hoặc sự kiện tiến
+  // triển vẫn tới đều làm timer reset mãi, hoặc abort không dứt được
+  // request đang treo và lần reset tới từ lúc thư viện hết lượt thử).
+  // Thêm đồng hồ HOÀN TẤT: từ lúc % lần đầu chạm 99%, nếu quá 120
+  // giây mà upload() vẫn chưa xong thì coi như kẹt ở khâu hoàn tất
+  // (kho Blob vẫn trống chứng tỏ chưa lần nào commit) — đồng hồ này
+  // KHÔNG reset theo sự kiện tiến triển (nhịp tụt 99→92→99 của lần
+  // docx trước chỉ là thử lại phần lỗi, không phải tiến triển thật).
+  // Tải chậm nhưng vẫn leo dưới 99% không bị đồng hồ này chạm tới.
   const STALL_MS = 60_000
+  const FINALIZE_MS = 120_000
   const controller = new AbortController()
   let stalled = false
+  let finalizeTimedOut = false
   let timer: ReturnType<typeof setTimeout> | undefined
+  let finalizeTimer: ReturnType<typeof setTimeout> | undefined
+  let finalizeStarted = false
   const arm = () => {
     if (timer) clearTimeout(timer)
     timer = setTimeout(() => {
@@ -165,12 +180,24 @@ async function postWorksheetSmart<T>(
       abortSignal: controller.signal,
       onUploadProgress: ({ percentage }) => {
         arm()
+        if (percentage >= 99 && !finalizeStarted) {
+          finalizeStarted = true
+          finalizeTimer = setTimeout(() => {
+            finalizeTimedOut = true
+            controller.abort()
+          }, FINALIZE_MS)
+        }
         opts?.onBlobProgress?.(percentage)
       },
     })
     blobUrl = blob.url
     opts?.onBlobProgress?.(100)
   } catch (e) {
+    if (finalizeTimedOut) {
+      throw new Error(
+        "File đã tải lên gần xong nhưng máy chủ Blob không xác nhận hoàn tất quá 120 giây — hãy thử lại, hoặc dùng file dưới 4MB để nạp qua đường trực tiếp (không qua Blob)",
+      )
+    }
     if (stalled) {
       throw new Error(
         "Tải file lớn lên Blob bị kẹt quá 60 giây không có tiến triển — hãy kiểm tra mạng rồi thử lại",
@@ -187,6 +214,7 @@ async function postWorksheetSmart<T>(
     throw new Error("Tải file lớn lên Blob bị gián đoạn — hãy thử lại")
   } finally {
     if (timer) clearTimeout(timer)
+    if (finalizeTimer) clearTimeout(finalizeTimer)
   }
   const res = await fetch(url, {
     method: "POST",
@@ -245,6 +273,10 @@ export function WorksheetImporter({
   // file đang đi chứ không phải treo, và để lần kẹt sau có bằng chứng
   // mà không cần DevTools (0% mãi = PUT không đi; % tăng chậm = mạng chậm).
   const [blobProgress, setBlobProgress] = useState<number | null>(null)
+  // §35: lỗi tải Blob chỉ báo bằng toast thì tự ẩn sau vài giây, giáo
+  // viên quay lại không thấy gì — giữ thêm một dòng lỗi cố định ngay
+  // dưới nút bấm cho tới khi chọn file mới hoặc bấm thử lại.
+  const [blobError, setBlobError] = useState<string | null>(null)
   // §17: việc AI gần đây của GV — kết quả đã xử lý xong nằm ở máy chủ,
   // đóng tab không mất; mở lại trang là mở lại được bản xem trước.
   const [myAiJobs, setMyAiJobs] = useState<AiJobListItem[]>([])
@@ -325,11 +357,13 @@ export function WorksheetImporter({
     setAiJob(null)
     setAiMeta(null)
     setPreviewIsAiResult(false)
+    setBlobError(null)
   }
 
   function reset() {
     savedRef.current = true
     blobValidatedRef.current = false
+    setBlobError(null)
     // §21: bỏ file ở đường nạp thường = bỏ luôn việc dở (thẻ đỏ biến
     // mất). Việc AI thì giữ nguyên job + thẻ đỏ — GV mở lại được từ
     // panel "Việc AI trước đó chưa lưu" hoặc từ thẻ đỏ ở lớp.
@@ -363,6 +397,7 @@ export function WorksheetImporter({
       return
     }
     startValidate(async () => {
+      setBlobError(null)
       try {
         const { data: res, viaBlob } = await postWorksheetSmart<WorksheetPreview>(
           "/api/worksheet/validate",
@@ -399,7 +434,10 @@ export function WorksheetImporter({
         if (res.isValid) toast.success("Tài liệu hợp lệ, sẵn sàng để lưu")
         else toast.error(`Phát hiện ${res.errors.length} lỗi cần sửa`)
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Không đọc được file")
+        const msg = e instanceof Error ? e.message : "Không đọc được file"
+        toast.error(msg)
+        // §35: lỗi đường Blob thì giữ dòng lỗi cố định cạnh nút bấm.
+        if (file.size > BLOB_TRANSPORT_THRESHOLD) setBlobError(msg)
       } finally {
         setBlobProgress(null)
       }
@@ -416,6 +454,7 @@ export function WorksheetImporter({
     if (startingAi) return
     setModeOpen(false)
     setStartingAi(true)
+    setBlobError(null)
     try {
       const { data: res } = await postWorksheetSmart<{ jobId: string }>(
         "/api/ai/jobs",
@@ -452,7 +491,10 @@ export function WorksheetImporter({
       })
       void refreshMyAiJobs()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Không tạo được việc AI")
+      const msg = e instanceof Error ? e.message : "Không tạo được việc AI"
+      toast.error(msg)
+      // §35: lỗi đường Blob thì giữ dòng lỗi cố định cạnh nút bấm.
+      if (file.size > BLOB_TRANSPORT_THRESHOLD) setBlobError(msg)
     } finally {
       setStartingAi(false)
       setBlobProgress(null)
@@ -1082,6 +1124,8 @@ export function WorksheetImporter({
               </Button>
             </div>
           )}
+          {/* §35: lỗi tải Blob hiện cố định ở đây, không chỉ toast. */}
+          {blobError && <p className="mt-2 text-sm font-medium text-destructive">{blobError}</p>}
           <input
             ref={inputRef}
             type="file"
