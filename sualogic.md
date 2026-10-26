@@ -2096,3 +2096,47 @@ parser-phien6/8, preview-phien3), không hồi quy. Kiểm chứng sống còn
 nợ: GV Test nạp lại đúng file Bài 2 4,55MB qua "Sử dụng AI" trên
 production — phải tạo được job (hết 413); xử lý AI trọn vẹn Bài 2 là
 việc riêng, không nằm trong §30.
+
+## §34 — Tải file lớn lên Blob: hiện % và chống treo lặng (2026-10-26)
+
+Nối tiếp §30. Kiểm chứng sống §30 THẤT BẠI theo cách mới, không còn
+là 413: bản mới đã lên production (route /api/blob/upload trả 405 chứ
+không 404), hai lần nạp Bài 2 4,55MB qua "Sử dụng AI" đều hết toast
+413 nhưng nút quay spinner 4–5 phút, không tạo được việc AI nào, cũng
+không có toast lỗi nào. Log Vercel 19:40–20:02 +07: POST
+/api/blob/upload 200 hai lần (cấp token thành công, 1,53s và 91ms);
+POST /api/ai/jobs = 0; POST /api/worksheet/validate = 0; chỉ có GET
+/api/ai/jobs (đọc danh sách, 200). Trích xuất đúng file Bài 2 ở máy
+local chỉ mất 2,4 giây nên không phải do trích xuất chậm. Kết luận:
+cái kẹt nằm ở phía trình duyệt, trong bước upload() của
+@vercel/blob/client, sau khi cấp token và trước khi gửi yêu cầu tạo
+việc — upload() không settle cũng không throw nên không có toast.
+
+Đọc code importer xác nhận đoạn giữa upload() và POST là thẳng hàng,
+không có await nào khác có thể kẹt: nếu PUT xong thì POST chắc chắn
+đã gửi (log chứng minh nó chưa gửi). Trong upload(), hai khả năng còn
+lại đều im lặng: PUT bị kẹt thật (không byte nào đi) hoặc PUT lỗi
+lặp lại mà thư viện tự thử lại tới 10 lần với backoff (mặc định của
+requestApi) — cả hai đều quay mãi không báo, và các lần thử trước đều
+tải lại trang trước khi hết lượt thử nên không bao giờ thấy lỗi.
+
+Không sửa bằng cách đoán nguyên nhân PUT (cần DevTools mà trình duyệt
+tự động không mở được bảng đó, và không thể nhờ GV mở DevTools trên
+trình duyệt ảo). Sửa bằng cách làm cho bước tải lên TỰ BỘC LỘ:
+- postWorksheetSmart nhận thêm onBlobProgress; upload() được truyền
+  abortSignal + onUploadProgress của @vercel/blob/client.
+- Nút "Kiểm tra tài liệu" và nút "Sử dụng AI" hiện "Đang tải lên…
+  x%" trong lúc tải file lớn (đường multipart cũ không có % này).
+- Stall timer 60 giây, reset mỗi lần có tiến triển: quá 60 giây không
+  có byte nào di chuyển thì abort và toast câu rõ ràng ("bị kẹt quá
+  60 giây không có tiến triển — hãy kiểm tra mạng rồi thử lại") thay
+  vì quay mãi. % đứng yên ở 0 = PUT không đi; % tăng chậm = mạng chậm
+  (chờ tiếp, đừng tải lại trang — tải lại là tự huỷ lần tải đang đi).
+- Timer chỉ phủ pha tải lên (progress-gated): tải chậm nhưng vẫn có
+  byte đi thì không bị huỷ oan; lỗi cấp token và lỗi PUT vẫn giữ câu
+  báo riêng như §30.
+
+Kiểm chứng: tsc sạch, next build exit 0. Kiểm chứng sống còn nợ:
+GV Test nạp lại đúng file Bài 2 4,55MB qua "Sử dụng AI" trên
+production và đọc đúng nút bấm: % tải lên chạy tới đâu, job có tạo
+được không, hay toast lỗi nào hiện ra — không cần DevTools.

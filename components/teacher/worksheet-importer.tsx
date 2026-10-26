@@ -134,18 +134,48 @@ const BLOB_TRANSPORT_THRESHOLD = 4 * 1024 * 1024
 async function postWorksheetSmart<T>(
   url: string,
   file: File,
+  opts?: { onBlobProgress?: (pct: number) => void },
 ): Promise<{ data: T; viaBlob: boolean }> {
   if (file.size <= BLOB_TRANSPORT_THRESHOLD) {
     return { data: await postWorksheet<T>(url, file), viaBlob: false }
   }
+  // §34: tải lên Blob mà không thấy tiến triển là lỗi treo lặng — 3 lần
+  // Bài 2 4,55MB quay 4–5 phút không toast, không job, mà không có
+  // DevTools nào xem được (trình duyệt tự động không mở được bảng đó).
+  // Hiện % tải lên, và huỷ nếu 60 giây không có byte nào di chuyển để
+  // lỗi hiện ra thay vì quay mãi. % đứng yên ở 0 = PUT không đi;
+  // % tăng chậm = mạng chậm (chờ tiếp, đừng tải lại trang).
+  const STALL_MS = 60_000
+  const controller = new AbortController()
+  let stalled = false
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const arm = () => {
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(() => {
+      stalled = true
+      controller.abort()
+    }, STALL_MS)
+  }
   let blobUrl: string
   try {
+    arm()
     const blob = await upload(file.name, file, {
       access: "public",
       handleUploadUrl: "/api/blob/upload",
+      abortSignal: controller.signal,
+      onUploadProgress: ({ percentage }) => {
+        arm()
+        opts?.onBlobProgress?.(percentage)
+      },
     })
     blobUrl = blob.url
+    opts?.onBlobProgress?.(100)
   } catch (e) {
+    if (stalled) {
+      throw new Error(
+        "Tải file lớn lên Blob bị kẹt quá 60 giây không có tiến triển — hãy kiểm tra mạng rồi thử lại",
+      )
+    }
     const msg = e instanceof Error ? e.message : ""
     // upload() của @vercel/blob không lộ status route cấp token — lỗi
     // "client token" là lỗi ở bước cấp quyền (gồm cả 501 Blob chưa cấu
@@ -155,6 +185,8 @@ async function postWorksheetSmart<T>(
       throw new Error("Không lấy được quyền tải file lớn lên Blob — có thể Blob chưa được cấu hình hoặc mạng đang lỗi; hãy thử lại, hoặc dùng file nhỏ hơn 4MB")
     }
     throw new Error("Tải file lớn lên Blob bị gián đoạn — hãy thử lại")
+  } finally {
+    if (timer) clearTimeout(timer)
   }
   const res = await fetch(url, {
     method: "POST",
@@ -209,6 +241,10 @@ export function WorksheetImporter({
   const [previewIsAiResult, setPreviewIsAiResult] = useState(false)
   const [solutionAskOpen, setSolutionAskOpen] = useState(false)
   const [startingAi, setStartingAi] = useState(false)
+  // §34: % tải file lớn lên Blob (chỉ đường Blob mới có) — để GV thấy
+  // file đang đi chứ không phải treo, và để lần kẹt sau có bằng chứng
+  // mà không cần DevTools (0% mãi = PUT không đi; % tăng chậm = mạng chậm).
+  const [blobProgress, setBlobProgress] = useState<number | null>(null)
   // §17: việc AI gần đây của GV — kết quả đã xử lý xong nằm ở máy chủ,
   // đóng tab không mất; mở lại trang là mở lại được bản xem trước.
   const [myAiJobs, setMyAiJobs] = useState<AiJobListItem[]>([])
@@ -331,6 +367,7 @@ export function WorksheetImporter({
         const { data: res, viaBlob } = await postWorksheetSmart<WorksheetPreview>(
           "/api/worksheet/validate",
           file,
+          { onBlobProgress: (pct) => setBlobProgress(pct) },
         )
         blobValidatedRef.current = viaBlob
         setPreview(res)
@@ -363,6 +400,8 @@ export function WorksheetImporter({
         else toast.error(`Phát hiện ${res.errors.length} lỗi cần sửa`)
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Không đọc được file")
+      } finally {
+        setBlobProgress(null)
       }
     })
   }
@@ -378,7 +417,11 @@ export function WorksheetImporter({
     setModeOpen(false)
     setStartingAi(true)
     try {
-      const { data: res } = await postWorksheetSmart<{ jobId: string }>("/api/ai/jobs", file)
+      const { data: res } = await postWorksheetSmart<{ jobId: string }>(
+        "/api/ai/jobs",
+        file,
+        { onBlobProgress: (pct) => setBlobProgress(pct) },
+      )
       aiJobIdRef.current = res.jobId
       // §21: việc AI đã tạo = việc dở -> ghi thẻ đỏ giữ chỗ (trừ nạp
       // cộng thêm — bài đích đã có thẻ). Lỗi ghi thẻ không chặn luồng AI.
@@ -412,6 +455,7 @@ export function WorksheetImporter({
       toast.error(e instanceof Error ? e.message : "Không tạo được việc AI")
     } finally {
       setStartingAi(false)
+      setBlobProgress(null)
     }
   }
 
@@ -1022,7 +1066,9 @@ export function WorksheetImporter({
                 ) : (
                   <FileUp className="h-4 w-4" />
                 )}
-                Kiểm tra tài liệu
+                {blobProgress != null
+                  ? `Đang tải lên… ${Math.round(blobProgress)}%`
+                  : "Kiểm tra tài liệu"}
               </Button>
               <Button
                 variant="default"
@@ -1399,7 +1445,9 @@ export function WorksheetImporter({
             </Button>
             <Button onClick={startAiFlow} disabled={startingAi}>
               {startingAi ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              Sử dụng AI
+              {startingAi && blobProgress != null
+                ? `Đang tải lên… ${Math.round(blobProgress)}%`
+                : "Sử dụng AI"}
             </Button>
           </DialogFooter>
         </DialogContent>
