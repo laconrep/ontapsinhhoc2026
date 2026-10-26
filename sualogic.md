@@ -2243,3 +2243,29 @@ còn nợ: nạp lại big-test.txt trên production và xác nhận lần này
 dừng lại với dòng lỗi đỏ cố định trong ~2–3 phút thay vì quay lặng.
 
 Kiểm chứng: tsc sạch, next build exit 0.
+
+## §36 — Tải file lớn: chuyển sang multipart (26/10, tiếp §35)
+
+PHÁT HIỆN QUAN TRỌNG (đọc code thư viện, không phải đoán): client
+upload() của @vercel/blob mặc định multipart=false — mọi cú tải Blob
+từ trước tới giờ đều là PUT ĐƠN, không phải multipart. PUT đơn 4,6MB
+lên tới ~100% rồi treo mãi không hoàn tất (kho vẫn trống). Đồng thời,
+thí nghiệm 4,1MB vừa rồi VÔ HIỆU: file em cắt ra chỉ có 4.100.000
+byte, dưới ngưỡng 4MiB = 4.194.304 byte, nên nó đi đường trực tiếp
+(không qua Blob) — bằng chứng: không hiện % tải Blob, xong trong
+~20 giây. Kết luận "4,1MB qua được" chỉ chứng minh lại đường trực
+tiếp vốn không hỏng, không nói gì về đường Blob. (Bài học: ngưỡng
+phải tính bằng byte, không tính bằng "MB" gọi miệng.)
+
+SỬA: postWorksheetSmart truyền multipart: true cho upload(). Với
+part 8MB của thư viện, file ≤8MB chỉ có 1 part + 2 request nhỏ
+create/complete — đổi hẳn hình dạng đường tải so với PUT đơn. Nếu
+multipart qua được file 4,6MB thì đường tải lớn sửa xong cho mọi
+file ≤10MB; nếu vẫn kẹt thì lỗi nằm ở bản thân việc chuyển byte
+chứ không phải hình dạng request, hướng tiếp theo là PUT thủ công
+bằng fetch hoặc chia nhỏ thủ công. Token route không cần sửa
+(onBeforeGenerateToken không hạn chế multipart). Kiểm chứng sống
+còn nợ: nạp lại big-test.txt 4,6MB trên production — qua được tới
+bản xem trước thì ĐẠT, kẹt lại với lỗi hoàn tất thì CHƯA.
+
+Kiểm chứng: tsc sạch, next build exit 0.

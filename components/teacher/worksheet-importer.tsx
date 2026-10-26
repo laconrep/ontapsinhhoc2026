@@ -174,9 +174,17 @@ async function postWorksheetSmart<T>(
   let blobUrl: string
   try {
     arm()
+    // §36: client upload() mặc định multipart=false → PUT đơn. PUT đơn
+    // 4,6MB lên tới ~100% rồi treo mãi không hoàn tất (kho Blob vẫn
+    // trống sau mọi lần thử) — đổi sang multipart (part 8MB → file
+    // ≤8MB chỉ có 1 part + 2 request nhỏ create/complete) để đổi hẳn
+    // hình dạng đường tải; nếu multipart qua được thì đường tải lớn
+    // sửa xong, nếu vẫn kẹt thì lỗi nằm ở bản thân việc chuyển byte
+    // chứ không phải hình dạng request.
     const blob = await upload(file.name, file, {
       access: "public",
       handleUploadUrl: "/api/blob/upload",
+      multipart: true,
       abortSignal: controller.signal,
       onUploadProgress: ({ percentage }) => {
         arm()
