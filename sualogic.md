@@ -1999,3 +1999,51 @@ placeholder bỏ media, placeholder lạ giữ nguyên chữ, escape XSS, br/blo
 ảnh một mình, entities); tsc sạch; next build exit 0. Kiểm chứng trên
 production (GV sửa câu có bodyHtml, tải lại trang, thẻ hiện chữ mới;
 học sinh làm bài mới thấy chữ mới) thực hiện sau khi push.
+
+## §33 — Parser cắt mất phần sau khi gặp dòng "Đáp án ..." / "– ..." trong lời giải (2026-10-26)
+
+Phát hiện từ coordinator xử lý Bài 4: sim đầu tiên chỉ còn 9/24 KP,
+15/53 câu vì lời giải render ra có dòng bắt đầu bằng "Đáp án ..." và
+"– ...". Coordinator đã vòng tránh bằng cách nối các dòng đó trong kết
+quả AI (newline→space) nên job vẫn nộp được; lỗi parser gốc vẫn còn và
+được sửa ở đây.
+
+Hai cơ chế cùng họ, đều do dòng nội dung bị hiểu nhầm thành dòng cấu trúc:
+1. `isTailHeading` cũ coi BẤT KỲ dòng nào bắt đầu bằng "Đáp án " (kèm
+   khoảng trắng) hoặc "Hướng dẫn giải" là tiêu đề phần cuối file → đóng
+   câu hỏi đang đọc, bật `inTail`, và vòng lặp chính bỏ qua TOÀN BỘ các
+   dòng còn lại. Một dòng "Đáp án B." trong lời giải (dạng "Giải chi
+   tiết: ..." nhiều dòng mà renderAiResult xuất ra) đủ cắt mất mọi KP và
+   câu hỏi phía sau nó.
+2. Khối xử lý dòng gạch ngang viết lại dòng "– ..." (en-dash) thành
+   "- ..." rồi nhánh KP (line law §19) cắt đứt lời giải đang mở và tạo
+   điểm kiến thức giả từ dòng đó.
+
+Sửa (chỉ lib/worksheet-parser.ts):
+- `isTailHeading` mới: CHỈ dòng TRƠ TRỌI là tiêu đề mới lật tail —
+  "ĐÁP ÁN" hoặc "HƯỚNG DẪN GIẢI" / "HƯỚNG DẪN GIẢI CHI TIẾT", không có
+  nội dung theo sau. Giữ nguyên hai miễn trừ cũ ("Đáp án:" là đáp án
+  SA, "Hướng dẫn giải:" mở lời giải của câu, kể cả khi sau dấu : còn
+  trống). Đánh đổi có chủ ý, ghi trong comment: tiêu đề viết kèm dấu :
+  ("ĐÁP ÁN:") không còn lật tail nữa vì không phân biệt được với đáp
+  án SA — trường hợp đó các dòng đáp án sẽ hiện thành điểm kiến thức
+  trong bản xem trước (lỗi HIỆN RA) thay vì mất lặng toàn bộ phần sau.
+  Tiêu đề thật trong mẫu và cả hai bài thật đều không có dấu : nên
+  không ảnh hưởng. Lưu ý: tiêu đề dài chỉ có phần mở rộng sau tiêu đề
+  trần ("ĐÁP ÁN TRẮC NGHIỆM...") cũng không còn lật tail khi đứng một
+  mình — nhưng trong cả hai bài thật, dạng dài này luôn đứng SAU một
+  tiêu đề trần nên inTail đã bật từ trước, không đổi hành vi.
+- Khối gạch ngang: khi đang ở trong lời giải của một câu (inSolution),
+  dòng "– ..." / bullet được giữ nguyên để rơi xuống nhánh nối lời
+  giải, không viết lại thành "- ..." nữa. Dòng "-" (gạch nối ASCII, vốn
+  là mốc KP của line law) giữ nguyên hành vi cũ — trong lời giải, nó
+  vẫn là mốc KP mới vì không phân biệt được với điểm kiến thức thật.
+
+Kiểm chứng: test mới scripts/check-parser-tail-heading.mjs 9/9 (trước
+sửa: 4 pass / 5 fail, đúng hai cơ chế trên); sim Bài 4 vẫn PASS
+(24 KP, 16 + 37 câu); bản render cũ (stale, còn dòng "Đáp án" ở đầu
+dòng) nay đọc được đủ 53/53 câu thay vì 15 câu như trước (số KP 65 do
+bản render cũ còn tách nhãn/nội dung thành 2 dòng — đúng với bản cũ,
+không phải lỗi mới). Suite: 37 pass / 7 fail — đúng 7 lỗi nền cũ
+(class-phien1/2/3/6, parser-phien6/8, preview-phien3), không hồi quy;
+tsc sạch, next build exit 0.

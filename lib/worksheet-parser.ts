@@ -405,15 +405,25 @@ function parseSolutionLine(line: string): string | null {
   return m ? m[2].trim() : null
 }
 
-/** ĐÁP ÁN / HƯỚNG DẪN GIẢI = hết phần câu. `Đáp án:` (có dấu :) là đáp án SA, không cắt. */
+/** Tiêu đề phần đáp án/lời giải cuối file: CHỈ khi dòng TRƠ TRỌI là tiêu
+ * đề (không có nội dung theo sau). Dòng "Đáp án B", "Đáp án là...",
+ * "Hướng dẫn giải câu 5..." là NỘI DUNG trong bài — trước đây chúng lật
+ * inTail và cắt mất toàn bộ phần sau (sim Bài 4 đầu tiên chỉ còn 9/24
+ * KP, 15/53 câu, vì lời giải render ra có dòng "Đáp án B." ở đầu dòng).
+ * Giữ nguyên hai miễn trừ cũ: "Đáp án:" (kể cả chưa có giá trị) là đáp
+ * án SA, "Hướng dẫn giải:" mở lời giải của câu — kể cả khi phần sau
+ * dấu : còn trống. Đánh đổi có chủ ý: tiêu đề viết kèm dấu : ("ĐÁP
+ * ÁN:") sẽ không còn lật tail nữa (không phân biệt được với đáp án SA);
+ * trường hợp đó các dòng đáp án sẽ hiện thành điểm kiến thức trong bản
+ * xem trước — lỗi HIỆN RA thay vì mất lặng toàn bộ phần sau. Tiêu đề
+ * thật trong mẫu và cả hai bài thật đều không có dấu : nên không ảnh
+ * hưởng. */
 function isTailHeading(line: string): boolean {
-  const bare = stripUnderline(line)
+  const bare = stripUnderline(line).trim()
   if (DAP_AN_RE.test(bare)) return false
-  // "Hướng dẫn giải: <nội dung>" (có dấu : và nội dung ngay sau) là lời
-  // giải CỦA CÂU (§15.3), không phải tiêu đề phần cuối file.
   if (SOLUTION_RE.test(bare)) return false
-  if (/^(đáp\s*án|dap\s*an)(\s|$)/i.test(bare)) return true
-  if (/^(hướng\s*dẫn\s*giải|huong\s*dan\s*giai)\b/i.test(bare)) return true
+  if (/^(đáp\s*án|dap\s*an)\s*$/i.test(bare)) return true
+  if (/^(hướng\s*dẫn\s*giải|huong\s*dan\s*giai)(\s+chi\s*tiết|\s+chi\s*tiet)?\s*$/i.test(bare)) return true
   return false
 }
 
@@ -723,7 +733,11 @@ export function parseTextContent(text: string, opts?: ParseOptions): ParseResult
     if (inTail) return
 
     let line = rawLine.trim()
-    if (BULLET_RE.test(line) || /^[–—−]\s*/.test(line)) {
+    // Dòng "– ..." / bullet trong lời giải đang mở là phần tiếp của lời
+    // giải, không phải điểm kiến thức mới: giữ nguyên để rơi xuống nhánh
+    // nối lời giải. Trước đây nó bị viết lại thành "- ..." rồi nhánh KP
+    // cắt đứt lời giải và tạo điểm kiến thức giả.
+    if (!(inSolution && curQuestion?.solution != null) && (BULLET_RE.test(line) || /^[–—−]\s*/.test(line))) {
       const rest = line.replace(BULLET_RE, "").replace(/^[–—−]\s*/, "").trim()
       const keep =
         parseChoiceLine(rest) != null ||
