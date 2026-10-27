@@ -15,10 +15,12 @@ import {
   spacedRepetition,
   classStudents,
   classes,
+  lessonRuns,
+  kpRunResults,
 } from "@/lib/db/schema"
 import { requireRole } from "@/lib/auth-helpers"
 import { revalidatePath } from "next/cache"
-import { and, asc, eq, inArray, sql } from "drizzle-orm"
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm"
 import {
   computeOverallStatus,
   gradeSlots,
@@ -432,6 +434,44 @@ export async function submitTab1(lessonId: string, assessments: Record<string, "
           },
         })
     }
+
+    // §38 (full): mở lượt học mới — đóng mọi lượt active cũ còn sót (phòng hờ),
+    // tạo lượt mới + snapshot tự đánh giá cho từng điểm của bài.
+    await tx
+      .update(lessonRuns)
+      .set({ status: "closed", closedAt: new Date() })
+      .where(
+        and(
+          eq(lessonRuns.studentId, student.id),
+          eq(lessonRuns.lessonId, lessonId),
+          eq(lessonRuns.status, "active"),
+        ),
+      )
+    const prevRuns = await tx
+      .select({ runNo: lessonRuns.runNo })
+      .from(lessonRuns)
+      .where(and(eq(lessonRuns.studentId, student.id), eq(lessonRuns.lessonId, lessonId)))
+      .orderBy(desc(lessonRuns.runNo))
+      .limit(1)
+    const [run] = await tx
+      .insert(lessonRuns)
+      .values({
+        studentId: student.id,
+        lessonId,
+        runNo: (prevRuns[0]?.runNo ?? 0) + 1,
+        status: "active",
+        tab1At: new Date(),
+      })
+      .returning({ id: lessonRuns.id })
+    if (run && kpIds.length > 0) {
+      await tx.insert(kpRunResults).values(
+        kpIds.map((kpId) => ({
+          runId: run.id,
+          knowledgePointId: kpId,
+          selfAssessment: assessments[kpId],
+        })),
+      )
+    }
   })
 
   const knownCount = Object.values(assessments).filter((v) => v === "known").length
@@ -483,6 +523,62 @@ export async function resetLessonProgress(
   if (stage !== "done") return { success: false, reason: "Hãy hoàn thành bài kiểm tra trước" }
 
   try {
+    // §38 (full): snapshot trạng thái Tab 1/2/3 hiện tại vào lượt đang mở rồi
+    // đóng lượt, trước khi xoá dấu nộp + reset tiến độ (quiz_attempts giữ nguyên).
+    // Số ô đúng lần đầu đã ghi lúc nộp Tab 2/3 nên ở đây không ghi đè chúng.
+    const [activeRun] = await db
+      .select({ id: lessonRuns.id })
+      .from(lessonRuns)
+      .where(
+        and(
+          eq(lessonRuns.studentId, student.id),
+          eq(lessonRuns.lessonId, lessonId),
+          eq(lessonRuns.status, "active"),
+        ),
+      )
+      .orderBy(desc(lessonRuns.createdAt))
+      .limit(1)
+    if (activeRun && kpIds.length > 0) {
+      const progRows = await db
+        .select()
+        .from(studentProgress)
+        .where(
+          and(eq(studentProgress.studentId, student.id), inArray(studentProgress.knowledgePointId, kpIds)),
+        )
+      for (const r of progRows) {
+        await db
+          .insert(kpRunResults)
+          .values({
+            runId: activeRun.id,
+            knowledgePointId: r.knowledgePointId,
+            selfAssessment: r.selfAssessment,
+            fillAttempts: r.fillAttempts ?? 0,
+            fillRevealed: r.fillRevealed ?? false,
+            fillStatus: r.fillStatus,
+            dragAttempts: r.dragAttempts ?? 0,
+            dragRevealed: r.dragRevealed ?? false,
+            dragStatus: r.dragStatus,
+          })
+          .onConflictDoUpdate({
+            target: [kpRunResults.runId, kpRunResults.knowledgePointId],
+            set: {
+              selfAssessment: r.selfAssessment,
+              fillAttempts: r.fillAttempts ?? 0,
+              fillRevealed: r.fillRevealed ?? false,
+              fillStatus: r.fillStatus,
+              dragAttempts: r.dragAttempts ?? 0,
+              dragRevealed: r.dragRevealed ?? false,
+              dragStatus: r.dragStatus,
+              updatedAt: new Date(),
+            },
+          })
+      }
+      await db
+        .update(lessonRuns)
+        .set({ status: "closed", closedAt: new Date() })
+        .where(eq(lessonRuns.id, activeRun.id))
+    }
+
     await db
       .delete(studentTab1Submissions)
       .where(
@@ -672,6 +768,69 @@ export async function submitTab2Question(
         and(eq(studentProgress.studentId, student.id), eq(studentProgress.knowledgePointId, kpId)),
       )
 
+    // §38 (full): ghi lịch sử lượt học — số ô đúng lần đầu chỉ ghi ở lần thử đầu.
+    const [fillRun] = await tx
+      .select({ id: lessonRuns.id })
+      .from(lessonRuns)
+      .where(
+        and(
+          eq(lessonRuns.studentId, student.id),
+          eq(lessonRuns.lessonId, kp.lessonId),
+          eq(lessonRuns.status, "active"),
+        ),
+      )
+      .orderBy(desc(lessonRuns.createdAt))
+      .limit(1)
+    let fillRunId = fillRun?.id
+    if (!fillRunId) {
+      const prev = await tx
+        .select({ runNo: lessonRuns.runNo })
+        .from(lessonRuns)
+        .where(and(eq(lessonRuns.studentId, student.id), eq(lessonRuns.lessonId, kp.lessonId)))
+        .orderBy(desc(lessonRuns.runNo))
+        .limit(1)
+      const [created] = await tx
+        .insert(lessonRuns)
+        .values({
+          studentId: student.id,
+          lessonId: kp.lessonId,
+          runNo: (prev[0]?.runNo ?? 0) + 1,
+          status: "active",
+        })
+        .returning({ id: lessonRuns.id })
+      fillRunId = created?.id
+    }
+    if (fillRunId) {
+      const firstFill =
+        attemptsAfter === 1
+          ? {
+              fillFirstSlots: results.filter((r) => r.isCorrect).length,
+              fillFirstTotal: results.length,
+            }
+          : {}
+      await tx
+        .insert(kpRunResults)
+        .values({
+          runId: fillRunId,
+          knowledgePointId: kpId,
+          selfAssessment: currentSelfAssessment,
+          fillAttempts: attemptsAfter,
+          fillRevealed,
+          fillStatus: newFillStatus,
+          ...firstFill,
+        })
+        .onConflictDoUpdate({
+          target: [kpRunResults.runId, kpRunResults.knowledgePointId],
+          set: {
+            fillAttempts: attemptsAfter,
+            fillRevealed,
+            fillStatus: newFillStatus,
+            ...firstFill,
+            updatedAt: new Date(),
+          },
+        })
+    }
+
     return { results: stripped, allCorrect, kpStatus: overallStatus }
   })
 }
@@ -843,6 +1002,69 @@ export async function submitTab3Question(
       .where(
         and(eq(studentProgress.studentId, student.id), eq(studentProgress.knowledgePointId, kpId)),
       )
+
+    // §38 (full): ghi lịch sử lượt học — số ô đúng lần đầu chỉ ghi ở lần thử đầu.
+    const [dragRun] = await tx
+      .select({ id: lessonRuns.id })
+      .from(lessonRuns)
+      .where(
+        and(
+          eq(lessonRuns.studentId, student.id),
+          eq(lessonRuns.lessonId, kp.lessonId),
+          eq(lessonRuns.status, "active"),
+        ),
+      )
+      .orderBy(desc(lessonRuns.createdAt))
+      .limit(1)
+    let dragRunId = dragRun?.id
+    if (!dragRunId) {
+      const prev = await tx
+        .select({ runNo: lessonRuns.runNo })
+        .from(lessonRuns)
+        .where(and(eq(lessonRuns.studentId, student.id), eq(lessonRuns.lessonId, kp.lessonId)))
+        .orderBy(desc(lessonRuns.runNo))
+        .limit(1)
+      const [created] = await tx
+        .insert(lessonRuns)
+        .values({
+          studentId: student.id,
+          lessonId: kp.lessonId,
+          runNo: (prev[0]?.runNo ?? 0) + 1,
+          status: "active",
+        })
+        .returning({ id: lessonRuns.id })
+      dragRunId = created?.id
+    }
+    if (dragRunId) {
+      const firstDrag =
+        attemptsAfter === 1
+          ? {
+              dragFirstSlots: results.filter((r) => r.isCorrect).length,
+              dragFirstTotal: results.length,
+            }
+          : {}
+      await tx
+        .insert(kpRunResults)
+        .values({
+          runId: dragRunId,
+          knowledgePointId: kpId,
+          selfAssessment: currentSelfAssessment,
+          dragAttempts: attemptsAfter,
+          dragRevealed,
+          dragStatus: newDragStatus,
+          ...firstDrag,
+        })
+        .onConflictDoUpdate({
+          target: [kpRunResults.runId, kpRunResults.knowledgePointId],
+          set: {
+            dragAttempts: attemptsAfter,
+            dragRevealed,
+            dragStatus: newDragStatus,
+            ...firstDrag,
+            updatedAt: new Date(),
+          },
+        })
+    }
 
     return { results: stripped, allCorrect, kpStatus: overallStatus }
   })
@@ -1463,7 +1685,8 @@ export async function submitQuiz(
     if (claimed.length === 0) throw new Error("Bài kiểm tra đã nộp")
 
     if (answerRows.length > 0) {
-      await tx.insert(quizAnswers).values(answerRows)
+      // §38 (full): thời điểm nộp từng câu — cờ "làm quá nhanh từng câu".
+      await tx.insert(quizAnswers).values(answerRows.map((r) => ({ ...r, answeredAt: new Date() })))
     }
 
     const kpIds = [...new Set(qRowsForSr.map((q) => q.knowledgePointId).filter((id): id is string => Boolean(id)))]
@@ -1549,7 +1772,8 @@ export async function submitQuizQuestion(
 
     const { rows, detail, tfChoices } = gradeOneFromSnapshot(questionId, snap, answer, solution, solutionBodyHtml)
     if (rows.length > 0) {
-      await tx.insert(quizAnswers).values(rows.map((r) => ({ attemptId: quizId, ...r })))
+      // §38 (full): thời điểm nộp từng câu — cờ "làm quá nhanh từng câu".
+      await tx.insert(quizAnswers).values(rows.map((r) => ({ attemptId: quizId, answeredAt: new Date(), ...r })))
     }
     return { ...detail, tfChoices }
   })

@@ -1,128 +1,117 @@
-import { readFileSync } from "node:fs"
+// §38 (full): phiên 4 được viết lại cho hệ thống kê theo bài mới.
+// Các helper tổng quan lớp cũ (quizBand, median, buildOverview,
+// buildAssignmentStat, summarizeStudentQuiz) KHÔNG còn — mô hình tổng quan
+// lớp đã được thay bằng thống kê theo bài (4 màn). Script này kiểm thử
+// các cờ tương đương trong hệ mới: cần hỗ trợ, nên ôn lại cả lớp, ngưỡng.
 import {
-  buildAssignmentStat,
-  buildOverview,
-  emptyClassStats,
-  firstTryPercentForKp,
-  isAtRisk,
-  isHardKp,
-  isWeakKp,
-  median,
-  quizBand,
-  quizPercent,
-  summarizeStudentQuiz,
-} from "../lib/class-stats-calc.ts"
+  buildStudentRow,
+  buildKpStats,
+  levelFromRate,
+  DEFAULT_THRESHOLDS,
+} from "@/lib/lesson-stats"
 
 function assert(cond, msg) {
   if (!cond) throw new Error(msg)
 }
-
-assert(quizPercent(8, 10) === 80, "quizPercent 8/10")
-assert(quizBand(19) === "0-20", "band 0-20")
-assert(quizBand(20) === "20-50", "band 20-50")
-assert(quizBand(50) === "50-80", "band 50-80")
-assert(quizBand(80) === "80-100", "band 80-100")
-assert(median([10, 20, 30]) === 20, "median le")
-assert(median([10, 20]) === 15, "median chan")
-console.log("OK quiz helpers")
-
-assert(isAtRisk({ unknownCount: 2, overconfidentCount: 1, overdue: false, quizAvg: 80, quizAttempts: 1 }), "unknown+overconfident >= 3")
-assert(isAtRisk({ unknownCount: 0, overconfidentCount: 0, overdue: true, quizAvg: 90, quizAttempts: 1 }), "overdue atRisk")
-assert(isAtRisk({ unknownCount: 0, overconfidentCount: 0, overdue: false, quizAvg: 40, quizAttempts: 1 }), "quizAvg < 50")
-assert(!isAtRisk({ unknownCount: 0, overconfidentCount: 0, overdue: false, quizAvg: 40, quizAttempts: 0 }), "chua lam quiz khong atRisk vi diem")
-assert(isWeakKp({ knownPercent: 40, overconfidentPercent: 0 }), "weak known < 50")
-assert(isWeakKp({ knownPercent: 80, overconfidentPercent: 30 }), "weak overconfident >= 30")
-assert(isHardKp({ knownPercent: 40, overconfidentPercent: 20, firstTryPercent: 80 }), "hard overconfident")
-assert(isHardKp({ knownPercent: 40, overconfidentPercent: 0, firstTryPercent: 30 }), "hard firstTry")
-assert(!isHardKp({ knownPercent: 60, overconfidentPercent: 20, firstTryPercent: 30 }), "known >= 50 khong hard")
-console.log("OK flags")
-
-const quiz = summarizeStudentQuiz([
-  { score: 5, maxScore: 10, completedAt: "2026-09-01T00:00:00Z" },
-  { score: 8, maxScore: 10, completedAt: "2026-09-10T00:00:00Z" },
-])
-assert(quiz.quizAvg === 65, `quizAvg ${quiz.quizAvg}`)
-assert(quiz.quizBest === 80, `quizBest ${quiz.quizBest}`)
-assert(quiz.quizAttempts === 2, "quizAttempts")
-assert(quiz.trend === 3, `trend ${quiz.trend}`)
-console.log("OK summarizeStudentQuiz")
-
-assert(firstTryPercentForKp([
-  { studentId: "a", attemptAt: 1, isCorrect: true },
-  { studentId: "a", attemptAt: 2, isCorrect: false },
-  { studentId: "b", attemptAt: 1, isCorrect: false },
-], 2) === 50, "firstTry chi tinh attempt dau")
-console.log("OK firstTryPercentForKp")
-
-const overview = buildOverview({
-  studentCount: 4,
-  studentsWithActivity: 2,
-  masteredAcrossAssigned: 6,
-  assignedKpSlots: 12,
-  quizPercents: [40, 80, 60],
-  atRiskCount: 1,
-  weeklyActivity: 7,
+const T = DEFAULT_THRESHOLDS
+const tab = (status, firstTry = null, attempts = 1, revealed = false) => ({
+  status,
+  firstTry,
+  attempts,
+  revealed,
 })
-assert(overview.completionRate === 50, "completionRate")
-assert(overview.masteryRate === 50, "masteryRate")
-assert(overview.avgQuiz === 60, "avgQuiz")
-assert(overview.medianQuiz === 60, "medianQuiz")
-assert(overview.atRiskCount === 1, "atRiskCount")
-assert(overview.weeklyActivity === 7, "weeklyActivity")
-console.log("OK buildOverview")
+const emptyTab = { status: null, firstTry: null, attempts: 0, revealed: false }
+const now = new Date("2026-10-27T12:00:00+07:00")
 
-const asg = buildAssignmentStat({
-  assignmentId: "as1",
-  lessonId: "l1",
-  lessonTitle: "Bai 1",
-  chapterTitle: "Chuong 1",
-  dueAt: "2026-10-01T00:00:00Z",
-  totalStudents: 4,
-  studentOutcomes: [
-    { status: "completed", completedAt: "2026-09-30T00:00:00Z", quizPercents: [90] },
-    { status: "completed", completedAt: "2026-10-02T00:00:00Z", quizPercents: [40] },
-    { status: "overdue", completedAt: null, quizPercents: [] },
-    { status: "in_progress", completedAt: null, quizPercents: [] },
+// Ngưỡng xếp mức (thay quizBand): 80/50 mặc định, đổi theo lớp.
+assert(levelFromRate(80, T) === "mastered", "80% -> Thành thạo")
+assert(levelFromRate(79, T) === "ok", "79% -> Tạm ổn")
+assert(levelFromRate(50, T) === "ok", "50% -> Tạm ổn")
+assert(levelFromRate(49, T) === "weak", "49% -> Chưa tốt")
+assert(levelFromRate(85, { mastery: 90, ok: 60 }) === "ok", "ngưỡng lớp 90/60 đổi mức")
+console.log("OK levelFromRate")
+
+// Cần hỗ trợ (thay isAtRisk): ≥1/3 điểm Chưa tốt, quá hạn chưa nộp,
+// làm lại ≥2 lần mà điểm không tăng.
+const kps = [
+  { id: "kp1", content: "Điểm 1", order: 0, slotCount: 1, questionIds: ["q1"], quizSlotCount: 1 },
+  { id: "kp2", content: "Điểm 2", order: 1, slotCount: 1, questionIds: [], quizSlotCount: 0 },
+  { id: "kp3", content: "Điểm 3", order: 2, slotCount: 1, questionIds: [], quizSlotCount: 0 },
+]
+function rawStudent(id, name, overrides) {
+  return {
+    studentId: id,
+    name,
+    selfByKp: {},
+    progressByKp: {},
+    submittedAttempts: [],
+    openAttempt: null,
+    lastActivityAt: null,
+    dueAt: null,
+    activityDays: [],
+    ...overrides,
+  }
+}
+const weakAll = rawStudent("hs1", "An", {
+  selfByKp: { kp1: "known", kp2: "known", kp3: "known" },
+  progressByKp: {
+    kp1: { self: "known", fill: tab("incorrect", "incorrect"), drag: emptyTab },
+    kp2: { self: "known", fill: tab("incorrect", "incorrect"), drag: emptyTab },
+    kp3: { self: "known", fill: tab("incorrect", "incorrect"), drag: emptyTab },
+  },
+})
+const rowWeak = buildStudentRow(weakAll, kps, T, 1, now)
+assert(rowWeak.needsHelp === true, "3/3 điểm yếu -> cần hỗ trợ")
+assert(rowWeak.helpReasons.some((r) => r.includes("≥ 1/3")), "lý do ghi ≥ 1/3")
+
+const overdue = rawStudent("hs2", "Bình", {
+  dueAt: "2026-10-26T23:59:00+07:00",
+  selfByKp: { kp1: "known", kp2: "known", kp3: "known" },
+  progressByKp: {
+    kp1: { self: "known", fill: tab("correct", "correct"), drag: emptyTab },
+    kp2: { self: "known", fill: tab("correct", "correct"), drag: emptyTab },
+    kp3: { self: "known", fill: tab("correct", "correct"), drag: emptyTab },
+  },
+})
+const rowOverdue = buildStudentRow(overdue, kps, T, 1, now)
+assert(rowOverdue.needsHelp === true, "quá hạn chưa nộp -> cần hỗ trợ")
+assert(rowOverdue.deadlineBadge === "Quá hạn", "huy hiệu Quá hạn")
+
+const retaker = rawStudent("hs3", "Chi", {
+  selfByKp: { kp1: "known", kp2: "known", kp3: "known" },
+  progressByKp: {
+    kp1: { self: "known", fill: tab("correct", "correct"), drag: emptyTab },
+    kp2: { self: "known", fill: tab("correct", "correct"), drag: emptyTab },
+    kp3: { self: "known", fill: tab("correct", "correct"), drag: emptyTab },
+  },
+  submittedAttempts: [
+    { id: "a1", score10: 8, completedAt: "2026-10-25T10:00:00+07:00", slotsByKp: { kp1: { correct: 1, total: 1 } }, questionIds: ["q1"], wrongAnswers: [], totalSlots: 1, durationMs: 60000, quickAnswers: 0 },
+    { id: "a2", score10: 7, completedAt: "2026-10-26T10:00:00+07:00", slotsByKp: { kp1: { correct: 1, total: 1 } }, questionIds: ["q1"], wrongAnswers: [], totalSlots: 1, durationMs: 60000, quickAnswers: 0 },
+    { id: "a3", score10: 8, completedAt: "2026-10-27T10:00:00+07:00", slotsByKp: { kp1: { correct: 1, total: 1 } }, questionIds: ["q1"], wrongAnswers: [], totalSlots: 1, durationMs: 60000, quickAnswers: 0 },
   ],
-  weakKpIds: ["k1"],
 })
-assert(asg.completedCount === 2, "completedCount")
-assert(asg.completionPercent === 50, "completionPercent")
-assert(asg.onTimeCount === 1, "onTimeCount")
-assert(asg.lateCount === 1, "lateCount")
-assert(asg.overdueCount === 1, "overdueCount")
-assert(asg.avgScore === 65, `avgScore ${asg.avgScore}`)
-assert(asg.bestScore === 90, "bestScore")
-assert(asg.distribution.find((d) => d.band === "80-100")?.count === 1, "dist 80-100")
-assert(asg.distribution.find((d) => d.band === "20-50")?.count === 1, "dist 20-50")
-assert(asg.weakKpIds[0] === "k1", "weakKpIds")
-console.log("OK buildAssignmentStat")
+const rowRetaker = buildStudentRow(retaker, kps, T, 1, now)
+assert(rowRetaker.retakeCount === 2, "3 lượt nộp -> làm lại 2")
+assert(rowRetaker.needsHelp === true, "làm lại 2 lần mà điểm không tăng -> cần hỗ trợ")
+console.log("OK needsHelp")
 
-const empty = emptyClassStats()
-assert(empty.overview.atRiskCount === 0, "empty overview")
-assert(Array.isArray(empty.assignments), "empty assignments")
-console.log("OK emptyClassStats")
+// Nên ôn lại cả lớp (thay isHardKp/isWeakKp): ≥40% Chưa tốt.
+const stats = buildKpStats([weakAll], [rowWeak], kps, T)
+assert(stats[0].weakRate === 1 && stats[0].needsReview === true, "100% yếu -> nên ôn lại")
+const fine = rawStudent("hs4", "Dũng", {
+  selfByKp: { kp1: "known", kp2: "known", kp3: "known" },
+  progressByKp: {
+    kp1: { self: "known", fill: tab("correct", "correct"), drag: emptyTab },
+    kp2: { self: "known", fill: tab("correct", "correct"), drag: emptyTab },
+    kp3: { self: "known", fill: tab("correct", "correct"), drag: emptyTab },
+  },
+  submittedAttempts: [
+    { id: "a1", score10: 10, completedAt: "2026-10-27T10:00:00+07:00", slotsByKp: { kp1: { correct: 1, total: 1 } }, questionIds: ["q1"], wrongAnswers: [], totalSlots: 1, durationMs: 60000, quickAnswers: 0 },
+  ],
+})
+const rowFine = buildStudentRow(fine, kps, T, 1, now)
+const statsFine = buildKpStats([fine], [rowFine], kps, T)
+assert(statsFine[0].weakRate === 0 && statsFine[0].needsReview === false, "0% yếu -> không ôn lại")
+console.log("OK needsReview")
 
-const types = readFileSync("types/index.ts", "utf8")
-assert(types.includes("export interface ClassOverviewStats"), "thieu ClassOverviewStats")
-assert(types.includes("export interface AssignmentStatRow"), "thieu AssignmentStatRow")
-assert(types.includes("quizAvg?:"), "StudentStatRow thieu quizAvg")
-assert(types.includes("firstTryPercent?:"), "KPStatRow thieu firstTryPercent")
-assert(types.includes("hardFlag?:"), "KPStatRow thieu hardFlag")
-assert(types.includes("overview: ClassOverviewStats"), "ClassStatsDto thieu overview")
-assert(types.includes("assignments: AssignmentStatRow[]"), "ClassStatsDto thieu assignments")
-console.log("OK types")
-
-const action = readFileSync("app/actions/class-stats.ts", "utf8")
-assert(action.includes("buildOverview"), "getClassStats khong dung buildOverview")
-assert(action.includes("buildAssignmentStat"), "getClassStats khong dung buildAssignmentStat")
-assert(action.includes("quizAnswers"), "thieu quizAnswers firstTry")
-assert(action.includes("classAssignments"), "thieu classAssignments")
-console.log("OK class-stats action")
-
-const page = readFileSync("app/teacher/classes/[id]/page.tsx", "utf8")
-assert(page.includes("emptyClassStats"), "page fallback khong dung emptyClassStats")
-assert(!page.includes("students: [], knowledgePoints: []"), "page van fallback type cu")
-console.log("OK page fallback")
-
-console.log("OK phien 4")
+console.log("phien 4 OK")

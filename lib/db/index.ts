@@ -359,6 +359,74 @@ export function ensureSchema(): Promise<void> {
           .query(`CREATE INDEX IF NOT EXISTS import_drafts_class_idx ON import_drafts ("classId")`)
           .catch((e) => console.error("[ensureSchema] import_drafts_class_idx DDL failed:", e)),
       )
+      // §38 (full): lịch sử lượt học + ngưỡng thống kê theo lớp + thời điểm
+      // nộp từng câu quiz. Mỗi DDL bọc catch riêng như mọi đợt trước.
+      .then(() =>
+        pool
+          .query(`
+          CREATE TABLE IF NOT EXISTS lesson_runs (
+            "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            "studentId" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+            "lessonId" uuid NOT NULL REFERENCES lessons("id") ON DELETE CASCADE,
+            "runNo" integer NOT NULL,
+            "status" text NOT NULL DEFAULT 'active',
+            "tab1At" timestamp,
+            "closedAt" timestamp,
+            "createdAt" timestamp NOT NULL DEFAULT now(),
+            CONSTRAINT "lr_student_lesson_run_unique" UNIQUE ("studentId", "lessonId", "runNo")
+          )
+        `)
+          .catch((e) => console.error("[ensureSchema] lesson_runs DDL failed:", e)),
+      )
+      .then(() =>
+        pool
+          .query(`CREATE INDEX IF NOT EXISTS lr_student_lesson_idx ON lesson_runs ("studentId", "lessonId")`)
+          .catch((e) => console.error("[ensureSchema] lr_student_lesson_idx DDL failed:", e)),
+      )
+      .then(() =>
+        pool
+          .query(`
+          CREATE TABLE IF NOT EXISTS kp_run_results (
+            "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            "runId" uuid NOT NULL REFERENCES lesson_runs("id") ON DELETE CASCADE,
+            "knowledgePointId" uuid NOT NULL REFERENCES knowledge_points("id") ON DELETE CASCADE,
+            "selfAssessment" text,
+            "fillFirstSlots" integer,
+            "fillFirstTotal" integer,
+            "fillAttempts" integer NOT NULL DEFAULT 0,
+            "fillRevealed" boolean NOT NULL DEFAULT false,
+            "fillStatus" text,
+            "dragFirstSlots" integer,
+            "dragFirstTotal" integer,
+            "dragAttempts" integer NOT NULL DEFAULT 0,
+            "dragRevealed" boolean NOT NULL DEFAULT false,
+            "dragStatus" text,
+            "updatedAt" timestamp NOT NULL DEFAULT now(),
+            CONSTRAINT "kprr_run_kp_unique" UNIQUE ("runId", "knowledgePointId")
+          )
+        `)
+          .catch((e) => console.error("[ensureSchema] kp_run_results DDL failed:", e)),
+      )
+      .then(() =>
+        pool
+          .query(`CREATE INDEX IF NOT EXISTS kprr_run_idx ON kp_run_results ("runId")`)
+          .catch((e) => console.error("[ensureSchema] kprr_run_idx DDL failed:", e)),
+      )
+      .then(() =>
+        pool
+          .query(`ALTER TABLE classes ADD COLUMN IF NOT EXISTS "statsMastery" integer NOT NULL DEFAULT 80`)
+          .catch((e) => console.error("[ensureSchema] classes.statsMastery DDL failed:", e)),
+      )
+      .then(() =>
+        pool
+          .query(`ALTER TABLE classes ADD COLUMN IF NOT EXISTS "statsOk" integer NOT NULL DEFAULT 50`)
+          .catch((e) => console.error("[ensureSchema] classes.statsOk DDL failed:", e)),
+      )
+      .then(() =>
+        pool
+          .query(`ALTER TABLE quiz_answers ADD COLUMN IF NOT EXISTS "answeredAt" timestamp`)
+          .catch((e) => console.error("[ensureSchema] quiz_answers.answeredAt DDL failed:", e)),
+      )
       .then(() => undefined)
       .catch((e) => {
         // 2026-10-21 (sự cố production): KHÔNG ném lỗi ra caller nữa.

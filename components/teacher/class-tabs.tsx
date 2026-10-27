@@ -2,10 +2,10 @@
 
 import { useMemo, type ReactNode } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import type { ClassAssignmentDto, ClassStatsDto } from "@/types"
+import type { ClassAssignmentDto } from "@/types"
 import { ClassDetail } from "@/components/teacher/class-detail"
 import { ClassAssignments } from "@/components/teacher/class-assignments"
-import { ClassStatsPanel } from "@/components/teacher/class-stats-panel"
+import { LessonStatsTab } from "@/components/teacher/lesson-stats-tab"
 import { cn } from "@/lib/utils"
 import { BarChart3, BookMarked, LayoutDashboard } from "lucide-react"
 
@@ -34,12 +34,10 @@ function parseTab(value: string | null): Tab {
 export function ClassTabs({
   cls,
   assignments,
-  stats,
   overviewExtra,
 }: {
   cls: ClassDetailData
   assignments: ClassAssignmentDto[]
-  stats: ClassStatsDto
   overviewExtra?: ReactNode
 }) {
   const router = useRouter()
@@ -86,7 +84,7 @@ export function ClassTabs({
       <div role="tabpanel" aria-labelledby={`class-tab-${tab}`}>
         {tab === "overview" ? <ClassDetail cls={cls} hero={overviewExtra} /> : null}
         {tab === "assignments" ? <ClassAssignments classId={cls.id} initial={assignments} /> : null}
-        {tab === "stats" ? <ClassStatsPanel stats={stats} /> : null}
+        {tab === "stats" ? <LessonStatsTab classId={cls.id} /> : null}
       </div>
     </div>
   )

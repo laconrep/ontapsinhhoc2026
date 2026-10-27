@@ -86,6 +86,9 @@ export const classes = pgTable("classes", {
   // SEC-05: mã mời mới dài 8 ký tự (trước đây 6) — cột nới lên 32 để chứa cả hai.
   inviteCode: varchar("inviteCode", { length: 32 }).notNull().unique(),
   schoolYear: text("schoolYear").notNull(),
+  // Thống kê §38 (full): ngưỡng xếp mức riêng từng lớp — mặc định 80/50.
+  statsMastery: integer("statsMastery").notNull().default(80),
+  statsOk: integer("statsOk").notNull().default(50),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
@@ -228,6 +231,64 @@ export const studentTab1Submissions = pgTable(
   }),
 )
 
+// §38 (full): lịch sử lượt học — một dòng mỗi lần học sinh nộp Tab 1
+// (lượt mới sau mỗi lần "học lại"). Đóng lượt khi resetLessonProgress.
+// Lượt không có dòng ở đây (học trước khi có bảng) được thống kê coi là lượt 1.
+export const lessonRuns = pgTable(
+  "lesson_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    studentId: text("studentId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    lessonId: uuid("lessonId")
+      .notNull()
+      .references(() => lessons.id, { onDelete: "cascade" }),
+    runNo: integer("runNo").notNull(),
+    status: text("status", { enum: ["active", "closed"] }).notNull().default("active"),
+    tab1At: timestamp("tab1At"),
+    closedAt: timestamp("closedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (t) => ({
+    byStudentLesson: index("lr_student_lesson_idx").on(t.studentId, t.lessonId),
+    uniqRun: uniqueIndex("lr_student_lesson_run_uidx").on(t.studentId, t.lessonId, t.runNo),
+  }),
+)
+
+// §38 (full): kết quả Tab 1/2/3 của từng điểm trong từng lượt học.
+// Ghi khi nộp Tab 1 (selfAssessment), khi nộp Tab 2/3 (số ô đúng lần đầu,
+// số lần thử, xem đáp án, trạng thái cuối). Lượt hiện tại đọc từ
+// studentProgress; bảng này giữ lịch sử các lượt đã đóng.
+export const kpRunResults = pgTable(
+  "kp_run_results",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    runId: uuid("runId")
+      .notNull()
+      .references(() => lessonRuns.id, { onDelete: "cascade" }),
+    knowledgePointId: uuid("knowledgePointId")
+      .notNull()
+      .references(() => knowledgePoints.id, { onDelete: "cascade" }),
+    selfAssessment: text("selfAssessment", { enum: ["known", "unknown"] }),
+    fillFirstSlots: integer("fillFirstSlots"),
+    fillFirstTotal: integer("fillFirstTotal"),
+    fillAttempts: integer("fillAttempts").notNull().default(0),
+    fillRevealed: boolean("fillRevealed").notNull().default(false),
+    fillStatus: text("fillStatus", { enum: ["correct", "incorrect"] }),
+    dragFirstSlots: integer("dragFirstSlots"),
+    dragFirstTotal: integer("dragFirstTotal"),
+    dragAttempts: integer("dragAttempts").notNull().default(0),
+    dragRevealed: boolean("dragRevealed").notNull().default(false),
+    dragStatus: text("dragStatus", { enum: ["correct", "incorrect"] }),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (t) => ({
+    uniqRunKp: uniqueIndex("kprr_run_kp_uidx").on(t.runId, t.knowledgePointId),
+    byRun: index("kprr_run_idx").on(t.runId),
+  }),
+)
+
 export const quizAttempts = pgTable(
   "quiz_attempts",
   {
@@ -263,6 +324,8 @@ export const quizAnswers = pgTable(
     optionId: uuid("optionId"),
     studentAnswer: text("studentAnswer"),
     isCorrect: boolean("isCorrect"),
+    // §38 (full): thời điểm nộp từng câu — cờ "làm quá nhanh từng câu".
+    answeredAt: timestamp("answeredAt"),
   },
   (t) => ({
     mcSaUnique: uniqueIndex("quiz_answers_mc_sa_uidx")

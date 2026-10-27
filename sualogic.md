@@ -2314,3 +2314,112 @@ scripts/check-parser-fallback-37.mjs 16/16. Suite 40/47, đúng 7 lỗi cũ
 (class-phien1/2/3/6, parser-phien6/8, preview-phien3), không hồi quy.
 Kiểm chứng sống còn nợ: nạp thường Bài 4 trên production — bản xem
 trước phải hiện 1 bài thiếu tên + điểm kiến thức lý thuyết (không lưu).
+
+## §38 — Thống kê lớp theo bài: 4 màn, tầng 3 bậc, lịch sử lượt học (user chốt full 27/10, không giai đoạn)
+
+BỐI CẢNH. File đề xuất tab Thống kê (27/10) + đặc tả 26/10 mâu thuẫn nhau
+(cột Màn 1 khác, Điểm TB lấy lượt đầu→gần nhất hay trung bình, không có cột
+Củng cố). Ngày 27/10 user chốt sửa FULL theo file đề xuất + mockup 4 màn đã
+duyệt (thanh 2 màu Màn 1, tooltip đủ tên Màn 2, đánh số điểm + hover nội dung
+Màn 3, bảng đủ học sinh Màn 4) — bản này THAY THẾ đặc tả 26/10. Sửa cho cả hai
+luồng nạp (AI và thường) ở tầng code; đợt kiểm thử chỉ chạy luồng AI.
+
+THAY ĐỔI LỚN: thống kê cũ (tổng quan lớp + theo bài giao + theo học sinh,
+tính lúc mở trang lớp, quizAvg trộn mọi bài) bị XOÁ và thay bằng thống kê
+theo BÀI ĐANG CHỌN, chỉ tính khi giáo viên mở tab Thống kê (không còn tính
+lúc mở trang lớp). File xoá: app/actions/class-stats.ts, lib/class-stats-calc.ts,
+lib/class-stats-ui.ts, components/teacher/class-stats-panel.tsx. Trang lớp
+không còn fetch stats; tab Thống kê tự tải + polling 30 giây (chỉ khi tab
+trình duyệt đang hiển thị, dừng khi ẩn — theo kết luận polling đã chốt 27/10;
+SSE không dùng cho tab này vì bus realtime chỉ single-process và các lần ghi
+Tab 1/2/3/quiz không publish gì).
+
+SCHEMA (ensureSchema, theo mẫu ADD COLUMN/CREATE TABLE IF NOT EXISTS cũ):
+- lesson_runs: một dòng mỗi lần học sinh nộp Tab 1 (runNo tăng dần theo
+  học sinh + bài, status active/closed). Đóng lượt khi resetLessonProgress.
+  Lượt học trước khi có bảng (không có dòng) được thống kê coi là lượt 1.
+- kp_run_results: kết quả Tab 1/2/3 của từng điểm trong từng lượt
+  (selfAssessment lúc nộp Tab 1; số ô đúng lần đầu + tổng số ô chỉ ghi ở
+  lần thử đầu Tab 2/3; số lần thử, xem đáp án, trạng thái cuối). Lượt hiện
+  tại đọc từ studentProgress; bảng này giữ lịch sử các lượt đã đóng.
+- classes.statsMastery (80) / statsOk (50): ngưỡng xếp mức riêng từng lớp.
+- quiz_answers.answeredAt: thời điểm nộp từng câu (cờ "làm quá nhanh").
+
+ĐIỂM GHI (app/actions/student-learn.ts, không đổi ngữ nghĩa chấm điểm):
+- submitTab1 thành công → đóng lượt active cũ còn sót + tạo lượt mới +
+  snapshot tự đánh giá cho mọi điểm của bài (cùng transaction).
+- submitTab2/3 → upsert kp_run_results cho lượt active (tự tạo lượt nếu học
+  sinh nộp Tab 1 từ trước khi có bảng); số ô đúng lần đầu lấy từ kết quả
+  gradeSlots trước khi strip (ô bỏ trống vẫn tính sai ở tầng quiz).
+- resetLessonProgress → snapshot trạng thái Tab 1/2/3 hiện tại vào lượt đang
+  mở (KHÔNG ghi đè số ô đúng lần đầu) rồi đóng lượt, trước khi xoá dấu nộp
+  + reset tiến độ; lịch sử quiz_attempts giữ nguyên như cũ.
+- submitQuizQuestion + submitQuiz → answeredAt = thời điểm nộp cho mọi dòng
+  đáp án mới. Lưu ý: submitQuiz ghi cùng timestamp cho các câu chốt cuối —
+  đếm "câu nhanh" chỉ tính gap 0 < gap < 5s để loại hàng loạt này.
+
+TẦNG 3 BẬC (lib/lesson-stats.ts, thuần túy — mọi quy tắc kiểm thử được):
+- A (quiz): tỉ lệ ô đúng trên lượt kiểm tra gần nhất đã nộp, ngưỡng lớp
+  (mặc định 80/50). Câu bỏ trống đã bị chấm sai ở submitQuiz nên vẫn nằm
+  trong mẫu số.
+- B (Tab 2/3, khi lượt đó không có câu kiểm tra cho điểm): làm đúng (dù lần
+  đầu hay lần sau) → Tạm ổn (không lên Thành thạo khi chưa quiz); làm sai,
+  chưa xem đáp án → Chưa tốt; đã xem đáp án mà chưa đúng → Chưa kiểm chứng.
+- C (chỉ tự nhận xét) → Chưa kiểm chứng; không hoạt động → Chưa làm.
+- Điểm không gắn câu kiểm tra nào luôn mang nhãn "Chưa có câu kiểm tra"
+  (ô ma trận gạch chéo), bất kể nguồn tầng nào.
+- Chủ quan sai dùng đúng helper isOverconfident (tự nhận Biết + sai lần đầu,
+  kể cả fallback dữ liệu cũ chưa có firstTry mà thử > 1 lần) — không tự viết
+  lại hẹp hơn (phiên 8 bắt buộc).
+- Pool Tab 2/3 theo LUỒNG HỌC THẬT: Tab 3 chỉ lấy điểm Chưa biết
+  (getTab3Questions lọc selfAssessment = "unknown"); điểm Biết mà điền sai
+  lần đầu KHÔNG tự chuyển sang kéo thả trong code hiện tại. Vì vậy pool Điền
+  khuyết = điểm Biết có ô trống, pool Kéo thả = điểm Chưa biết có ô trống.
+  Ghi chú trong mockup "điền sai lần đầu cũng chuyển sang kéo thả" KHÔNG
+  khớp code — chưa đổi luồng học; chỉ ghi nhận để hỏi user (không tự đổi
+  ngữ nghĩa luồng học trong đợt sửa thống kê).
+- Màn 1 theo ĐIỂM (không theo ô): xanh = điểm đúng ngay lần đầu, đỏ = điểm
+  sai lần đầu (kể cả sau đó làm đúng), xám = chưa làm; đuôi = số điểm làm
+  đúng cuối cùng / tổng pool. Đuôi Kiểm tra = số ô đã nộp / tổng số ô.
+  Số lần làm lại = số lượt đã nộp − 1, hoặc "Lượt N (đang làm)" khi có lượt mở.
+  Cần hỗ trợ: ≥1/3 điểm ở Chưa tốt, hoặc quá hạn mà chưa nộp kiểm tra, hoặc
+  làm lại ≥2 lần mà điểm không tăng — luôn kèm lý do.
+- Màn 2: 5 đoạn cộng lại = sĩ số; hover đoạn → tooltip ĐỦ tên (không viết
+  tắt "...và X em khác"); bấm dòng → danh sách tên theo mức; "Nên ôn lại cả
+  lớp" khi ≥40% Chưa tốt; "Ít câu" khi điểm có < 2 ô kiểm tra; Thành thạo
+  lượt đầu → gần nhất; câu sai nhiều nhất + đáp án sai phổ biến nhất (mẫu số
+  mỗi câu = số lượt gần nhất có câu đó trong đề — đúng cả bài lesson-mode
+  lẫn sample-mode); tỉ lệ chủ quan sai trên số em tự nhận Biết; số em xem
+  đáp án.
+- Màn 3: cột xếp theo độ khó (tỉ lệ Chưa tốt giảm dần, rồi Tạm ổn tăng dần,
+  rồi thứ tự gốc), đánh số "Điểm 1…N"; hover tên điểm → tooltip toàn bộ nội
+  dung (kèm title fallback); ô ✓/~/✗ + nguồn, ô Q luôn có phân số đúng/tổng
+  ô; tổng kết dòng đếm ĐÚNG từ các ô; lọc "chỉ em còn điểm đỏ"; chế độ Thu
+  gọn / Chi tiết / Nhóm 10; bấm ô → panel chi tiết (tự nhận xét, số lần thử
+  sai, xem đáp án, ô quiz, từng lượt); bấm tên → hồ sơ 3 nhóm.
+- Màn 4: biểu đồ điểm TB lớp theo bài (lượt đầu vs gần nhất, thang 10); điểm
+  tiến bộ/thụt lùi nhất (số em Thành thạo tăng/giảm); điểm yếu kéo dài (yếu
+  từ 2 lượt trở lên); chip phân loại (Tiến bộ / Ổn định tốt / Ôn lại nhưng
+  chưa tiến bộ / Bỏ dở / Chưa bắt đầu) hover đủ tên; bảng đủ học sinh với
+  "Mức điểm (đầu → gần nhất)" = số điểm tăng ▲ / giữ ■ / giảm ▼ giữa lượt
+  đầu và lượt gần nhất (chỉ điểm có quiz ở cả hai lượt); Bỏ dở / Chưa bắt
+  đầu hiển thị "—" cho điểm và mức; chuyên cần (streak, vắng trên 7 ngày) +
+  cờ chất lượng (trung bình < 10 giây/câu, ≥ 3 câu dưới 5 giây).
+- Bài không có câu kiểm tra: Màn 4 phân loại hiển thị "—" (không ép xếp loại
+  theo quiz khi không có quiz).
+
+ACTION (app/actions/lesson-stats.ts): getLessonStats(classId, lessonId?) —
+chỉ bài đã giao + bài lưu tại lớp (leftJoin, không innerJoin chapters nên
+bài lưu tại lớp hiện được); mặc định bài mới giao nhất; dữ liệu lượt hiện
+tại từ submission + studentProgress hiện tại; lượt kiểm tra gần nhất cho
+tầng A; đề lượt gần nhất cho mẫu số câu sai; updateClassStatsThresholds
+(bắt buộc 0 ≤ ok < mastery ≤ 100). UI: components/teacher/lesson-stats-tab.tsx.
+
+KIỂM THỬ: scripts/check-class-stats-tier.mjs 40/40 (tầng A/B/C, Màn 1–4,
+hạn, streak). 3 script cũ import module đã xoá được viết lại theo module mới
+(phien4: cờ cần hỗ trợ / nên ôn lại / ngưỡng; phien5: nhãn 5 mức + thứ tự;
+phien8: khối thống kê chuyển sang lib/lesson-stats.ts dùng isOverconfident
++ action dùng buildKpStats). Suite 41/48 pass, đúng 7 lỗi cũ
+(class-phien1/2/3/6, parser-phien6/8, preview-phien3), không hồi quy.
+tsc sạch, next build exit 0. Chưa push (chờ PAT mới); kiểm chứng sống + đợt
+20 học sinh làm bài chờ sau deploy.

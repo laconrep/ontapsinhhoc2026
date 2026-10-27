@@ -174,11 +174,12 @@ function tfAllCorrect(student, options) {
 }
 
 {
-  const stats = readFileSync(resolve(root, "app/actions/class-stats.ts"), "utf8")
-  if (!stats.includes("isOverconfident")) fail("class-stats chua dung isOverconfident")
-  if (stats.includes('selfAssessment === "known" && r.fillStatus === "incorrect"')) {
-    fail("class-stats van dung fillStatus incorrect cho overconfident")
-  }
+  // §38 (full): thống kê theo bài mới — chủ quan sai tính trong lõi thuần
+  // lib/lesson-stats.ts (buildKpStats) và action chỉ ráp dữ liệu qua nó.
+  const pure = readFileSync(resolve(root, "lib/lesson-stats.ts"), "utf8")
+  if (!pure.includes("isOverconfident")) fail("lesson-stats chua dung isOverconfident")
+  const action = readFileSync(resolve(root, "app/actions/lesson-stats.ts"), "utf8")
+  if (!action.includes("buildKpStats")) fail("lesson-stats action khong dung buildKpStats")
 }
 
 console.log("phien 8 OK")

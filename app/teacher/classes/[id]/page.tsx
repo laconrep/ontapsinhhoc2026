@@ -1,13 +1,11 @@
 import { getClassDetail } from "@/app/actions/classes"
-import { getClassStats } from "@/app/actions/class-stats"
 import { getActiveSessionForClass } from "@/app/actions/sessions"
 import { getDraftSessions } from "@/app/actions/live-quiz"
 import { getClassAssignments } from "@/app/actions/assignments"
 import { Suspense } from "react"
 import { ClassTabs } from "@/components/teacher/class-tabs"
 import { SessionControl } from "@/components/teacher/session-control"
-import { emptyClassStats } from "@/lib/class-stats-calc"
-import type { ClassAssignmentDto, ClassStatsDto } from "@/types"
+import type { ClassAssignmentDto } from "@/types"
 
 export const dynamic = "force-dynamic"
 
@@ -20,16 +18,9 @@ export default async function ClassDetailPage({
 
   const cls = await getClassDetail(id)
 
-  let stats: ClassStatsDto = emptyClassStats()
   let activeSession = null
   let drafts: Awaited<ReturnType<typeof getDraftSessions>> = []
   let assignments: ClassAssignmentDto[] = []
-
-  try {
-    stats = await getClassStats(id)
-  } catch (err) {
-    console.error("getClassStats error:", err)
-  }
 
   try {
     activeSession = await getActiveSessionForClass(id)
@@ -54,7 +45,6 @@ export default async function ClassDetailPage({
       <ClassTabs
         cls={cls}
         assignments={assignments}
-        stats={stats}
         overviewExtra={
           <SessionControl classId={cls.id} activeSession={activeSession} drafts={drafts} />
         }
