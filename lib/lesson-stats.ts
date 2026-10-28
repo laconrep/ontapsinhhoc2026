@@ -246,6 +246,8 @@ export interface RawAttempt {
     optionContent: string | null
   }[]
   totalSlots: number
+  /** Số ô đúng của lượt (tính từ isCorrect của từng đáp án, kể cả câu chung của bài). */
+  correctSlots: number
   durationMs: number | null
   quickAnswers: number // số câu trả lời cách câu trước < 5 giây
 }
@@ -264,7 +266,7 @@ export interface RawStudentLesson {
     }
   >
   submittedAttempts: RawAttempt[] // đã nộp, xếp theo thời gian tăng dần
-  openAttempt: { attemptNo: number; answeredSlots: number; totalSlots: number } | null
+  openAttempt: { attemptNo: number; answeredSlots: number; answeredCorrect: number; totalSlots: number } | null
   lastActivityAt: string | null
   dueAt: string | null
   activityDays: string[] // YYYY-MM-DD, để tính streak
@@ -306,6 +308,8 @@ export interface StudentRow {
    *  chốt ngay (chân không). */
   dragFinalized: boolean
   quizAnswered: number
+  /** Số ô đúng của lượt gần nhất (đã nộp) hoặc của lượt đang làm (trên các câu đã trả lời). */
+  quizCorrect: number
   quizTotal: number
   quizState: "done" | "doing" | "none"
   retakesText: string
@@ -428,14 +432,17 @@ export function buildStudentRow(
       : "—"
 
   let quizAnswered = 0
+  let quizCorrect = 0
   let quizTotal = lessonTotalSlots
   let quizState: StudentRow["quizState"] = "none"
   if (latestAttempt) {
     quizAnswered = latestAttempt.totalSlots
+    quizCorrect = latestAttempt.correctSlots
     quizTotal = latestAttempt.totalSlots
     quizState = "done"
   } else if (s.openAttempt) {
     quizAnswered = s.openAttempt.answeredSlots
+    quizCorrect = s.openAttempt.answeredCorrect
     quizTotal = s.openAttempt.totalSlots
     quizState = "doing"
   }
@@ -496,6 +503,7 @@ export function buildStudentRow(
     dragEventual,
     dragFinalized,
     quizAnswered,
+    quizCorrect,
     quizTotal,
     quizState,
     retakesText,
@@ -597,6 +605,11 @@ export function buildKpStats(
       const latest = s.submittedAttempts[s.submittedAttempts.length - 1]
       if (!latest) continue
       const questionIds = new Set(kp.questionIds)
+      // Một học sinh chỉ tính 1 lần sai cho mỗi câu, dù câu TF sai nhiều ý:
+      // nếu không, wrong đếm theo ý (28) trên số em làm bài (18) cho tỉ lệ
+      // 156% — hiển thị vỡ. wrongTexts vẫn đếm theo từng ý để tìm đáp án
+      // sai phổ biến (mức ý) cho đúng.
+      const seenWrong = new Set<string>()
       for (const w of latest.wrongAnswers) {
         if (!questionIds.has(w.questionId)) continue
         const entry = perQuestion.get(w.questionId) ?? {
@@ -604,7 +617,10 @@ export function buildKpStats(
           wrong: 0,
           wrongTexts: new Map<string, number>(),
         }
-        entry.wrong += 1
+        if (!seenWrong.has(w.questionId)) {
+          seenWrong.add(w.questionId)
+          entry.wrong += 1
+        }
         const text = w.optionContent ?? w.studentAnswer ?? "—"
         entry.wrongTexts.set(text, (entry.wrongTexts.get(text) ?? 0) + 1)
         perQuestion.set(w.questionId, entry)

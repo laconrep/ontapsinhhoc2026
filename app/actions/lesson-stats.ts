@@ -481,6 +481,7 @@ export async function getLessonStats(classId: string, lessonId?: string): Promis
               }))
           : [],
         totalSlots,
+        correctSlots,
         durationMs:
           a.completedAt != null ? a.completedAt.getTime() - a.startedAt.getTime() : null,
         quickAnswers: isLatest ? quickAnswers : 0,
@@ -512,6 +513,7 @@ export async function getLessonStats(classId: string, lessonId?: string): Promis
       ? {
           attemptNo: submittedRaw.length + 1,
           answeredSlots: (answersByAttempt.get(open.id) ?? []).length,
+          answeredCorrect: (answersByAttempt.get(open.id) ?? []).filter((r) => r.isCorrect).length,
           totalSlots: open.totalSlots ?? (rosterByAttempt.get(open.id) ?? []).length,
         }
       : null

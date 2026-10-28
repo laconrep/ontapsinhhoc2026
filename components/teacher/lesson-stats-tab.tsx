@@ -292,6 +292,14 @@ export function LessonStatsTab({ classId }: { classId: string }) {
       <div className="p-5">
         {screen === 1 ? (
           <Screen1 data={data} />
+        ) : data.coverage.attached === 0 ? (
+          // Cửa chưa-gắn (chốt 28/10): chưa câu nào gắn vào điểm nào thì Màn 2–5
+          // không hiện số liệu mà hiện thông báo này (thay cho dòng "Chưa có dữ liệu").
+          // Giáo viên gắn thêm câu → lần tải lại thống kê sau (mở tab hoặc polling 30s)
+          // có attached > 0 thì cửa tự mở, hiện đủ các màn.
+          <p className="rounded-lg bg-yellow-100 p-3 text-sm text-yellow-900">
+            Giáo viên chưa gắn câu trắc nghiệm vào điểm kiến thức thì kết quả thống kê không chính xác
+          </p>
         ) : screen === 2 ? (
           <Screen2
             data={data}
@@ -506,14 +514,19 @@ function Screen1({ data }: { data: LessonStatsDto }) {
                   <td className="py-3 px-3">
                     <SplitBar
                       segments={[
-                        { count: s.quizAnswered, className: "bg-green-500", label: "Đã nộp" },
+                        { count: s.quizCorrect, className: "bg-green-500", label: "Đúng" },
+                        {
+                          count: Math.max(0, s.quizAnswered - s.quizCorrect),
+                          className: "bg-red-500",
+                          label: "Sai",
+                        },
                         {
                           count: Math.max(0, s.quizTotal - s.quizAnswered),
                           className: "bg-zinc-300 text-zinc-600",
-                          label: "Chưa nộp",
+                          label: "Chưa làm",
                         },
                       ]}
-                      tail={`${s.quizAnswered}/${s.quizTotal} ô${s.quizState === "doing" ? " (đang làm)" : ""}`}
+                      tail={`${s.quizCorrect}/${s.quizTotal} ô đúng${s.quizState === "doing" ? " (đang làm)" : ""}`}
                     />
                   </td>
                   <td className="py-3 pl-3 text-foreground">{s.retakesText}</td>
@@ -1199,36 +1212,36 @@ function Screen4({
 // "Chuyển" = điểm Tab 1 tự nhận Biết nhưng điền sai chốt nên đánh giá
 // lại thành Chưa biết, chuyển sang kéo thả.
 const CRITERIA_A: [string, string, string, string, string][] = [
-  ["Biết", "Đúng lần 1", "—", "—", "Khá (F)"],
-  ["Biết", "Đúng lần 2 (sau gợi ý)", "—", "—", "Khá (F) · cờ “sau gợi ý”"],
-  ["Biết", "Sai lần 1, đang chờ làm lại", "—", "—", "Chưa kiểm chứng (F)"],
-  ["Biết", "Sai chốt → chuyển", "Chưa kéo xong", "—", "Chưa tốt (F)"],
-  ["Biết", "Sai chốt → chuyển", "Đúng lần 1", "—", "Khá (D) · cờ “đã chuyển”"],
-  ["Biết", "Sai chốt → chuyển", "Đúng lần 2", "—", "Chưa tốt (F) · cờ “đã chuyển”"],
-  ["Biết", "Sai chốt → chuyển", "Sai (đã chốt)", "—", "Chưa tốt (F) · cờ “đã chuyển”"],
-  ["Biết", "Sai chốt → chuyển", "Sau khi đã xem đáp án", "—", "Chưa tốt (D) · cờ “đã chuyển”"],
-  ["Biết", "Chưa làm", "—", "—", "Chưa kiểm chứng (S)"],
-  ["Chưa biết", "—", "Đúng lần 1", "—", "Khá (D)"],
-  ["Chưa biết", "—", "Đúng lần 2 (sau 1 lần sai, chưa lộ)", "—", "Khá (D)"],
-  ["Chưa biết", "—", "Sai lần 1, đang chờ làm lại", "—", "Chưa kiểm chứng (D)"],
-  ["Chưa biết", "—", "Sai (đã chốt)", "—", "Chưa tốt (D)"],
-  ["Chưa biết", "—", "Sau khi đã xem đáp án", "—", "Chưa tốt (D)"],
-  ["Chưa tự nhận", "—", "—", "—", "Chưa làm"],
+  ["Biết", "Đúng lần 1", "Không vào tab này", "Chưa hoàn thành", "Khá (F)"],
+  ["Biết", "Đúng lần 2 (sau gợi ý)", "Không vào tab này", "Chưa hoàn thành", "Khá (F) · cờ “sau gợi ý”"],
+  ["Biết", "Sai lần 1, đang chờ làm lại", "Chưa vào tab này", "Chưa hoàn thành", "Chưa kiểm chứng (F)"],
+  ["Biết", "Sai chốt → chuyển", "Chưa kéo xong", "Chưa hoàn thành", "Chưa tốt (F)"],
+  ["Biết", "Sai chốt → chuyển", "Đúng lần 1", "Chưa hoàn thành", "Khá (D) · cờ “đã chuyển”"],
+  ["Biết", "Sai chốt → chuyển", "Đúng lần 2", "Chưa hoàn thành", "Chưa tốt (F) · cờ “đã chuyển”"],
+  ["Biết", "Sai chốt → chuyển", "Sai (đã chốt)", "Chưa hoàn thành", "Chưa tốt (F) · cờ “đã chuyển”"],
+  ["Biết", "Sai chốt → chuyển", "Sau khi đã xem đáp án", "Chưa hoàn thành", "Chưa tốt (D) · cờ “đã chuyển”"],
+  ["Biết", "Chưa làm", "Chưa vào tab này", "Chưa hoàn thành", "Chưa kiểm chứng (S)"],
+  ["Chưa biết", "Không vào tab này", "Đúng lần 1", "Chưa hoàn thành", "Khá (D)"],
+  ["Chưa biết", "Không vào tab này", "Đúng lần 2 (sau 1 lần sai, chưa lộ)", "Chưa hoàn thành", "Khá (D)"],
+  ["Chưa biết", "Không vào tab này", "Sai lần 1, đang chờ làm lại", "Chưa hoàn thành", "Chưa kiểm chứng (D)"],
+  ["Chưa biết", "Không vào tab này", "Sai (đã chốt)", "Chưa hoàn thành", "Chưa tốt (D)"],
+  ["Chưa biết", "Không vào tab này", "Sau khi đã xem đáp án", "Chưa hoàn thành", "Chưa tốt (D)"],
+  ["Chưa tự nhận", "Chưa vào tab này", "Chưa vào tab này", "Chưa hoàn thành", "Chưa làm"],
 ]
 const CRITERIA_B: [string, string, string, string, string][] = [
-  ["—", "—", "—", "Đúng ≥ 75% (đủ ≥ 2 ô đúng)", "Thành thạo (Q)"],
-  ["—", "—", "—", "Đúng 50–dưới 75%", "Khá (Q)"],
-  ["—", "—", "—", "Đúng dưới 50%", "Chưa tốt (Q)"],
-  ["Biết", "Đúng (lần 1 hoặc sau gợi ý)", "—", "1 ô, đúng", "Thành thạo (Q) · kết hợp"],
-  ["Biết", "Đúng (lần 1 hoặc sau gợi ý)", "—", "1 ô, sai", "Khá (Q) · đệm"],
-  ["Chuyển / Chưa biết / chưa làm", "—", "—", "1 ô, đúng", "Khá (Q) · chặn"],
-  ["—", "—", "Sau khi đã xem đáp án", "Đúng 100% và ≥ 2 ô đúng", "Thành thạo (Q)"],
-  ["—", "—", "Sau khi đã xem đáp án", "Đúng từ 50% (trừ dòng trên)", "Khá (Q)"],
-  ["—", "—", "Sau khi đã xem đáp án", "Đúng dưới 50%", "Chưa tốt (Q)"],
+  ["Đã hoàn thành", "Đã hoàn thành", "Đã hoàn thành", "Đúng ≥ 75% và đủ ≥ 2 ô đúng", "Thành thạo (Q)"],
+  ["Đã hoàn thành", "Đã hoàn thành", "Đã hoàn thành", "Đúng 50% đến dưới 75%", "Khá (Q)"],
+  ["Đã hoàn thành", "Đã hoàn thành", "Đã hoàn thành", "Đúng dưới 50%", "Chưa tốt (Q)"],
+  ["Biết", "Điền đúng (lần 1 hoặc sau gợi ý)", "Đã hoàn thành", "Quiz chỉ có 1 ô và đúng", "Thành thạo (Q) — vì đã có Biết + điền đúng làm bằng chứng, cộng 1 ô quiz đúng là đủ"],
+  ["Biết", "Điền đúng (lần 1 hoặc sau gợi ý)", "Đã hoàn thành", "Quiz chỉ có 1 ô và sai", "Khá (Q) — Biết + điền đúng đỡ cho 1 ô quiz sai"],
+  ["Chưa biết, chưa làm, hoặc đã chuyển", "Theo Tab 1", "Đã hoàn thành", "Quiz chỉ có 1 ô và đúng", "Khá (Q) — chỉ 1 ô đúng thì chưa đủ lên Thành thạo"],
+  ["Đã hoàn thành", "Đã hoàn thành", "Đã xem đáp án kéo thả", "Đúng 100% và đủ ≥ 2 ô đúng", "Thành thạo (Q)"],
+  ["Đã hoàn thành", "Đã hoàn thành", "Đã xem đáp án kéo thả", "Đúng từ 50% (trừ dòng 7)", "Khá (Q)"],
+  ["Đã hoàn thành", "Đã hoàn thành", "Đã xem đáp án kéo thả", "Đúng dưới 50%", "Chưa tốt (Q)"],
 ]
 
 function Screen5({ data }: { data: LessonStatsDto }) {
-  const rows = [...CRITERIA_A, ...CRITERIA_B]
+  const rows = [...CRITERIA_B, ...CRITERIA_A]
   return (
     <div className="space-y-4">
       <div className="space-y-1 text-sm text-muted-foreground">
@@ -1237,20 +1250,9 @@ function Screen5({ data }: { data: LessonStatsDto }) {
           Q (trắc nghiệm) &gt; F (điền khuyết) &gt; D (kéo thả) &gt; S (tự nhận). Khi một điểm có nhiều loại
           bằng chứng, loại đứng trước quyết định mức; chữ cái trong ô ma trận cho biết nguồn nào đã quyết định.
         </p>
-        <p>
-          <span className="font-medium text-foreground">Ngưỡng cố định, không điều chỉnh theo lớp: </span>
-          Thành thạo ≥ {data.thresholds.mastery}%, Khá ≥ {data.thresholds.ok}%, tính trên ô điểm của từng điểm
-          trong lượt nộp gần nhất (không phải điểm toàn bài).
-        </p>
-        <p>
-          <span className="font-medium text-foreground">Thứ tự xét: </span>
-          dòng đặc biệt (lộ, 1 ô kết hợp/đệm/chặn) ưu tiên trước dòng tỉ lệ chung; dòng tỉ lệ chỉ áp dụng khi
-          không thuộc dòng đặc biệt. Cờ “sau gợi ý”, “đã chuyển” chỉ giải thích, không đổi mức.
-        </p>
-        <p>
-          Điểm chỉ đọc (không có ô trống) không có Tab 2/3: đánh giá theo Tab 1 và Tab 4 như các dòng tương ứng.
-        </p>
       </div>
+      <p className="text-sm font-semibold text-red-600">tiêu chí đánh giá chỉ đúng khi câu hỏi trắc nghiệm đã gắn vào các điểm kiến thức</p>
+      <p className="text-sm text-muted-foreground">Bảng mô tả luồng chuẩn Tab 1 → Tab 2 → Tab 3 → Tab 4: mỗi dòng là trạng thái của học sinh ở từng tab và mức tương ứng.</p>
       <div className="overflow-x-auto rounded-lg border border-border">
         <table className="w-full text-sm">
           <thead>
@@ -1263,13 +1265,17 @@ function Screen5({ data }: { data: LessonStatsDto }) {
               <th className="px-2 py-2 font-medium">Đánh giá</th>
             </tr>
           </thead>
-          <tbody>
+                    <tbody>
             <tr className="border-b border-border bg-muted/30">
               <td colSpan={6} className="px-2 py-1.5 text-xs font-semibold text-foreground">
-                Chưa có trắc nghiệm (Tab 4: —)
+                Có trắc nghiệm
+                <br />
+                <span className="font-normal text-muted-foreground">
+                  Xét dòng đặc biệt (4–9) trước; dòng 1–3 chỉ dùng khi không thuộc dòng đặc biệt.
+                </span>
               </td>
             </tr>
-            {CRITERIA_A.map((r, i) => (
+            {CRITERIA_B.map((r, i) => (
               <tr key={i} className="border-b border-border last:border-0">
                 <td className="px-2 py-1.5 text-muted-foreground">{i + 1}</td>
                 <td className="px-2 py-1.5">{r[0]}</td>
@@ -1281,12 +1287,12 @@ function Screen5({ data }: { data: LessonStatsDto }) {
             ))}
             <tr className="border-b border-border bg-muted/30">
               <td colSpan={6} className="px-2 py-1.5 text-xs font-semibold text-foreground">
-                Có trắc nghiệm (lượt nộp gần nhất, tính theo ô của điểm đó)
+                Nếu học sinh chưa hoàn thành tab trắc nghiệm
               </td>
             </tr>
-            {CRITERIA_B.map((r, i) => (
+            {CRITERIA_A.map((r, i) => (
               <tr key={i} className="border-b border-border last:border-0">
-                <td className="px-2 py-1.5 text-muted-foreground">{CRITERIA_A.length + i + 1}</td>
+                <td className="px-2 py-1.5 text-muted-foreground">{CRITERIA_B.length + i + 1}</td>
                 <td className="px-2 py-1.5">{r[0]}</td>
                 <td className="px-2 py-1.5">{r[1]}</td>
                 <td className="px-2 py-1.5">{r[2]}</td>

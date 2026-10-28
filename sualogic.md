@@ -2620,3 +2620,17 @@ exit 0. CHƯA PUSH (chờ PAT mới). Kiểm chứng sống (điểm chuyển xu
 hiện thật ở Tab 3 + tầng theo §40) chờ đợt kiểm thử live sau deploy.
 NGOÀI PHẠM VI §42 (vẫn mở): bảo đảm ≥2 ô phía AI + gán TF nhiều điểm
 (theo ý hay theo câu).
+
+## §43 — Màn 5 viết lại (bảng gộp, quiz lên trước) + cửa chưa-gắn + cột Tab 4 đúng/sai + khóa xem lại ở Tab 2 + fix mostMissed (28/10)
+
+MÀN 5 VIẾT LẠI (user duyệt bản xem trước v3): bảng vẫn 24 dòng, luật không đổi, chỉ đổi cách trình bày — khối có trắc nghiệm lên trước (dòng 1–9), khối chưa hoàn thành trắc nghiệm xuống dưới (dòng 10–24, tiêu đề "Nếu học sinh chưa hoàn thành tab trắc nghiệm"); bỏ hết chữ "Bất kể", mỗi ô viết theo luồng chuẩn Tab 1→4 (khối quiz Tab 1/2/3 = "Đã hoàn thành"; khối dưới Tab 4 = "Chưa hoàn thành"; "Không vào tab này" cho điểm điền đúng/không sang kéo và điểm Chưa biết/không vào điền; "Chưa vào tab này" cho dòng đang chờ/chưa làm; dòng 6 Tab 2 = "Theo Tab 1"); ghi chú thứ tự xét đổi số theo đánh số mới (dòng đặc biệt 4–9 trước dòng tỉ lệ 1–3); thêm dòng đỏ "tiêu chí đánh giá chỉ đúng khi câu hỏi trắc nghiệm đã gắn vào các điểm kiến thức" + ghi chú luồng chuẩn; bỏ 3 dòng giới thiệu cũ (chỉ giữ dòng "Thứ bậc bằng chứng"). Hai khối xét theo TỪNG ĐIỂM (điểm nào HS đã hoàn thành trắc nghiệm thì đọc khối trên, chưa hoàn thành thì đọc khối dưới), không phải theo cả bài.
+
+CỬA CHƯA-GẮN (user chốt 28/10): khi coverage.attached === 0 (không câu nào gắn vào điểm nào — thường gặp khi upload không dùng AI rồi bấm lưu mà không gắn), Màn 1 hiện bình thường, Màn 2–5 không hiện số liệu mà hiện thông báo "Giáo viên chưa gắn câu trắc nghiệm vào điểm kiến thức thì kết quả thống kê không chính xác" (thay cho ý "Chưa có dữ liệu"). Nút bấm các màn vẫn còn. Giáo viên gắn thêm câu → lần tải lại thống kê sau (mở tab hoặc polling 30s) có attached > 0 thì cửa tự mở. Bài gắn một phần thì cửa không áp, chỉ còn cảnh báo vàng ở header như cũ.
+
+CỘT TAB 4 MÀN 1 (user đồng ý 28/10): thanh Tab 4 chia xanh Đúng / đỏ Sai / xám Chưa làm như cột Tab 2/3 (trước đây chỉ chia Đã nộp/Chưa nộp), đuôi "X/Y ô đúng" (+ " (đang làm)" khi đang làm). Server: toRawAttempt giữ correctSlots (đã tính sẵn từ isCorrect nhưng trước đây bỏ đi); open attempt thêm answeredCorrect; StudentRow thêm quizCorrect.
+
+KHÓA XEM LẠI Ở TAB 2 (user chốt 28/10): lesson-study chỉ truyền onReviewStep1 khi stage tab3/tab4/done — Tab 2 không được về Tab 1 để đọc (tránh chép kiến thức); từ Tab 3 trở đi được xem lại Tab 1 nhưng chỉ xem không sửa (Tab1Readonly), vì Tab 3 là củng cố — đây cũng là lý do mức kéo thả đánh giá thấp hơn điền khuyết (Q > F > D > S). Stepper giữ nguyên (reviewable khi current > 1, nhưng cha đã chặn ở Tab 2).
+
+FIX mostMissed TF (bug tìm được lúc kiểm thử live v41): buildKpStats đếm wrong theo ý (mỗi ý TF sai là 1 lần) nhưng answered theo người → hiển thị "156% sai (28/18)". Sửa: mỗi em tính 1 lần sai/câu (seenWrong), wrongTexts vẫn đếm theo ý.
+
+KIỂM THỬ: tsc sạch; suite 42/49 đúng 7 lỗi cũ; kiểm chứng sống trên production sau deploy (Màn 5 đủ 24 dòng theo thứ tự mới, cột Tab 4 chia đúng/sai, cửa chưa-gắn hiện thông báo + tự mở sau khi gắn, Tab 2 không có nút Xem lại, mostMissed không còn >100%).

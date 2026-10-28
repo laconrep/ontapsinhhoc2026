@@ -116,7 +116,13 @@ export function LessonStudy({
       <Stepper
         current={current}
         skipped={{ 2: skip2 && current > 2 }}
-        onReviewStep1={stage !== "tab1" ? () => setReviewOpen(true) : undefined}
+        // Chốt 28/10: Tab 2 không được xem lại Tab 1 (tránh chép kiến thức);
+        // từ Tab 3 trở đi mới được xem lại (chỉ xem, Tab1Readonly).
+        onReviewStep1={
+          stage === "tab3" || stage === "tab4" || stage === "done"
+            ? () => setReviewOpen(true)
+            : undefined
+        }
       />
 
       {stage === "tab1" && (
