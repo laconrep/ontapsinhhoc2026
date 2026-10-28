@@ -231,6 +231,15 @@ export function buildDragChips(
   }))
 }
 
+/**
+ * §42: Điền khuyết khóa ở lần sai thứ 2 — KP bị đánh giá lại thành
+ * "Chưa biết" và chuyển sang bước Kéo thả. Tab 2 không còn đường lộ đáp
+ * án (REVEAL_FILL_AT = 3 không bao giờ tới được vì khóa đã chốt ở 2).
+ */
+export function isFillTransfer(attemptsAfter: number, allCorrect: boolean): boolean {
+  return !allCorrect && attemptsAfter >= 2
+}
+
 export function stripFillResults(
   results: { slotIndex: number; isCorrect: boolean; correctAnswer: string }[],
   attemptsAfter: number,

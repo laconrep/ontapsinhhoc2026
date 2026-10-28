@@ -2580,6 +2580,43 @@ thêm Screen5 (bảng tĩnh CRITERIA_A/CRITERIA_B + ghi chú đầu bảng, lấ
 ngưỡng hiển thị từ data.thresholds).
 
 KIỂM THỬ: tsc sạch; suite 41/48 đúng 7 lỗi cũ; next build exit 0.
-CHƯA PUSH (chờ PAT mới, chung với §39+§40). Kiểm chứng sống trên
-production (Màn 5 hiển thị đủ 24 dòng, lớp cũ hiện 75/50, không còn ô
-sửa ngưỡng) chờ sau deploy.
+ĐÃ PUSH 28/10 (commit 245a3d3, chung §39+§40+§41; Vercel Ready
+15:20). Kiểm chứng sống Màn 5 chờ đợt kiểm thử live sau §42.
+
+## §42 — Tab 2 mới: sai lần 2 khóa + chuyển sang kéo (28/10)
+
+SPEC (chốt 27/10, triển khai sau thống kê theo lệnh 28/10): lần 1
+sai ghi nhận như cũ; lần 2 có gợi ý chữ cái đầu (cơ chế cũ:
+stripFillResults trả hint khi attempts >= 1); lần 2 sai -> báo sai
++ buộc chuyển câu + KHÔNG xem đáp án + điểm bị đánh giá lại thành
+Chưa biết -> sang nhóm kéo. Tab 2 từ đây KHÔNG CÒN đường lộ đáp
+án (REVEAL_FILL_AT = 3 không bao giờ tới được vì khóa đã chốt ở 2).
+Submission Tab 1 giữ nguyên (thống kê §40 nhận diện điểm chuyển qua
+submission Biết ∧ progress Chưa biết). Reset giữ hành vi hiện tại
+(xóa field Tab 2/3; self đã lật giữ nguyên tới khi làm lại Tab 1).
+
+CODE: lib/slot-render.ts — thêm isFillTransfer(attemptsAfter,
+allCorrect) = !allCorrect && attemptsAfter >= 2. app/actions/
+student-learn.ts — submitTab2Question: (a) đường legacy: dữ liệu
+trước §42 đã sai 2 lần mà self vẫn known -> lần chạm tiếp theo lật
+self sang unknown + trả transferred (không chấm, không tăng attempts,
+không lộ đáp án); (b) đường thường: transferred = isFillTransfer ->
+lật selfAssessment sang unknown trong cùng update, overallStatus
+tính theo self mới, kết quả trả về lược hint + correctAnswer (chỉ
+còn isCorrect), thêm cờ transferred vào MỌI đường return (để type
+client đồng nhất). getTab2Questions KHÔNG đổi (pool = self known nên
+điểm đã lật tự rời Tab 2); getTab3Questions KHÔNG đổi (pool = self
+unknown nên điểm đã lật tự vào Tab 3); kp_run_results KHÔNG đổi
+(không nơi nào đọc selfAssessment của nó cho thống kê). components/
+student/tab2-fill-in.tsx — FillInCard: res.transferred -> hiện khối
+"Bạn đã sai ở câu này. Điểm này đã chuyển sang bước Kéo thả... Tab 2
+không hiển thị đáp án." + nút "Câu tiếp theo" (dùng chung onCorrect,
+kể cả câu cuối -> finished -> sang Tab 3); không nút thử lại, không
+persist draft (onCorrect của cha đã clearDraft).
+
+KIỂM THỬ: check-tab2-transfer 7/7; tsc sạch; suite 42/49 đúng 7 lỗi
+cũ (phien1/2/3/6, parser-phien6/8, preview-phien3); next build
+exit 0. CHƯA PUSH (chờ PAT mới). Kiểm chứng sống (điểm chuyển xuất
+hiện thật ở Tab 3 + tầng theo §40) chờ đợt kiểm thử live sau deploy.
+NGOÀI PHẠM VI §42 (vẫn mở): bảo đảm ≥2 ô phía AI + gán TF nhiều điểm
+(theo ý hay theo câu).

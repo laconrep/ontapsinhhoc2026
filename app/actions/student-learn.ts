@@ -32,12 +32,14 @@ import {
 import { gradeMC, gradeSA, gradeTF, resolveFirstTry, scoreLinear } from "@/lib/scoring"
 import {
   buildDragChips,
+  isFillTransfer,
   pickDistractors,
   renderClientSlots,
   slotRenderMismatch,
   stripDragResults,
   stripFillResults,
   type ClientSlotPart,
+  type SlotGradeClient,
 } from "@/lib/slot-render"
 import { selectQuizQuestions } from "@/lib/quiz-selection"
 import { hitRateLimit } from "@/lib/rate-limit"
@@ -737,26 +739,59 @@ export async function submitTab2Question(
         results: alreadyCorrectResults(terms),
         allCorrect: true,
         kpStatus: existing?.overallStatus ?? "mastered",
+        transferred: false,
       }
+    }
+
+    // §42 (legacy): dữ liệu trước §42 có thể đã sai điền 2 lần mà chưa
+    // chuyển (self vẫn known). Lần chạm tiếp theo khóa + chuyển luôn,
+    // không chấm thêm (không tăng attempts, không lộ đáp án).
+    if (currentFillStatus === "incorrect" && (existing?.fillAttempts ?? 0) >= 2) {
+      const legacyOverall = computeOverallStatus({
+        selfAssessment: "unknown",
+        fillStatus: "incorrect",
+        dragStatus: currentDragStatus,
+      })
+      await tx
+        .update(studentProgress)
+        .set({
+          selfAssessment: "unknown",
+          overallStatus: legacyOverall,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(eq(studentProgress.studentId, student.id), eq(studentProgress.knowledgePointId, kpId)),
+        )
+      return { results: [], allCorrect: false, kpStatus: legacyOverall, transferred: true }
     }
 
     await assertGradeBurst(student.id, kpId)
     const { results, allCorrect } = gradeSlots(terms, answers)
 
     const newFillStatus: FillDragStatus = allCorrect ? "correct" : "incorrect"
+    const attemptsAfter = (existing?.fillAttempts ?? 0) + 1
+    // §42: sai lần 2 khóa + chuyển sang kéo. Submission Tab 1 giữ nguyên
+    // (thống kê §40 nhận diện điểm chuyển qua submission Biết ∧ progress
+    // Chưa biết); Tab 2 từ đây không còn đường lộ đáp án.
+    const transferred = isFillTransfer(attemptsAfter, allCorrect)
+    const newSelfAssessment = transferred ? "unknown" : currentSelfAssessment
     const overallStatus = computeOverallStatus({
-      selfAssessment: currentSelfAssessment,
+      selfAssessment: newSelfAssessment,
       fillStatus: newFillStatus,
       dragStatus: currentDragStatus,
     })
-    const attemptsAfter = (existing?.fillAttempts ?? 0) + 1
     const { stripped, revealed } = stripFillResults(results, attemptsAfter, allCorrect)
+    // Chuyển rồi thì không gửi gợi ý lẫn đáp án về client nữa.
+    const strippedSafe: SlotGradeClient[] = transferred
+      ? stripped.map((r) => ({ slotIndex: r.slotIndex, isCorrect: r.isCorrect }))
+      : stripped
     const fillRevealed = Boolean(existing?.fillRevealed) || revealed
     const fillFirstTry = resolveFirstTry(existing?.fillFirstTry, newFillStatus)
 
     await tx
       .update(studentProgress)
       .set({
+        selfAssessment: newSelfAssessment,
         fillStatus: newFillStatus,
         fillAttempts: sql`${studentProgress.fillAttempts} + 1`,
         fillRevealed,
@@ -831,7 +866,7 @@ export async function submitTab2Question(
         })
     }
 
-    return { results: stripped, allCorrect, kpStatus: overallStatus }
+    return { results: strippedSafe, allCorrect, kpStatus: overallStatus, transferred }
   })
 }
 

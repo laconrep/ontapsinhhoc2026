@@ -216,6 +216,8 @@ function FillInCard({
   const [serverAllCorrect, setServerAllCorrect] = useState<boolean | null>(
     restored?.serverAllCorrect ?? null,
   )
+  // §42: sai lần 2 khóa + chuyển sang kéo — không thử lại, không xem đáp án.
+  const [transferred, setTransferred] = useState(false)
   const [pending, startTransition] = useTransition()
   const inputsRef = useRef<Record<number, HTMLInputElement | null>>({})
 
@@ -241,6 +243,12 @@ function FillInCard({
           value: answers[slotIndex] ?? answers[Number(slotIndex)] ?? "",
         }))
         const res = await submitTab2Question(question.knowledgePointId, payload)
+        // §42: sai lần 2 — điểm chuyển sang kéo, buộc sang câu tiếp theo.
+        if (res.transferred) {
+          setTransferred(true)
+          toast.error("Bạn đã sai. Điểm này chuyển sang bước Kéo thả để bạn ôn lại.")
+          return
+        }
         const map: Record<number, SlotResult> = {}
         for (const r of res.results) {
           const slotIndex = Number(r.slotIndex)
@@ -298,6 +306,24 @@ function FillInCard({
       : slots.every((s) => results[s]?.isCorrect) &&
         Object.values(results).every((r) => r.isCorrect))
   const wrongSlots = slots.filter((s) => graded && results[s] && !results[s].isCorrect)
+
+  // §42: câu đã khóa + chuyển — không thử lại, không hiện đáp án, buộc
+  // sang câu tiếp theo (điểm này sẽ gặp lại ở bước Kéo thả).
+  if (transferred) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-4">
+        <p className="font-heading font-semibold text-foreground">Bạn đã sai ở câu này.</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Điểm kiến thức này đã chuyển sang bước Kéo thả để bạn ôn lại. Tab 2 không hiển thị đáp án.
+        </p>
+        <div className="mt-4 flex gap-2">
+          <Button className="min-h-11 flex-1" onClick={onCorrect}>
+            Câu tiếp theo
+          </Button>
+        </div>
+      </div>
+    )
+  }
 
   // BUG-01: KP không dựng được ô nào (dữ liệu lỗi) — không render nút Kiểm
   // tra (trước đây allFilled trên mảng rỗng luôn true, học sinh bấm chấm
