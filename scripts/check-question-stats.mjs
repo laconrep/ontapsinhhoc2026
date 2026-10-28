@@ -129,6 +129,19 @@ const medStats = buildQuestionStats(medStudents, [
 check("median 30", medStats[0].medianSec === 30, medStats[0].medianSec)
 // q1 là câu đầu tiên của mọi em → không có gap → median null.
 check("q1 medianSec null", s1.medianSec === null, s1.medianSec)
+// §46: MC thật lưu id phương án ở studentAnswer, optionId null — vẫn phải đếm đúng.
+const realMcStudents = [0, 1, 2, 3].map((i) =>
+  mkStudent(`r${i}`, 5, [
+    ["q4", null, i < 3, T0 + i * 1000],
+  ]),
+)
+// Ghi đè studentAnswer thành id phương án (mkStudent đặt studentAnswer = opt = null).
+for (const [i, s] of realMcStudents.entries()) s.submittedAttempts[0].answers[0].studentAnswer = i < 3 ? "X" : "Y"
+const realMc = buildQuestionStats(realMcStudents, [
+  { id: "q4", no: 4, type: "MC", kpId: null, options: [{ id: "X", content: "X" }, { id: "Y", content: "Y" }] },
+])[0]
+check("MC studentAnswer option rate", approx(realMc.options.find((o) => o.optionId === "X").rate, 3 / 4), realMc.options)
+check("MC studentAnswer option count", realMc.options.find((o) => o.optionId === "X").count === 3, realMc.options)
 // Câu không có đáp án nào: answered 0, không lỗi.
 const empty = buildQuestionStats([], questions)
 check("empty answered 0", empty.every((s) => s.answered === 0), empty.map((s) => s.answered))

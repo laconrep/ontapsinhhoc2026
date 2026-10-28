@@ -1040,13 +1040,19 @@ export function buildQuestionStats(
     }
     const missRate = totalSlots === 0 ? 0 : 1 - correctSlots / totalSlots
     // Tỉ lệ từng phương án (MC: đáp án chọn; TF: từng ý đúng/sai).
+    // §46: đáp án MC lưu id phương án đã chọn ở studentAnswer (xem wrongTextFor
+    // dùng studentAnswer để tra nội dung phương án), KHÔNG phải optionId — khớp
+    // bằng optionId cho MC luôn ra 0% trên dữ liệu thật. TF giữ optionId (ý),
+    // studentAnswer của TF chỉ là 'D'/'S'.
+    const optKey = (r: { optionId: string | null; studentAnswer: string | null }) =>
+      q.type === "MC" ? (r.studentAnswer ?? r.optionId) : r.optionId
     const options: QuestionOptionRate[] = []
     if (q.type !== "SA") {
       for (const opt of q.options) {
         let optAnswered = 0
         let optCorrect = 0
         for (const s of perStudent) {
-          for (const r of s.rows.filter((r) => r.optionId === opt.id)) {
+          for (const r of s.rows.filter((r) => optKey(r) === opt.id)) {
             optAnswered += 1
             if (r.isCorrect) optCorrect += 1
           }
