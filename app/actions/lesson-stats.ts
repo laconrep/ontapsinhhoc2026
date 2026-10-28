@@ -95,8 +95,6 @@ async function assertTeacherClass(classId: string, teacherId: string) {
   const [cls] = await db
     .select({
       id: classes.id,
-      statsMastery: classes.statsMastery,
-      statsOk: classes.statsOk,
     })
     .from(classes)
     .where(and(eq(classes.id, classId), eq(classes.teacherId, teacherId)))
@@ -115,11 +113,12 @@ async function assertTeacherClass(classId: string, teacherId: string) {
 export async function getLessonStats(classId: string, lessonId?: string): Promise<LessonStatsDto> {
   const teacher = await requireRole("teacher")
   await ensureSchema()
-  const cls = await assertTeacherClass(classId, teacher.id)
-  const thresholds: StatsThresholds = {
-    mastery: cls.statsMastery ?? DEFAULT_THRESHOLDS.mastery,
-    ok: cls.statsOk ?? DEFAULT_THRESHOLDS.ok,
-  }
+  await assertTeacherClass(classId, teacher.id)
+  // §41: ngưỡng CỐ ĐỊNH 75/50 cho mọi lớp, không đọc giá trị đã lưu theo
+  // lớp nữa (lớp cũ đã lưu 80 cũng dùng 75; cột statsMastery/statsOk giữ
+  // lại trong DB nhưng không còn dùng). Giáo viên không tự điều chỉnh
+  // ngưỡng vì không đủ hiểu để điều chỉnh đúng.
+  const thresholds: StatsThresholds = { ...DEFAULT_THRESHOLDS }
   const now = new Date()
 
   const studentRows = await db
@@ -739,31 +738,4 @@ export async function getLessonStats(classId: string, lessonId?: string): Promis
     rawStudents,
     generatedAt: now.toISOString(),
   }
-}
-
-/** Ngưỡng xếp mức riêng từng lớp (mặc định 80/50; bắt buộc 0 ≤ ok < mastery ≤ 100). */
-export async function updateClassStatsThresholds(
-  classId: string,
-  mastery: number,
-  ok: number,
-): Promise<{ ok: boolean }> {
-  const teacher = await requireRole("teacher")
-  await ensureSchema()
-  await assertTeacherClass(classId, teacher.id)
-  if (
-    !Number.isInteger(mastery) ||
-    !Number.isInteger(ok) ||
-    mastery < 0 ||
-    mastery > 100 ||
-    ok < 0 ||
-    ok > 100 ||
-    ok >= mastery
-  ) {
-    throw new Error("Ngưỡng không hợp lệ: cần 0 ≤ ngưỡng Khá < ngưỡng Thành thạo ≤ 100")
-  }
-  await db
-    .update(classes)
-    .set({ statsMastery: mastery, statsOk: ok })
-    .where(eq(classes.id, classId))
-  return { ok: true }
 }

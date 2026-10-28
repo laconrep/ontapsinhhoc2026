@@ -2544,3 +2544,42 @@ không); (b) cảnh báo nội dung C1 + reassessedCount + dragReassessedPool
 Tiến bộ trong buổi, khiêm tốn, mâu thuẫn, bỏ trống); (c) luồng Tab 2
 mới; (d) bảo đảm ≥ 2 ô phía AI; (e) gán TF nhiều điểm; (f) synonym
 retroactive; (g) migrate ngưỡng 80 đã lưu sang 75.
+
+## §41 — Màn 5 "Tiêu chí đánh giá" + ngưỡng cố định 75/50
+
+QUYẾT (user 28/10 15:11): (1) Bảng tiêu chí nằm ở MÀN THỨ 5 trong tab
+thống kê (cùng hàng tab với Màn 1–4). (2) Ngưỡng CỐ ĐỊNH, giáo viên
+không điều chỉnh — vì giáo viên cũng không hiểu để điều chỉnh. Hệ quả:
+lớp cũ đã lưu 80 cũng dùng 75 (không đọc giá trị đã lưu nữa); cột
+statsMastery/statsOk giữ lại trong DB nhưng không còn dùng (không xóa
+cột, đúng quyết giữ ensureSchema như-is).
+
+BẢNG: 24 dòng, cột STT | Tab 1 | Tab 2 | Tab 3 | Tab 4 | Đánh giá.
+15 dòng chưa có trắc nghiệm (Biết: đúng L1, đúng L2, sai L1 chờ, chuyển
+chưa kéo xong, chuyển kéo đúng L1/L2, chuyển kéo sai chốt, chuyển kéo
+sau lộ, chỉ tự nhận; Chưa biết: kéo đúng L1/L2, kéo sai L1 chờ, kéo sai
+chốt, kéo sau lộ; chưa tự nhận -> Chưa làm) + 9 dòng có trắc nghiệm
+(tỉ lệ chung ≥75% / 50–75% / <50%; 1 ô kết hợp đúng -> Thành thạo, 1 ô
+đệm sai -> Khá, 1 ô chặn đúng -> Khá; lộ 100% đủ ô -> Thành thạo, lộ
+≥50% còn lại -> Khá, lộ <50% -> Chưa tốt). Đầu bảng ghi: thứ bậc
+Q > F > D > S, ngưỡng cố định 75/50 tính theo ô của điểm đó (không
+phải điểm toàn bài), thứ tự xét (dòng đặc biệt trước dòng tỉ lệ), cờ
+chỉ giải thích không đổi mức, điểm chỉ đọc không có Tab 2/3 thì đánh
+theo Tab 1 + Tab 4. Nội dung bảng phải khớp tierForKp — sửa luật thì
+sửa cả bảng (ghi chú trong code). Dòng "điền cũ đã lộ mà vẫn sai" chỉ
+có ở dữ liệu cũ (luồng mới không còn lộ ở Tab 2) nên không đưa vào
+bảng giáo viên.
+
+CODE: app/actions/lesson-stats.ts — getLessonStats dùng
+{ ...DEFAULT_THRESHOLDS } thay vì cls.statsMastery/statsOk;
+assertTeacherClass chỉ chọn id; XÓA updateClassStatsThresholds (không
+còn nơi nào gọi). components/teacher/lesson-stats-tab.tsx — Screen =
+1|2|3|4|5; ô ngưỡng + form sửa ngưỡng bỏ hẳn, thay bằng nút "Tiêu chí
+đánh giá" ở header (bấm -> Màn 5); tab bar thêm "Tiêu chí đánh giá";
+thêm Screen5 (bảng tĩnh CRITERIA_A/CRITERIA_B + ghi chú đầu bảng, lấy
+ngưỡng hiển thị từ data.thresholds).
+
+KIỂM THỬ: tsc sạch; suite 41/48 đúng 7 lỗi cũ; next build exit 0.
+CHƯA PUSH (chờ PAT mới, chung với §39+§40). Kiểm chứng sống trên
+production (Màn 5 hiển thị đủ 24 dòng, lớp cũ hiện 75/50, không còn ô
+sửa ngưỡng) chờ sau deploy.

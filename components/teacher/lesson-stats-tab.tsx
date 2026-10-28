@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
 import {
   getLessonStats,
-  updateClassStatsThresholds,
   type LessonStatsDto,
 } from "@/app/actions/lesson-stats"
 import { LEVEL_LABEL, type StatsLevel } from "@/lib/lesson-stats"
@@ -11,7 +10,7 @@ import { cn } from "@/lib/utils"
 import { EmptyState } from "@/components/shared/empty-state"
 import { BarChart3, Users } from "lucide-react"
 
-type Screen = 1 | 2 | 3 | 4
+type Screen = 1 | 2 | 3 | 4 | 5
 type MatrixMode = "compact" | "detail" | "groups"
 
 const LEVEL_BG: Record<StatsLevel, string> = {
@@ -96,10 +95,6 @@ export function LessonStatsTab({ classId }: { classId: string }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [screen, setScreen] = useState<Screen>(1)
-  const [editingThresholds, setEditingThresholds] = useState(false)
-  const [masteryInput, setMasteryInput] = useState(75)
-  const [okInput, setOkInput] = useState(50)
-  const [savingThresholds, setSavingThresholds] = useState(false)
   const [tooltip, setTooltip] = useState<{ x: number; y: number; title: string; lines: string[] } | null>(null)
   const [expandedKp, setExpandedKp] = useState<string | null>(null)
   const [onlyWeak, setOnlyWeak] = useState(false)
@@ -134,8 +129,6 @@ export function LessonStatsTab({ classId }: { classId: string }) {
         if (cancelled) return
         setData(first)
         if (first.lessonId) setLessonId(first.lessonId)
-        setMasteryInput(first.thresholds.mastery)
-        setOkInput(first.thresholds.ok)
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Không tải được thống kê")
       } finally {
@@ -175,20 +168,6 @@ export function LessonStatsTab({ classId }: { classId: string }) {
     setProfileId(null)
     setMatrixGroup(0)
     void fetchStats(id)
-  }
-
-  const saveThresholds = async () => {
-    if (!lessonId) return
-    setSavingThresholds(true)
-    try {
-      await updateClassStatsThresholds(classId, masteryInput, okInput)
-      setEditingThresholds(false)
-      await fetchStats(lessonId)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Không lưu được ngưỡng")
-    } finally {
-      setSavingThresholds(false)
-    }
   }
 
   const namesByKpLevel = useMemo(() => {
@@ -257,56 +236,13 @@ export function LessonStatsTab({ classId }: { classId: string }) {
                 </option>
               ))}
             </select>
-            {!editingThresholds ? (
-              <button
-                type="button"
-                onClick={() => setEditingThresholds(true)}
-                className="rounded-md border border-border px-3 py-1.5 text-xs text-foreground"
-              >
-                Ngưỡng {data.thresholds.mastery}% / {data.thresholds.ok}%
-              </button>
-            ) : (
-              <span className="flex items-center gap-1 text-xs">
-                <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={masteryInput}
-                  onChange={(e) => setMasteryInput(Number(e.target.value))}
-                  className="w-16 rounded-md border border-border bg-background px-2 py-1.5 text-foreground"
-                  aria-label="Ngưỡng Thành thạo"
-                />
-                <span className="text-muted-foreground">/</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={99}
-                  value={okInput}
-                  onChange={(e) => setOkInput(Number(e.target.value))}
-                  className="w-16 rounded-md border border-border bg-background px-2 py-1.5 text-foreground"
-                  aria-label="Ngưỡng Khá"
-                />
-                <button
-                  type="button"
-                  disabled={savingThresholds}
-                  onClick={() => void saveThresholds()}
-                  className="rounded-md bg-primary px-2 py-1.5 text-primary-foreground disabled:opacity-50"
-                >
-                  Lưu
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingThresholds(false)
-                    setMasteryInput(data.thresholds.mastery)
-                    setOkInput(data.thresholds.ok)
-                  }}
-                  className="rounded-md border border-border px-2 py-1.5 text-foreground"
-                >
-                  Huỷ
-                </button>
-              </span>
-            )}
+            <button
+              type="button"
+              onClick={() => setScreen(5)}
+              className="rounded-md border border-border px-3 py-1.5 text-xs text-foreground"
+            >
+              Tiêu chí đánh giá
+            </button>
           </div>
         </div>
         <div className="mt-3">
@@ -336,6 +272,7 @@ export function LessonStatsTab({ classId }: { classId: string }) {
             [2, "Điểm kiến thức"],
             [3, "Ma trận"],
             [4, "Tiến bộ"],
+            [5, "Tiêu chí đánh giá"],
           ] as const
         ).map(([n, label]) => (
           <button
@@ -380,8 +317,10 @@ export function LessonStatsTab({ classId }: { classId: string }) {
             onShowTooltip={showTooltip}
             onClearTooltip={() => setTooltip(null)}
           />
-        ) : (
+        ) : screen === 4 ? (
           <Screen4 data={data} onShowTooltip={showTooltip} onClearTooltip={() => setTooltip(null)} />
+        ) : (
+          <Screen5 data={data} />
         )}
       </div>
 
@@ -1249,6 +1188,116 @@ function Screen4({
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ================= Màn 5 — Tiêu chí đánh giá =================
+// §41: bảng tra cứu toàn bộ luật tầng (24 dòng). Mỗi dòng là một trường
+// hợp xảy ra và cách đánh giá của nó; nội dung bảng phải khớp
+// tierForKp trong lib/lesson-stats.ts — sửa luật thì sửa cả bảng này.
+// "Chuyển" = điểm Tab 1 tự nhận Biết nhưng điền sai chốt nên đánh giá
+// lại thành Chưa biết, chuyển sang kéo thả.
+const CRITERIA_A: [string, string, string, string, string][] = [
+  ["Biết", "Đúng lần 1", "—", "—", "Khá (F)"],
+  ["Biết", "Đúng lần 2 (sau gợi ý)", "—", "—", "Khá (F) · cờ “sau gợi ý”"],
+  ["Biết", "Sai lần 1, đang chờ làm lại", "—", "—", "Chưa kiểm chứng (F)"],
+  ["Biết", "Sai chốt → chuyển", "Chưa kéo xong", "—", "Chưa tốt (F)"],
+  ["Biết", "Sai chốt → chuyển", "Đúng lần 1", "—", "Khá (D) · cờ “đã chuyển”"],
+  ["Biết", "Sai chốt → chuyển", "Đúng lần 2", "—", "Chưa tốt (F) · cờ “đã chuyển”"],
+  ["Biết", "Sai chốt → chuyển", "Sai (đã chốt)", "—", "Chưa tốt (F) · cờ “đã chuyển”"],
+  ["Biết", "Sai chốt → chuyển", "Sau khi đã xem đáp án", "—", "Chưa tốt (D) · cờ “đã chuyển”"],
+  ["Biết", "Chưa làm", "—", "—", "Chưa kiểm chứng (S)"],
+  ["Chưa biết", "—", "Đúng lần 1", "—", "Khá (D)"],
+  ["Chưa biết", "—", "Đúng lần 2 (sau 1 lần sai, chưa lộ)", "—", "Khá (D)"],
+  ["Chưa biết", "—", "Sai lần 1, đang chờ làm lại", "—", "Chưa kiểm chứng (D)"],
+  ["Chưa biết", "—", "Sai (đã chốt)", "—", "Chưa tốt (D)"],
+  ["Chưa biết", "—", "Sau khi đã xem đáp án", "—", "Chưa tốt (D)"],
+  ["Chưa tự nhận", "—", "—", "—", "Chưa làm"],
+]
+const CRITERIA_B: [string, string, string, string, string][] = [
+  ["—", "—", "—", "Đúng ≥ 75% (đủ ≥ 2 ô đúng)", "Thành thạo (Q)"],
+  ["—", "—", "—", "Đúng 50–dưới 75%", "Khá (Q)"],
+  ["—", "—", "—", "Đúng dưới 50%", "Chưa tốt (Q)"],
+  ["Biết", "Đúng (lần 1 hoặc sau gợi ý)", "—", "1 ô, đúng", "Thành thạo (Q) · kết hợp"],
+  ["Biết", "Đúng (lần 1 hoặc sau gợi ý)", "—", "1 ô, sai", "Khá (Q) · đệm"],
+  ["Chuyển / Chưa biết / chưa làm", "—", "—", "1 ô, đúng", "Khá (Q) · chặn"],
+  ["—", "—", "Sau khi đã xem đáp án", "Đúng 100% và ≥ 2 ô đúng", "Thành thạo (Q)"],
+  ["—", "—", "Sau khi đã xem đáp án", "Đúng từ 50% (trừ dòng trên)", "Khá (Q)"],
+  ["—", "—", "Sau khi đã xem đáp án", "Đúng dưới 50%", "Chưa tốt (Q)"],
+]
+
+function Screen5({ data }: { data: LessonStatsDto }) {
+  const rows = [...CRITERIA_A, ...CRITERIA_B]
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1 text-sm text-muted-foreground">
+        <p>
+          <span className="font-medium text-foreground">Thứ bậc bằng chứng: </span>
+          Q (trắc nghiệm) &gt; F (điền khuyết) &gt; D (kéo thả) &gt; S (tự nhận). Khi một điểm có nhiều loại
+          bằng chứng, loại đứng trước quyết định mức; chữ cái trong ô ma trận cho biết nguồn nào đã quyết định.
+        </p>
+        <p>
+          <span className="font-medium text-foreground">Ngưỡng cố định, không điều chỉnh theo lớp: </span>
+          Thành thạo ≥ {data.thresholds.mastery}%, Khá ≥ {data.thresholds.ok}%, tính trên ô điểm của từng điểm
+          trong lượt nộp gần nhất (không phải điểm toàn bài).
+        </p>
+        <p>
+          <span className="font-medium text-foreground">Thứ tự xét: </span>
+          dòng đặc biệt (lộ, 1 ô kết hợp/đệm/chặn) ưu tiên trước dòng tỉ lệ chung; dòng tỉ lệ chỉ áp dụng khi
+          không thuộc dòng đặc biệt. Cờ “sau gợi ý”, “đã chuyển” chỉ giải thích, không đổi mức.
+        </p>
+        <p>
+          Điểm chỉ đọc (không có ô trống) không có Tab 2/3: đánh giá theo Tab 1 và Tab 4 như các dòng tương ứng.
+        </p>
+      </div>
+      <div className="overflow-x-auto rounded-lg border border-border">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border bg-muted/50 text-left">
+              <th className="px-2 py-2 font-medium">STT</th>
+              <th className="px-2 py-2 font-medium">Tab 1</th>
+              <th className="px-2 py-2 font-medium">Tab 2</th>
+              <th className="px-2 py-2 font-medium">Tab 3</th>
+              <th className="px-2 py-2 font-medium">Tab 4</th>
+              <th className="px-2 py-2 font-medium">Đánh giá</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b border-border bg-muted/30">
+              <td colSpan={6} className="px-2 py-1.5 text-xs font-semibold text-foreground">
+                Chưa có trắc nghiệm (Tab 4: —)
+              </td>
+            </tr>
+            {CRITERIA_A.map((r, i) => (
+              <tr key={i} className="border-b border-border last:border-0">
+                <td className="px-2 py-1.5 text-muted-foreground">{i + 1}</td>
+                <td className="px-2 py-1.5">{r[0]}</td>
+                <td className="px-2 py-1.5">{r[1]}</td>
+                <td className="px-2 py-1.5">{r[2]}</td>
+                <td className="px-2 py-1.5">{r[3]}</td>
+                <td className="px-2 py-1.5 font-medium">{r[4]}</td>
+              </tr>
+            ))}
+            <tr className="border-b border-border bg-muted/30">
+              <td colSpan={6} className="px-2 py-1.5 text-xs font-semibold text-foreground">
+                Có trắc nghiệm (lượt nộp gần nhất, tính theo ô của điểm đó)
+              </td>
+            </tr>
+            {CRITERIA_B.map((r, i) => (
+              <tr key={i} className="border-b border-border last:border-0">
+                <td className="px-2 py-1.5 text-muted-foreground">{CRITERIA_A.length + i + 1}</td>
+                <td className="px-2 py-1.5">{r[0]}</td>
+                <td className="px-2 py-1.5">{r[1]}</td>
+                <td className="px-2 py-1.5">{r[2]}</td>
+                <td className="px-2 py-1.5">{r[3]}</td>
+                <td className="px-2 py-1.5 font-medium">{r[4]}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-muted-foreground">Tổng cộng {rows.length} dòng.</p>
     </div>
   )
 }
