@@ -246,7 +246,7 @@ function FillInCard({
         // §42: sai lần 2 — điểm chuyển sang kéo, buộc sang câu tiếp theo.
         if (res.transferred) {
           setTransferred(true)
-          toast.error("Bạn đã sai. Điểm này chuyển sang bước Kéo thả để bạn ôn lại.")
+          toast.error("Bạn đã sai. Điểm kiến thức này chuyển sang bước Kéo thả để bạn ôn lại.")
           return
         }
         const map: Record<number, SlotResult> = {}

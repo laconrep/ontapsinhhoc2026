@@ -5,7 +5,7 @@
 // Đa luồng: nhiều worker nhận các việc khác nhau song song; nhận việc là
 // một UPDATE nguyên tử theo (id, status='pending').
 
-import { and, asc, desc, eq, inArray } from "drizzle-orm"
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm"
 import { db, ensureSchema } from "@/lib/db"
 import { aiJobs, aiTeacherAssignments, aiUsageLogs, knowledgePoints, lessons } from "@/lib/db/schema"
 import type { UnderlinedTerm } from "@/types"
@@ -95,7 +95,14 @@ export async function listAiJobsForTeacher(teacherId: string, limit = 15) {
       createdAt: aiJobs.createdAt,
     })
     .from(aiJobs)
-    .where(eq(aiJobs.teacherId, teacherId))
+    // Việc thống kê (#1/#11) có kind stats_* trong resultMeta — chúng hiện ở
+    // panel Trợ lý AI, không lẫn vào danh sách việc nhập bài của giáo viên.
+    .where(
+      and(
+        eq(aiJobs.teacherId, teacherId),
+        sql`COALESCE(${aiJobs.resultMeta}->>'kind', '') NOT IN ('stats_newsletter', 'stats_qa')`,
+      ),
+    )
     .orderBy(desc(aiJobs.createdAt))
     .limit(limit)
 }
@@ -374,6 +381,32 @@ export async function submitJobResult(
     })
     .where(eq(aiJobs.id, jobId))
   await logAi({ teacherId: job.teacherId, jobId, workerId, action: "job_ready", detail: { repairRounds: job.repairRound } })
+  return { ok: true }
+}
+
+/** Việc thống kê (#1/#11): worker nộp bản văn bản (bản tin/hỏi đáp).
+ *  Không qua vòng kiểm worksheet của submitJobResult — văn bản không phải
+ *  tài liệu nhập bài, và số liệu đã được ẩn danh từ lúc tạo việc. */
+export async function submitTextResult(
+  jobId: string,
+  workerId: string,
+  text: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const job = await loadClaimedJob(jobId, workerId)
+  if (!job || job.status !== "processing") return { ok: false, error: "Việc không ở trạng thái processing" }
+  if (!text.trim()) return { ok: false, error: "Kết quả trống" }
+  await db
+    .update(aiJobs)
+    .set({
+      status: "ready",
+      progress: 100,
+      stage: "Hoàn thành",
+      resultText: text,
+      lastErrors: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(aiJobs.id, jobId))
+  await logAi({ teacherId: job.teacherId, jobId, workerId, action: "job_ready", detail: { kind: "stats_text" } })
   return { ok: true }
 }
 

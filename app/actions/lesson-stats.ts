@@ -21,12 +21,15 @@ import { and, asc, desc, eq, inArray, isNotNull } from "drizzle-orm"
 import {
   buildStudentRow,
   buildKpStats,
+  buildQuestionStats,
   buildMatrix,
   buildProgressTable,
   buildLessonChart,
   computeStreak,
   DEFAULT_THRESHOLDS,
   type KpStat,
+  type QuestionMeta,
+  type QuestionStat,
   type MatrixCell,
   type ProgressTableRow,
   type LessonChartPoint,
@@ -56,6 +59,8 @@ export interface LessonStatsDto {
   stageDistribution: { stage: string; label: string; count: number }[]
   students: StudentRow[]
   kpStats: KpStat[]
+  /** Thống kê từng câu hỏi (batch 2): tỉ lệ phương án, độ khó/phân biệt, thời gian. */
+  questionStats: QuestionStat[]
   matrixOrderedKps: RawKp[]
   matrixCells: Record<string, Record<string, MatrixCell>>
   progressTable: ProgressTableRow[]
@@ -179,6 +184,7 @@ export async function getLessonStats(classId: string, lessonId?: string): Promis
     stageDistribution: [],
     students: [],
     kpStats: [],
+    questionStats: [],
     matrixOrderedKps: [],
     matrixCells: {},
     progressTable: [],
@@ -241,9 +247,10 @@ export async function getLessonStats(classId: string, lessonId?: string): Promis
     questionIds.length === 0
       ? []
       : await db
-          .select({ id: questionOptions.id, questionId: questionOptions.questionId, content: questionOptions.content })
+          .select({ id: questionOptions.id, questionId: questionOptions.questionId, content: questionOptions.content, order: questionOptions.order })
           .from(questionOptions)
           .where(inArray(questionOptions.questionId, questionIds))
+          .orderBy(asc(questionOptions.order))
   const optionContentById = new Map(optionRows.map((o) => [o.id, o.content]))
   const optionCountByQuestion = new Map<string, number>()
   for (const o of optionRows) {
@@ -270,6 +277,13 @@ export async function getLessonStats(classId: string, lessonId?: string): Promis
     attached: attachedCount,
     unattached: questionRows.length - attachedCount,
   }
+  const questionsMeta: QuestionMeta[] = questionRows.map((q, idx) => ({
+    id: q.id,
+    no: idx + 1,
+    type: q.type as "MC" | "TF" | "SA",
+    kpId: q.knowledgePointId,
+    options: optionRows.filter((o) => o.questionId === q.id).map((o) => ({ id: o.id, content: o.content })),
+  }))
 
   const submissionRows =
     studentIds.length === 0
@@ -485,6 +499,15 @@ export async function getLessonStats(classId: string, lessonId?: string): Promis
         durationMs:
           a.completedAt != null ? a.completedAt.getTime() - a.startedAt.getTime() : null,
         quickAnswers: isLatest ? quickAnswers : 0,
+        answers: isLatest
+          ? rows.map((r) => ({
+              questionId: r.questionId,
+              optionId: r.optionId,
+              studentAnswer: r.studentAnswer,
+              isCorrect: r.isCorrect === true,
+              answeredAt: r.answeredAt ? r.answeredAt.toISOString() : null,
+            }))
+          : [],
       }
     }
 
@@ -709,6 +732,8 @@ export async function getLessonStats(classId: string, lessonId?: string): Promis
     }
   }
 
+  const questionStats = buildQuestionStats(rawStudents, questionsMeta)
+
   return {
     classId,
     lessonId: selectedId,
@@ -728,6 +753,7 @@ export async function getLessonStats(classId: string, lessonId?: string): Promis
     stageDistribution,
     students: rows,
     kpStats,
+    questionStats,
     matrixOrderedKps: matrix.orderedKps,
     matrixCells: matrix.cells,
     progressTable,

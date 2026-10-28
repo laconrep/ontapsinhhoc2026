@@ -160,7 +160,7 @@ export function Tab3DragDrop({
       <div className="rounded-xl border border-border bg-card p-6 text-center">
         <p className="font-heading font-semibold text-foreground text-balance">
           {skipped
-            ? "Không còn điểm kiến thức nào cần kéo-thả ôn lại — bước Kéo thả chỉ ôn những điểm bạn đánh dấu “chưa biết” ở bước Tự đánh giá, mà bạn không đánh dấu điểm nào. Tiến thẳng đến bài kiểm tra."
+            ? "Không còn điểm kiến thức nào cần kéo-thả ôn lại — bước Kéo thả chỉ ôn những điểm kiến thức bạn đánh dấu “chưa biết” ở bước Tự đánh giá, mà bạn không đánh dấu điểm kiến thức nào. Tiến thẳng đến bài kiểm tra."
             : "Bạn đã hoàn thành kéo thả. Tiếp tục sang bước Kiểm tra."}
         </p>
         <p className="mt-2 text-sm text-muted-foreground">Chuyển sang bước Kiểm tra trong {countdown} giây...</p>

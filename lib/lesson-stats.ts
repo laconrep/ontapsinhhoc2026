@@ -250,6 +250,15 @@ export interface RawAttempt {
   correctSlots: number
   durationMs: number | null
   quickAnswers: number // số câu trả lời cách câu trước < 5 giây
+  /** Toàn bộ đáp án của lượt gần nhất (lượt cũ để rỗng — tránh phình DTO).
+   *  Dùng cho thống kê từng câu (tỉ lệ phương án, độ khó/phân biệt, thời gian). */
+  answers: {
+    questionId: string
+    optionId: string | null
+    studentAnswer: string | null
+    isCorrect: boolean
+    answeredAt: string | null
+  }[]
 }
 
 export interface RawStudentLesson {
@@ -946,4 +955,157 @@ export function computeStreak(activityDays: string[], today: Date): number {
     cursor.setDate(cursor.getDate() - 1)
   }
   return streak
+}
+
+// ================= Thống kê từng câu hỏi (batch 2) =================
+
+export interface QuestionMeta {
+  id: string
+  no: number
+  type: "MC" | "TF" | "SA"
+  kpId: string | null
+  options: { id: string; content: string }[]
+}
+
+export interface QuestionOptionRate {
+  optionId: string
+  label: string
+  /** MC: số em chọn phương án; TF: số em trả lời ý này. */
+  count: number
+  /** MC: tỉ lệ chọn trong số em làm câu; TF: tỉ lệ đúng của ý. */
+  rate: number
+}
+
+export interface QuestionStat {
+  questionId: string
+  questionNo: number
+  type: "MC" | "TF" | "SA"
+  kpId: string | null
+  /** Số em có đáp án ở lượt gần nhất (TF: có ít nhất 1 ý). */
+  answered: number
+  /** Tổng số ô (slot) đã trả lời — MC/SA bằng answered, TF bằng số ý đã trả lời. */
+  totalSlots: number
+  /** Số ô đúng theo slot (TF tính theo ý, MC/SA tính theo câu). */
+  correct: number
+  missRate: number
+  options: QuestionOptionRate[]
+  /** Trung vị thời gian làm câu (giây), từ khoảng cách giữa các lần trả lời; null khi < 3 khoảng. */
+  medianSec: number | null
+  /** Độ khó theo tỉ lệ đúng: ≥ 0.8 Dễ, 0.3–0.8 Vừa, < 0.3 Khó; null khi answered < 5. */
+  difficulty: "easy" | "medium" | "hard" | null
+  /** Phân biệt: tỉ lệ đúng nhóm điểm cao trừ nhóm điểm thấp; null khi thiếu dữ liệu (answered < 10 hoặc < 10 em có điểm). */
+  discrimination: number | null
+}
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2
+}
+
+export function buildQuestionStats(
+  rawStudents: RawStudentLesson[],
+  questions: QuestionMeta[],
+): QuestionStat[] {
+  // Lượt gần nhất đã nộp của mỗi em + điểm của lượt đó (để chia nhóm phân biệt).
+  const latestByStudent = rawStudents.map((s) => {
+    const latest = s.submittedAttempts[s.submittedAttempts.length - 1] ?? null
+    return { score10: latest?.score10 ?? null, attempt: latest }
+  })
+  const scored = latestByStudent
+    .map((x, i) => ({ score: x.score10, idx: i }))
+    .filter((x): x is { score: number; idx: number } => x.score != null)
+    .sort((a, b) => b.score - a.score)
+  const third = Math.max(1, Math.ceil(scored.length / 3))
+  const topIdx = new Set(scored.slice(0, third).map((x) => x.idx))
+  const bottomIdx = new Set(scored.slice(-third).map((x) => x.idx))
+
+  return questions.map((q) => {
+    // Đáp án lượt gần nhất của từng em cho câu này (TF: nhiều dòng theo ý).
+    const perStudent: { rows: NonNullable<RawAttempt["answers"]>; idx: number }[] = []
+    latestByStudent.forEach((x, idx) => {
+      const rows = (x.attempt?.answers ?? []).filter((a) => a.questionId === q.id)
+      if (rows.length > 0) perStudent.push({ rows, idx })
+    })
+    const answered = perStudent.length
+    // Tỉ lệ đúng theo ô (slot): TF tính theo ý, MC/SA tính theo câu.
+    let correctSlots = 0
+    let totalSlots = 0
+    for (const s of perStudent) {
+      for (const r of s.rows) {
+        totalSlots += 1
+        if (r.isCorrect) correctSlots += 1
+      }
+    }
+    const missRate = totalSlots === 0 ? 0 : 1 - correctSlots / totalSlots
+    // Tỉ lệ từng phương án (MC: đáp án chọn; TF: từng ý đúng/sai).
+    const options: QuestionOptionRate[] = []
+    if (q.type !== "SA") {
+      for (const opt of q.options) {
+        let optAnswered = 0
+        let optCorrect = 0
+        for (const s of perStudent) {
+          for (const r of s.rows.filter((r) => r.optionId === opt.id)) {
+            optAnswered += 1
+            if (r.isCorrect) optCorrect += 1
+          }
+        }
+        options.push({
+          optionId: opt.id,
+          label: opt.content,
+          count: optAnswered,
+          rate: optAnswered === 0 ? 0 : q.type === "TF" ? optCorrect / optAnswered : optAnswered / answered,
+        })
+      }
+    }
+    // Thời gian: khoảng cách giữa các lần trả lời liên tiếp của cùng em, gán cho câu trả lời sau.
+    // Gap = 0 là hàng loạt lúc nộp bài cuối, không tính (cùng quy ước quickAnswers).
+    const gaps: number[] = []
+    for (const s of perStudent) {
+      const all = [...(latestByStudent[s.idx]?.attempt?.answers ?? [])]
+        .map((a) => ({ t: a.answeredAt ? new Date(a.answeredAt).getTime() : null, qid: a.questionId }))
+        .filter((x): x is { t: number; qid: string } => x.t != null)
+        .sort((a, b) => a.t - b.t)
+      for (let i = 1; i < all.length; i++) {
+        const gap = all[i]!.t - all[i - 1]!.t
+        if (gap > 0 && all[i]!.qid === q.id) gaps.push(gap / 1000)
+      }
+    }
+    const med = gaps.length >= 3 ? median(gaps) : null
+    // Độ khó + phân biệt.
+    const correctRate = totalSlots === 0 ? 0 : correctSlots / totalSlots
+    const difficulty =
+      answered < 5 ? null : correctRate >= 0.8 ? "easy" : correctRate < 0.3 ? "hard" : "medium"
+    let discrimination: number | null = null
+    if (answered >= 10 && scored.length >= 10 && topIdx.size >= 3 && bottomIdx.size >= 3) {
+      const meanScore = (idxSet: Set<number>) => {
+        let sum = 0
+        let n = 0
+        for (const s of perStudent) {
+          if (!idxSet.has(s.idx)) continue
+          sum += s.rows.filter((r) => r.isCorrect).length / s.rows.length
+          n += 1
+        }
+        return n === 0 ? null : sum / n
+      }
+      const top = meanScore(topIdx)
+      const bottom = meanScore(bottomIdx)
+      if (top != null && bottom != null) discrimination = Math.round((top - bottom) * 100) / 100
+    }
+    return {
+      questionId: q.id,
+      questionNo: q.no,
+      type: q.type,
+      kpId: q.kpId,
+      answered,
+      totalSlots,
+      correct: correctSlots,
+      missRate,
+      options,
+      medianSec: med == null ? null : Math.round(med * 10) / 10,
+      difficulty,
+      discrimination,
+    }
+  })
 }

@@ -287,7 +287,7 @@ export function ImportErrorFix({
                 </div>
                 {isKp ? (
                   <p className="mb-2 text-sm text-muted-foreground">
-                    Click để gõ như Word. Giữ Ctrl rồi click từ để gạch chân (ô điền/kéo thả); giữ Ctrl rồi
+                    Click để gõ như Word. Giữ Ctrl rồi click từ để gạch chân (ô điền khuyết/kéo thả); giữ Ctrl rồi
                     bôi nhiều từ để tạo cụm. Thêm dấu ngoặc kép quanh từ đã gạch chân thì cụm từ này có thể
                     đổi chỗ vị trí điền khuyết.
                   </p>

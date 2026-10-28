@@ -5,12 +5,17 @@ import {
   getLessonStats,
   type LessonStatsDto,
 } from "@/app/actions/lesson-stats"
-import { LEVEL_LABEL, type StatsLevel } from "@/lib/lesson-stats"
+import {
+  createAiStatsJob,
+  listAiStatsJobs,
+  type AiStatsJobRow,
+} from "@/app/actions/ai-stats"
+import { LEVEL_LABEL, type QuestionStat, type StatsLevel } from "@/lib/lesson-stats"
 import { cn } from "@/lib/utils"
 import { EmptyState } from "@/components/shared/empty-state"
 import { BarChart3, Users } from "lucide-react"
 
-type Screen = 1 | 2 | 3 | 4 | 5
+type Screen = 1 | 2 | 3 | 4 | 5 | 6
 type MatrixMode = "compact" | "detail" | "groups"
 
 const LEVEL_BG: Record<StatsLevel, string> = {
@@ -256,7 +261,7 @@ export function LessonStatsTab({ classId }: { classId: string }) {
         ) : data.coverage.unattached > 0 ? (
           <p className="mt-3 rounded-lg bg-yellow-100 p-3 text-sm text-yellow-900">
             {data.coverage.unattached}/{data.coverage.total} câu chưa gắn vào điểm kiến thức — các câu này không
-            tính vào tầng quiz của điểm nào.{" "}
+            tính vào tầng quiz của điểm kiến thức nào.{" "}
             <a href={`/teacher/lessons/${data.lessonId}`} className="font-semibold underline">
               Gắn câu hỏi →
             </a>
@@ -279,6 +284,7 @@ export function LessonStatsTab({ classId }: { classId: string }) {
             [3, "Ma trận"],
             [4, "Tiến bộ"],
             [5, "Tiêu chí đánh giá"],
+            [6, "Trợ lý AI"],
           ] as const
         ).map(([n, label]) => (
           <button
@@ -333,8 +339,10 @@ export function LessonStatsTab({ classId }: { classId: string }) {
           />
         ) : screen === 4 ? (
           <Screen4 data={data} onShowTooltip={showTooltip} onClearTooltip={() => setTooltip(null)} />
-        ) : (
+        ) : screen === 5 ? (
           <Screen5 data={data} />
+        ) : (
+          <Screen6 data={data} />
         )}
       </div>
 
@@ -428,7 +436,7 @@ function Screen1({ data }: { data: LessonStatsDto }) {
                   Kéo thả
                   <span className="mt-0.5 block font-normal">Xanh: đúng ngay lần đầu · Đỏ: sai lần đầu · Xám: chưa làm</span>
                   <span className="mt-0.5 block font-normal text-red-600">
-                    Gồm điểm chưa biết từ đầu và điểm chuyển từ điền khuyết
+                    Gồm điểm kiến thức chưa biết từ đầu và điểm kiến thức chuyển từ điền khuyết
                   </span>
                 </th>
                 <th className="pb-2 px-3 font-medium">
@@ -567,6 +575,56 @@ function Screen1({ data }: { data: LessonStatsDto }) {
   )
 }
 
+function QuestionStatLine({ q }: { q: QuestionStat }) {
+  const typeLabel = q.type === "MC" ? "Trắc nghiệm" : q.type === "TF" ? "Đúng/Sai" : "Tự luận ngắn"
+  const diffLabel =
+    q.difficulty === "easy" ? "Dễ" : q.difficulty === "medium" ? "Vừa" : q.difficulty === "hard" ? "Khó" : null
+  const discLabel =
+    q.discrimination == null
+      ? null
+      : q.discrimination >= 0.3
+        ? "Phân biệt tốt"
+        : q.discrimination >= 0.1
+          ? "Tạm"
+          : "Kém"
+  return (
+    <div className="text-xs text-foreground">
+      <p>
+        <span className="font-semibold">
+          Câu {q.questionNo} ({typeLabel})
+        </span>
+        {q.answered < 5 ? (
+          <> — Chưa đủ dữ liệu ({q.answered}/5 em)</>
+        ) : (
+          <>
+            {" "}
+            — {Math.round(q.missRate * 100)}% sai ({q.totalSlots - q.correct}/{q.totalSlots} ô) · Độ khó: {diffLabel}
+            {q.discrimination != null ? (
+              <>
+                {" "}
+                · Phân biệt: {discLabel} ({q.discrimination >= 0 ? "+" : ""}
+                {q.discrimination})
+              </>
+            ) : (
+              <> · Phân biệt: Chưa đủ dữ liệu ({q.answered}/10 lượt)</>
+            )}
+            {q.medianSec != null ? <> · Trung vị {q.medianSec} giây/câu</> : null}
+          </>
+        )}
+      </p>
+      {q.type !== "SA" && q.answered >= 5 && q.options.length > 0 ? (
+        <p className="mt-0.5 text-muted-foreground">
+          {q.options
+            .map(
+              (o) => `${truncate(o.label, 30)}: ${Math.round(o.rate * 100)}%${q.type === "TF" ? " đúng" : ""} (${o.count})`,
+            )
+            .join(" · ")}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 // ================= Màn 2 — Điểm kiến thức =================
 
 function Screen2({
@@ -585,6 +643,7 @@ function Screen2({
   onClearTooltip: () => void
 }) {
   const classSize = data.overview.classSize
+  const commonQuestions = data.questionStats.filter((q) => q.kpId == null)
   return (
     <div className="flex flex-col gap-4">
       {data.kpStats.length === 0 ? (
@@ -594,11 +653,12 @@ function Screen2({
           {data.kpStats.map((k) => {
             const names = namesByKpLevel.get(k.kpId)
             const expanded = expandedKp === k.kpId
+            const kpQuestions = data.questionStats.filter((q) => q.kpId === k.kpId)
             return (
               <li key={k.kpId} className="rounded-lg border border-border p-4">
                 <button type="button" onClick={() => onToggleKp(k.kpId)} className="w-full text-left">
                   <p className="text-sm text-foreground line-clamp-2">
-                    <span className="font-semibold">Điểm {k.kpNo}.</span> {k.content}
+                    <span className="font-semibold">Điểm kiến thức {k.kpNo}.</span> {k.content}
                   </p>
                 </button>
                 <p className="mt-1 flex flex-wrap gap-2 text-xs">
@@ -644,12 +704,12 @@ function Screen2({
                   </span>
                   {k.fillFirstTry.total > 0 ? (
                     <span>
-                      Điền đúng lần đầu: {k.fillFirstTry.correct}/{k.fillFirstTry.total}
+                      Điền khuyết đúng lần đầu: {k.fillFirstTry.correct}/{k.fillFirstTry.total}
                     </span>
                   ) : null}
                   {k.dragFirstTry.total > 0 ? (
                     <span>
-                      Kéo đúng lần đầu: {k.dragFirstTry.correct}/{k.dragFirstTry.total}
+                      Kéo thả đúng lần đầu: {k.dragFirstTry.correct}/{k.dragFirstTry.total}
                     </span>
                   ) : null}
                   {k.mostMissed ? (
@@ -688,6 +748,16 @@ function Screen2({
                         </p>
                       )
                     })}
+                    {kpQuestions.length > 0 ? (
+                      <div className="mt-2 border-t border-border/60 pt-2">
+                        <p className="mb-2 text-xs font-semibold text-foreground">Câu hỏi của điểm kiến thức này</p>
+                        <div className="flex flex-col gap-2">
+                          {kpQuestions.map((q) => (
+                            <QuestionStatLine key={q.questionId} q={q} />
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </li>
@@ -695,6 +765,22 @@ function Screen2({
           })}
         </ul>
       )}
+      {commonQuestions.length > 0 ? (
+        <div className="rounded-lg border border-border p-4">
+          <h3 className="mb-1 text-sm font-semibold text-foreground">
+            Câu hỏi chung của bài (chưa gắn vào điểm kiến thức)
+          </h3>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Các câu này chưa gắn vào điểm kiến thức nào nên không tính vào tầng của điểm nào; số liệu dưới đây để
+            giáo viên xem lại câu hỏi.
+          </p>
+          <div className="flex flex-col gap-2">
+            {commonQuestions.map((q) => (
+              <QuestionStatLine key={q.questionId} q={q} />
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -772,7 +858,7 @@ function Screen3({
       <div className="flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-2 text-xs text-foreground">
           <input type="checkbox" checked={onlyWeak} onChange={onToggleOnlyWeak} />
-          Chỉ em còn điểm đỏ
+          Chỉ em còn điểm kiến thức đỏ
         </label>
         <span className="mx-1 hidden h-4 w-px bg-border sm:block" aria-hidden="true" />
         {(
@@ -823,8 +909,8 @@ function Screen3({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Cột xếp theo độ khó giảm dần (Điểm 1 khó nhất). Rê chuột lên tên điểm để xem toàn bộ nội dung. Ô gạch
-        chéo là điểm chưa có câu kiểm tra. Bấm vào một ô để xem chi tiết; bấm tên học sinh để xem hồ sơ.
+        Cột xếp theo độ khó giảm dần (Điểm kiến thức 1 khó nhất). Rê chuột lên tên điểm kiến thức để xem toàn bộ nội dung. Ô gạch
+        chéo là điểm kiến thức chưa có câu kiểm tra. Bấm vào một ô để xem chi tiết; bấm tên học sinh để xem hồ sơ.
       </p>
 
       {visibleStudents.length === 0 ? (
@@ -840,10 +926,10 @@ function Screen3({
                     key={kp.id}
                     className="cursor-help px-2 pb-2 text-center font-medium"
                     title={kp.content}
-                    onMouseMove={(e) => onShowTooltip(e, `Điểm ${kpNoById.get(kp.id)}`, [kp.content])}
+                    onMouseMove={(e) => onShowTooltip(e, `Điểm kiến thức ${kpNoById.get(kp.id)}`, [kp.content])}
                     onMouseLeave={onClearTooltip}
                   >
-                    Điểm {kpNoById.get(kp.id)}
+                    Điểm kiến thức {kpNoById.get(kp.id)}
                   </th>
                 ))}
                 <th className="pb-2 pl-3 font-medium">Tổng kết</th>
@@ -929,7 +1015,7 @@ function Screen3({
         <div className="rounded-lg border border-border bg-secondary/40 p-4">
           <div className="flex items-start justify-between gap-2">
             <h3 className="text-sm font-semibold text-foreground">
-              Chi tiết ô: {detailRow.name} — Điểm {kpNoById.get(detailKp.id)}
+              Chi tiết ô: {detailRow.name} — Điểm kiến thức {kpNoById.get(detailKp.id)}
             </h3>
             <button type="button" onClick={() => onCellDetail(null)} className="text-xs text-muted-foreground">
               Đóng
@@ -974,7 +1060,7 @@ function Screen3({
                 : detailStudent.submittedAttempts
                     .map((a) => {
                       const slots = a.slotsByKp[detailKp.id]
-                      return slots ? `${slots.correct}/${slots.total} ô` : "không có câu của điểm này"
+                      return slots ? `${slots.correct}/${slots.total} ô` : "không có câu của điểm kiến thức này"
                     })
                     .join(" · ")}
             </span>
@@ -1004,11 +1090,11 @@ function Screen3({
                 </span>{" "}
                 {list.length === 0
                   ? "—"
-                  : list.map((kp) => `Điểm ${kpNoById.get(kp.id)}`).join(", ")}
+                  : list.map((kp) => `Điểm kiến thức ${kpNoById.get(kp.id)}`).join(", ")}
               </p>
             ))}
             <p className="text-xs text-muted-foreground">
-              Chưa kiểm chứng / Chưa làm: {profileGroups.other.length} điểm.
+              Chưa kiểm chứng / Chưa làm: {profileGroups.other.length} điểm kiến thức.
             </p>
           </div>
         </div>
@@ -1134,12 +1220,12 @@ function Screen4({
         <div className="rounded-lg border border-border p-3">
           <h4 className="text-sm font-semibold text-foreground">Tiến bộ nhất</h4>
           {data.mostImproved.length === 0 ? (
-            <p className="mt-1 text-xs text-muted-foreground">Chưa có điểm nào tăng số em Thành thạo.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Chưa có điểm kiến thức nào tăng số em Thành thạo.</p>
           ) : (
             <ul className="mt-1 flex flex-col gap-1 text-xs text-foreground">
               {data.mostImproved.map((m) => (
                 <li key={m.kpNo}>
-                  Điểm {m.kpNo}: +{m.delta} em Thành thạo
+                  Điểm kiến thức {m.kpNo}: +{m.delta} em Thành thạo
                 </li>
               ))}
             </ul>
@@ -1148,12 +1234,12 @@ function Screen4({
         <div className="rounded-lg border border-border p-3">
           <h4 className="text-sm font-semibold text-foreground">Thụt lùi nhất</h4>
           {data.leastImproved.length === 0 ? (
-            <p className="mt-1 text-xs text-muted-foreground">Không có điểm nào giảm số em Thành thạo.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Không có điểm kiến thức nào giảm số em Thành thạo.</p>
           ) : (
             <ul className="mt-1 flex flex-col gap-1 text-xs text-foreground">
               {data.leastImproved.map((m) => (
                 <li key={m.kpNo}>
-                  Điểm {m.kpNo}: {m.delta} em Thành thạo
+                  Điểm kiến thức {m.kpNo}: {m.delta} em Thành thạo
                 </li>
               ))}
             </ul>
@@ -1162,12 +1248,12 @@ function Screen4({
         <div className="rounded-lg border border-border p-3">
           <h4 className="text-sm font-semibold text-foreground">Yếu kéo dài (yếu từ 2 lượt trở lên)</h4>
           {data.persistentWeak.length === 0 ? (
-            <p className="mt-1 text-xs text-muted-foreground">Không có điểm yếu kéo dài.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Không có điểm kiến thức yếu kéo dài.</p>
           ) : (
             <ul className="mt-1 flex flex-col gap-1 text-xs text-foreground">
               {data.persistentWeak.map((m) => (
                 <li key={m.kpNo}>
-                  Điểm {m.kpNo}: {m.studentCount} em
+                  Điểm kiến thức {m.kpNo}: {m.studentCount} em
                 </li>
               ))}
             </ul>
@@ -1181,7 +1267,7 @@ function Screen4({
             ? `Điểm dao động (lượt gần nhất): ${scoreSpread.min} – ${scoreSpread.max} (lệch chuẩn ${scoreSpread.std})${samePaper ? " — cả lớp cùng bộ câu hỏi" : ""}. `
             : ""}
           {inSessionTransferred > 0
-            ? `Học được trong buổi: ${inSessionLearned}/${inSessionTransferred} điểm chuyển từ điền sang kéo đã lên Khá/Thành thạo.`
+            ? `Học được trong buổi: ${inSessionLearned}/${inSessionTransferred} điểm kiến thức chuyển từ điền khuyết sang kéo thả đã lên Khá/Thành thạo.`
             : ""}
         </p>
       ) : null}
@@ -1291,7 +1377,7 @@ const CRITERIA_A: [string, string, string, string, string][] = [
   ["Biết", "Đúng lần 1", "Không vào tab này", "Chưa hoàn thành", "Khá (F)"],
   ["Biết", "Đúng lần 2 (sau gợi ý)", "Không vào tab này", "Chưa hoàn thành", "Khá (F) · cờ “sau gợi ý”"],
   ["Biết", "Sai lần 1, đang chờ làm lại", "Chưa vào tab này", "Chưa hoàn thành", "Chưa kiểm chứng (F)"],
-  ["Biết", "Sai chốt → chuyển", "Chưa kéo xong", "Chưa hoàn thành", "Chưa tốt (F)"],
+  ["Biết", "Sai chốt → chuyển", "Chưa kéo thả xong", "Chưa hoàn thành", "Chưa tốt (F)"],
   ["Biết", "Sai chốt → chuyển", "Đúng lần 1", "Chưa hoàn thành", "Khá (D) · cờ “đã chuyển”"],
   ["Biết", "Sai chốt → chuyển", "Đúng lần 2", "Chưa hoàn thành", "Chưa tốt (F) · cờ “đã chuyển”"],
   ["Biết", "Sai chốt → chuyển", "Sai (đã chốt)", "Chưa hoàn thành", "Chưa tốt (F) · cờ “đã chuyển”"],
@@ -1308,8 +1394,8 @@ const CRITERIA_B: [string, string, string, string, string][] = [
   ["Đã hoàn thành", "Đã hoàn thành", "Đã hoàn thành", "Đúng ≥ 75% và đủ ≥ 2 ô đúng", "Thành thạo (Q)"],
   ["Đã hoàn thành", "Đã hoàn thành", "Đã hoàn thành", "Đúng 50% đến dưới 75%", "Khá (Q)"],
   ["Đã hoàn thành", "Đã hoàn thành", "Đã hoàn thành", "Đúng dưới 50%", "Chưa tốt (Q)"],
-  ["Biết", "Điền đúng (lần 1 hoặc sau gợi ý)", "Đã hoàn thành", "Quiz chỉ có 1 ô và đúng", "Thành thạo (Q) — vì đã có Biết + điền đúng làm bằng chứng, cộng 1 ô quiz đúng là đủ"],
-  ["Biết", "Điền đúng (lần 1 hoặc sau gợi ý)", "Đã hoàn thành", "Quiz chỉ có 1 ô và sai", "Khá (Q) — Biết + điền đúng đỡ cho 1 ô quiz sai"],
+  ["Biết", "Điền khuyết đúng (lần 1 hoặc sau gợi ý)", "Đã hoàn thành", "Quiz chỉ có 1 ô và đúng", "Thành thạo (Q) — vì đã có Biết + điền khuyết đúng làm bằng chứng, cộng 1 ô quiz đúng là đủ"],
+  ["Biết", "Điền khuyết đúng (lần 1 hoặc sau gợi ý)", "Đã hoàn thành", "Quiz chỉ có 1 ô và sai", "Khá (Q) — Biết + điền khuyết đúng đỡ cho 1 ô quiz sai"],
   ["Chưa biết, chưa làm, hoặc đã chuyển", "Theo Tab 1", "Đã hoàn thành", "Quiz chỉ có 1 ô và đúng", "Khá (Q) — chỉ 1 ô đúng thì chưa đủ lên Thành thạo"],
   ["Đã hoàn thành", "Đã hoàn thành", "Đã xem đáp án kéo thả", "Đúng 100% và đủ ≥ 2 ô đúng", "Thành thạo (Q)"],
   ["Đã hoàn thành", "Đã hoàn thành", "Đã xem đáp án kéo thả", "Đúng từ 50% (trừ dòng 7)", "Khá (Q)"],
@@ -1323,7 +1409,7 @@ function Screen5({ data }: { data: LessonStatsDto }) {
       <div className="space-y-1 text-sm text-muted-foreground">
         <p>
           <span className="font-medium text-foreground">Thứ bậc bằng chứng: </span>
-          Q (trắc nghiệm) &gt; F (điền khuyết) &gt; D (kéo thả) &gt; S (tự nhận). Khi một điểm có nhiều loại
+          Q (trắc nghiệm) &gt; F (điền khuyết) &gt; D (kéo thả) &gt; S (tự nhận). Khi một điểm kiến thức có nhiều loại
           bằng chứng, loại đứng trước quyết định mức; chữ cái trong ô ma trận cho biết nguồn nào đã quyết định.
         </p>
       </div>
@@ -1380,6 +1466,228 @@ function Screen5({ data }: { data: LessonStatsDto }) {
         </table>
       </div>
       <p className="text-xs text-muted-foreground">Tổng cộng {rows.length} dòng.</p>
+    </div>
+  )
+}
+
+// ================= Màn 6 — Trợ lý AI (#1 bản tin, #11 hỏi đáp) =================
+
+const AI_JOB_STATUS: Record<string, string> = {
+  pending: "Đang chờ AI xử lý",
+  detecting: "AI đang xử lý",
+  processing: "AI đang viết",
+  ready: "Đã xong",
+  failed: "Không xử lý được",
+}
+
+function Screen6({ data }: { data: LessonStatsDto }) {
+  const [jobs, setJobs] = useState<AiStatsJobRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState<"newsletter" | "qa" | null>(null)
+  const [question, setQuestion] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [expandedJob, setExpandedJob] = useState<string | null>(null)
+
+  const refresh = useCallback(async () => {
+    if (!data.lessonId) return
+    try {
+      setJobs(await listAiStatsJobs(data.classId, data.lessonId))
+    } catch {
+      // Tải lại lỗi (mạng chập chờn) thì giữ danh sách cũ.
+    }
+    setLoading(false)
+  }, [data.classId, data.lessonId])
+
+  useEffect(() => {
+    refresh()
+  }, [refresh])
+
+  const hasBusy = jobs.some((j) => j.status === "pending" || j.status === "processing")
+  useEffect(() => {
+    if (!hasBusy) return
+    const t = setInterval(refresh, 15000)
+    return () => clearInterval(t)
+  }, [hasBusy, refresh])
+
+  // Mã HS01.. trong số liệu ẩn danh theo đúng thứ tự học sinh của tab (tên A→Z);
+  // bản AI viết chỉ có mã, panel đổi mã thành tên để giáo viên đọc cho tiện.
+  const nameByCode = useMemo(() => {
+    const m = new Map<string, string>()
+    data.students.forEach((s, i) => m.set(`HS${String(i + 1).padStart(2, "0")}`, s.name))
+    return m
+  }, [data.students])
+  const withNames = (text: string) => text.replace(/HS\d+/g, (code) => nameByCode.get(code) ?? code)
+
+  const newsletters = jobs.filter((j) => j.kind === "newsletter")
+  const qas = jobs.filter((j) => j.kind === "qa")
+  const latestNewsletter = newsletters.find((j) => j.status === "ready")
+  const busyNewsletter = newsletters.some((j) => j.status === "pending" || j.status === "processing")
+  const olderNewsletters = newsletters.filter((j) => j.id !== latestNewsletter?.id)
+
+  const createNewsletter = async () => {
+    if (!data.lessonId || creating) return
+    setCreating("newsletter")
+    setError(null)
+    try {
+      await createAiStatsJob("newsletter", data.classId, data.lessonId)
+      await refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không tạo được việc")
+    }
+    setCreating(null)
+  }
+
+  const ask = async (q: string) => {
+    if (!data.lessonId || creating || !q.trim()) return
+    setCreating("qa")
+    setError(null)
+    try {
+      await createAiStatsJob("qa", data.classId, data.lessonId, q.trim())
+      setQuestion("")
+      await refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không tạo được việc")
+    }
+    setCreating(null)
+  }
+
+  const renderJobBody = (job: AiStatsJobRow) => {
+    if (job.status === "ready" && job.resultText) {
+      return <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{withNames(job.resultText)}</p>
+    }
+    if (job.status === "failed") {
+      return <p className="text-sm text-red-600">{job.error ?? "AI không xử lý được việc này."}</p>
+    }
+    return (
+      <p className="text-sm text-muted-foreground">
+        {AI_JOB_STATUS[job.status] ?? job.status}
+        {job.stage ? ` — ${job.stage}` : ""}…
+      </p>
+    )
+  }
+
+  const fmtJobTime = (iso: string) =>
+    new Date(iso).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+
+  if (!data.lessonId) {
+    return <p className="py-6 text-center text-sm text-muted-foreground">Chưa chọn bài để thống kê.</p>
+  }
+  return (
+    <div className="flex flex-col gap-6">
+      <p className="text-xs text-muted-foreground">
+        Trợ lý AI chỉ đọc số liệu đã ẩn danh (học sinh chỉ còn mã HS01, HS02… theo thứ tự tên trong tab), không thấy
+        tên thật; bản hiển thị dưới đây đã đổi mã thành tên để giáo viên dễ đọc. AI không chấm điểm, không đổi tầng
+        của học sinh — chỉ viết bản tin và trả lời từ số liệu.
+      </p>
+      {error ? <p className="rounded-lg bg-red-100 p-3 text-sm text-red-700">{error}</p> : null}
+
+      <section className="rounded-lg border border-border p-4">
+        <h3 className="text-sm font-semibold text-foreground">Bản tin lớp</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Tóm tắt tình hình lớp cho giáo viên: em nào cần hỗ trợ, điểm kiến thức nào yếu, câu nào nên xem lại.
+        </p>
+        {loading ? (
+          <p className="mt-3 text-sm text-muted-foreground">Đang tải…</p>
+        ) : busyNewsletter ? (
+          <p className="mt-3 text-sm text-muted-foreground">AI đang viết bản tin… (tự cập nhật khoảng 15 giây một lần)</p>
+        ) : latestNewsletter ? (
+          <div className="mt-3 rounded-lg bg-secondary/40 p-4">{renderJobBody(latestNewsletter)}</div>
+        ) : (
+          <p className="mt-3 text-sm text-muted-foreground">Chưa có bản tin nào cho bài này.</p>
+        )}
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={createNewsletter}
+            disabled={creating === "newsletter" || busyNewsletter}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {creating === "newsletter" ? "Đang tạo…" : latestNewsletter || busyNewsletter ? "Tạo bản tin mới" : "Tạo bản tin"}
+          </button>
+          <button
+            type="button"
+            onClick={refresh}
+            className="rounded-lg border border-border px-4 py-2 text-sm hover:bg-secondary"
+          >
+            Làm mới
+          </button>
+        </div>
+        {olderNewsletters.length > 0 ? (
+          <div className="mt-4 border-t border-border/60 pt-3">
+            <p className="mb-2 text-xs font-semibold text-foreground">Bản tin trước</p>
+            <div className="flex flex-col gap-2">
+              {olderNewsletters.map((job) => (
+                <div key={job.id} className="rounded-lg bg-secondary/40 p-3">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedJob((cur) => (cur === job.id ? null : job.id))}
+                    className="w-full text-left text-xs text-foreground"
+                  >
+                    <span className="font-semibold">{fmtJobTime(job.createdAt)}</span> ·{" "}
+                    {AI_JOB_STATUS[job.status] ?? job.status}
+                  </button>
+                  {expandedJob === job.id ? <div className="mt-2">{renderJobBody(job)}</div> : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="rounded-lg border border-border p-4">
+        <h3 className="text-sm font-semibold text-foreground">Hỏi đáp số liệu</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Hỏi về lớp, bài, điểm kiến thức, học sinh — AI trả lời từ số liệu, kèm con số cụ thể; chưa đủ dữ liệu thì
+          nói rõ là chưa đủ, không đoán.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {["Điểm kiến thức nào yếu nhất?", "Em nào cần hỗ trợ?", "Câu nào nên xem lại?", "Lớp tiến bộ ra sao?"].map(
+            (s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setQuestion(s)}
+                className="rounded-full border border-border px-3 py-1 text-xs hover:bg-secondary"
+              >
+                {s}
+              </button>
+            ),
+          )}
+        </div>
+        <div className="mt-3 flex gap-2">
+          <input
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") ask(question)
+            }}
+            placeholder="Vd: Điểm kiến thức nào yếu nhất?"
+            className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+          />
+          <button
+            type="button"
+            onClick={() => ask(question)}
+            disabled={creating === "qa" || !question.trim()}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {creating === "qa" ? "Đang gửi…" : "Hỏi"}
+          </button>
+        </div>
+        <div className="mt-4 flex flex-col gap-3">
+          {qas.map((job) => (
+            <div key={job.id} className="rounded-lg bg-secondary/40 p-3">
+              <p className="text-sm font-semibold text-foreground">{job.question ?? "Câu hỏi"}</p>
+              <div className="mt-1">{renderJobBody(job)}</div>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {AI_JOB_STATUS[job.status] ?? job.status} · {fmtJobTime(job.createdAt)}
+              </p>
+            </div>
+          ))}
+          {qas.length === 0 && !loading ? (
+            <p className="text-sm text-muted-foreground">Chưa có câu hỏi nào.</p>
+          ) : null}
+        </div>
+      </section>
     </div>
   )
 }

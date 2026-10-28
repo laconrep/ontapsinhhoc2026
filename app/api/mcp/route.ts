@@ -8,6 +8,7 @@ import {
   reportDetection,
   setJobProgress,
   submitJobResult,
+  submitTextResult,
 } from "@/lib/ai/jobs"
 import type { AiResult } from "@/lib/ai/types"
 
@@ -111,6 +112,16 @@ const TOOLS = [
     },
   },
   {
+    name: "submit_text_result",
+    description:
+      "Nộp kết quả dạng văn bản cho việc thống kê (bản tin lớp #1, hỏi đáp #11). Chỉ dùng cho việc có kind stats_newsletter/stats_qa (xem resultMeta.kind trong get_job); việc nhập bài dùng submit_result.",
+    inputSchema: {
+      type: "object",
+      properties: { jobId: { type: "string" }, text: { type: "string" } },
+      required: ["jobId", "text"],
+    },
+  },
+  {
     name: "fail_job",
     description: "Báo việc không xử lý được, kèm lý do hiển thị cho giáo viên.",
     inputSchema: {
@@ -170,6 +181,9 @@ async function callTool(name: string, args: Record<string, unknown>, workerId: s
           filename: job.filename,
           teacherId: job.teacherId,
           status: job.status,
+          // Việc thống kê mang kind trong resultMeta (stats_newsletter/stats_qa);
+          // việc nhập bài không có kind (null).
+          kind: (job.resultMeta as { kind?: string } | null)?.kind ?? null,
           sourceText: job.sourceText,
           hasSolutions: job.hasSolutions,
           wantSolutions: job.wantSolutions,
@@ -194,6 +208,10 @@ async function callTool(name: string, args: Record<string, unknown>, workerId: s
     case "submit_result": {
       const res = await submitJobResult(jobId, workerId, (args.result ?? {}) as AiResult)
       return toolText(res, !res.ok && !res.repairErrors)
+    }
+    case "submit_text_result": {
+      const res = await submitTextResult(jobId, workerId, typeof args.text === "string" ? args.text : "")
+      return toolText(res, !res.ok)
     }
     case "fail_job": {
       const res = await failJob(jobId, workerId, typeof args.reason === "string" ? args.reason : "Không rõ lý do")
