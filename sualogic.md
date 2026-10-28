@@ -2494,3 +2494,53 @@ không; (b) luồng Tab 2 mới (sai lần 2 khóa + chuyển sang kéo, gợi �
 cái đầu, không lộ đáp án) — triển khai sau §39; (c) bảo đảm ≥ 2 ô cho
 mọi điểm ở phía AI sinh câu hỏi (kèm duyệt hàng loạt); (d) mô hình gán
 TF nhiều điểm (theo ý hay theo câu + sinh thêm); (e) synonym retroactive.
+
+## §40 — Điền thắng kéo: viết lại tầng theo chốt 28/10 (sau đánh giá file v2)
+
+QUYẾT (user chốt 28/10, sau khi đánh giá file De-xuat-thong-ke-v2 so với
+§39): (1) ĐIỀN THẮNG KÉO ở tầng B — chuyển rồi kéo đúng vẫn Chưa tốt,
+chỉ Tab 4 gỡ, tính trên Ô ĐIỂM CỦA ĐIỂM ĐÓ (không phải điểm toàn bài):
+≥ 75% -> Thành thạo, 50–<75% -> Khá, < 50% -> Chưa tốt; 1 ô theo code
+§39 (đúng -> Khá do chặn, sai -> Chưa tốt). (2) Ngưỡng 75/50 xác nhận
+(bỏ 80). (3) B6: chép đáp án + Tab 4 -> Thành thạo CHỈ khi đúng 100%
+trắc nghiệm. (4) Bảng 1 ô + firm + Màn 4 theo code §39 (firm hẹp: kết
+hợp chỉ dành cho Biết + điền đúng; Màn 4 giữ chặn 2 ô ở attemptTier).
+(5) §3 tổng 5 cột = sĩ số + cảnh báo nội dung: đồng ý (chưa code cảnh
+báo). (6) Kéo đúng lần 1 (không lộ) ở điểm chuyển: điền kéo BẰNG NHAU
+-> Khá ở tầng B; kéo lần 2 mới đúng -> kéo thua điền -> Chưa tốt ở
+tầng B, nhưng trắc nghiệm 75% vẫn gỡ lên Thành thạo. (7) A7 (chuyển +
+kéo đúng sau lộ) + quiz: 75% -> Khá, 1/1 -> Khá, 1/2 (50%) -> Khá,
+100% (đủ ≥ 2 ô) -> Thành thạo. (8) Chép đáp án (A12) + quiz 75–99% ->
+Khá. Ghi chú đầu file viết theo điền-thắng-kéo; kp_run_results ghi đè
+selfAssessment là rủi ro thật (upsert student-learn.ts:550 CÓ ghi đè)
+— xử lý khi làm luồng; A3 lên Thành thạo sơ bộ KHÔNG mở lại.
+
+CODE (lib/lesson-stats.ts, chỉ tierForKp + ghi chú đầu file, pool/Màn 1/
+Màn 4 không đổi): bỏ nhánh (0) kéo lộ khóa Chưa tốt tuyệt đối; lộ chỉ
+hạ mức trong nhánh quiz (100% đủ ≥ 2 ô -> Thành thạo, 50–99% -> Khá,
+< 50% -> Chưa tốt; 1 ô đúng 100% sau lộ vẫn Khá do chặn); nhánh chuyển
+riêng trước nhánh điền/kéo thường: kéo đúng lần 1 (firstTry đúng,
+fallback attempts == 1) -> Khá (D) + cờ "đã chuyển", kéo đã chốt còn
+lại -> Chưa tốt (F, riêng sau lộ nguồn D) + cờ "đã chuyển", chưa kéo
+hoặc kéo chờ -> Chưa tốt (F, điền chốt đứng); điểm không chuyển theo
+bước chốt điền trước (điền đúng -> Khá + cờ sau gợi ý, điền sai chốt
+-> Chưa tốt), điền trống thì kéo quyết (đúng chưa lộ -> Khá, còn lại
+-> Chưa tốt); chờ -> Chưa kiểm chứng; tự nhận -> Chưa kiểm chứng (S).
+Tainted = drag.status != null && drag.revealed (đúng lần 3+ hoặc sai
+sau lộ, kể cả sai sau lộ + quiz 100% cũng gỡ theo cùng luật lộ nới lỏng).
+
+KIỂM THỬ: scripts/check-class-stats-tier.mjs 78/78 (thêm: chuyển + kéo
+lần 2 + quiz 75% -> Thành thạo, chuyển + kéo lần 2 + quiz 1/1 -> Khá,
+lộ nới lỏng 1/1 -> Khá, 4/4 -> Thành thạo, 3/4 -> Khá, 1/2 -> Khá,
+1/4 -> Chưa tốt, chuyển + kéo lần 2 -> Chưa tốt nguồn F + cờ, chuyển +
+kéo sau lộ -> Chưa tốt nguồn D + cờ). Suite 41/48 pass, đúng 7 lỗi cũ
+(class-phien1/2/3/6, parser-phien6/8, preview-phien3), không hồi quy.
+tsc sạch. CHƯA PUSH (chờ PAT mới, chung với §39).
+
+CÒN MỞ (không thuộc §40): (a) tab "Tiêu chí đánh giá" thay ô ngưỡng
+80/50 — đang chờ chốt thiết kế (vị trí tab, ngưỡng còn cho sửa ở đâu
+không); (b) cảnh báo nội dung C1 + reassessedCount + dragReassessedPool
++ mở rộng hệ cờ (Đúng lần đầu, Sau 1 lần sai, Chép đáp án, Quên nhanh,
+Tiến bộ trong buổi, khiêm tốn, mâu thuẫn, bỏ trống); (c) luồng Tab 2
+mới; (d) bảo đảm ≥ 2 ô phía AI; (e) gán TF nhiều điểm; (f) synonym
+retroactive; (g) migrate ngưỡng 80 đã lưu sang 75.

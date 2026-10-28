@@ -1,4 +1,4 @@
-// §38 (full): kiểm thử lõi tính toán thống kê (thuần túy, không cần DB).
+// §38/§39/§40: kiểm thử lõi tính toán thống kê (thuần túy, không cần DB).
 // Chạy: node --import ~/workspace/.epg/register-loader.mjs scripts/check-class-stats-tier.mjs
 import {
   tierForKp,
@@ -46,9 +46,14 @@ check("A: đệm chỉ cho 1 ô: Biết + điền đúng + trắc nghiệm 1/4 (
 check("A: chưa biết + kéo đúng + trắc nghiệm 1/1 -> Khá (bị chặn)", tierForKp({ quizCorrect: 1, quizTotal: 1, self: "unknown", fill: emptyTab, drag: tab("correct", "correct"), hasQuizQuestion: true }, T).level === "ok")
 check("A: chưa biết + kéo đúng + trắc nghiệm 0/1 -> Chưa tốt", tierForKp({ quizCorrect: 0, quizTotal: 1, self: "unknown", fill: emptyTab, drag: tab("correct", "correct"), hasQuizQuestion: true }, T).level === "weak")
 check("A: chuyển + kéo đúng + trắc nghiệm 1/1 -> Khá (không vượt chặn vì điền đã sai)", tierForKp({ quizCorrect: 1, quizTotal: 1, self: "known", fill: tab("incorrect", "incorrect", 2), drag: tab("correct", "correct"), hasQuizQuestion: true, transferred: true }, T).level === "ok")
-check("A: chuyển + kéo đúng + trắc nghiệm 3/4 -> Thành thạo (trắc nghiệm thắng kéo)", tierForKp({ quizCorrect: 3, quizTotal: 4, self: "known", fill: tab("incorrect", "incorrect", 2), drag: tab("correct", "correct"), hasQuizQuestion: true, transferred: true }, T).level === "mastered")
-check("A: kéo lộ khóa Chưa tốt: kéo đúng sau lộ + trắc nghiệm 1/1 -> Chưa tốt", tierForKp({ quizCorrect: 1, quizTotal: 1, self: "unknown", fill: emptyTab, drag: tab("correct", "incorrect", 3, true), hasQuizQuestion: true }, T).level === "weak")
-check("A: kéo lộ khóa Chưa tốt: kéo sai sau lộ + trắc nghiệm 4/4 -> Chưa tốt", tierForKp({ quizCorrect: 4, quizTotal: 4, self: "unknown", fill: emptyTab, drag: tab("incorrect", "incorrect", 3, true), hasQuizQuestion: true }, T).level === "weak")
+check("A: chuyển + kéo đúng + trắc nghiệm 3/4 -> Thành thạo (trắc nghiệm thắng điền/kéo)", tierForKp({ quizCorrect: 3, quizTotal: 4, self: "known", fill: tab("incorrect", "incorrect", 2), drag: tab("correct", "correct"), hasQuizQuestion: true, transferred: true }, T).level === "mastered")
+check("A: chuyển + kéo đúng lần 2 + trắc nghiệm 3/4 -> Thành thạo (kéo lần 2 đúng + quiz 75%)", tierForKp({ quizCorrect: 3, quizTotal: 4, self: "known", fill: tab("incorrect", "incorrect", 2), drag: tab("correct", "incorrect", 2), hasQuizQuestion: true, transferred: true }, T).level === "mastered")
+check("A: chuyển + kéo đúng lần 2 + trắc nghiệm 1/1 -> Khá (chặn 1 ô)", tierForKp({ quizCorrect: 1, quizTotal: 1, self: "known", fill: tab("incorrect", "incorrect", 2), drag: tab("correct", "incorrect", 2), hasQuizQuestion: true, transferred: true }, T).level === "ok")
+check("A: lộ nới lỏng: kéo đúng sau lộ + trắc nghiệm 1/1 -> Khá (100% nhưng 1 ô nên bị chặn)", tierForKp({ quizCorrect: 1, quizTotal: 1, self: "unknown", fill: emptyTab, drag: tab("correct", "incorrect", 3, true), hasQuizQuestion: true }, T).level === "ok")
+check("A: lộ nới lỏng: kéo sai sau lộ + trắc nghiệm 4/4 -> Thành thạo (100% gỡ lộ)", tierForKp({ quizCorrect: 4, quizTotal: 4, self: "unknown", fill: emptyTab, drag: tab("incorrect", "incorrect", 3, true), hasQuizQuestion: true }, T).level === "mastered")
+check("A: lộ nới lỏng: kéo đúng sau lộ + trắc nghiệm 3/4 (75%) -> Khá (chưa gỡ hết lộ)", tierForKp({ quizCorrect: 3, quizTotal: 4, self: "unknown", fill: emptyTab, drag: tab("correct", "incorrect", 3, true), hasQuizQuestion: true }, T).level === "ok")
+check("A: lộ nới lỏng: kéo đúng sau lộ + trắc nghiệm 1/2 (50%) -> Khá", tierForKp({ quizCorrect: 1, quizTotal: 2, self: "unknown", fill: emptyTab, drag: tab("correct", "incorrect", 3, true), hasQuizQuestion: true }, T).level === "ok")
+check("A: lộ nới lỏng: kéo đúng sau lộ + trắc nghiệm 1/4 (25%) -> Chưa tốt", tierForKp({ quizCorrect: 1, quizTotal: 4, self: "unknown", fill: emptyTab, drag: tab("correct", "incorrect", 3, true), hasQuizQuestion: true }, T).level === "weak")
 check("A: 4/10 ô = 40% -> Chưa tốt", tierForKp({ quizCorrect: 4, quizTotal: 10, self: "known", fill: emptyTab, drag: emptyTab, hasQuizQuestion: true }, T).level === "weak")
 check("A: ngưỡng lớp 90/60 đổi kết quả", tierForKp({ quizCorrect: 8, quizTotal: 10, self: "known", fill: emptyTab, drag: emptyTab, hasQuizQuestion: true }, { mastery: 90, ok: 60 }).level === "ok")
 check("A: nguồn Q + đúng/tổng ô", (() => {
@@ -77,11 +82,22 @@ check("B: kéo đúng -> Khá, nguồn D", (() => {
 })())
 check("B: kéo sai lần 1 đang chờ làm lại -> Chưa kiểm chứng (đối xứng điền chờ)", tierForKp({ quizCorrect: null, quizTotal: null, self: "unknown", fill: emptyTab, drag: tab("incorrect", "incorrect", 1), hasQuizQuestion: false }, T).level === "unverified")
 check("B: kéo sai đã chốt -> Chưa tốt", tierForKp({ quizCorrect: null, quizTotal: null, self: "unknown", fill: emptyTab, drag: tab("incorrect", "incorrect", 2), hasQuizQuestion: false }, T).level === "weak")
-check("B: chuyển + kéo đúng -> Khá + cờ đã chuyển", (() => {
+check("B: chuyển + kéo đúng lần 1 -> Khá + cờ đã chuyển (điền kéo bằng nhau)", (() => {
   const r = tierForKp({ quizCorrect: null, quizTotal: null, self: "known", fill: tab("incorrect", "incorrect", 2), drag: tab("correct", "correct"), hasQuizQuestion: false, transferred: true }, T)
   return r.level === "ok" && r.source === "D" && r.flags.includes("đã chuyển")
 })())
-check("B: chuyển + kéo sai đã chốt -> Chưa tốt", tierForKp({ quizCorrect: null, quizTotal: null, self: "known", fill: tab("incorrect", "incorrect", 2), drag: tab("incorrect", "incorrect", 2), hasQuizQuestion: false, transferred: true }, T).level === "weak")
+check("B: chuyển + kéo đúng lần 2 -> Chưa tốt nguồn F + cờ đã chuyển (kéo thua điền)", (() => {
+  const r = tierForKp({ quizCorrect: null, quizTotal: null, self: "known", fill: tab("incorrect", "incorrect", 2), drag: tab("correct", "incorrect", 2), hasQuizQuestion: false, transferred: true }, T)
+  return r.level === "weak" && r.source === "F" && r.flags.includes("đã chuyển")
+})())
+check("B: chuyển + kéo đúng sau lộ -> Chưa tốt nguồn D + cờ đã chuyển (lộ, chưa quiz)", (() => {
+  const r = tierForKp({ quizCorrect: null, quizTotal: null, self: "known", fill: tab("incorrect", "incorrect", 2), drag: tab("correct", "incorrect", 3, true), hasQuizQuestion: false, transferred: true }, T)
+  return r.level === "weak" && r.source === "D" && r.flags.includes("đã chuyển")
+})())
+check("B: chuyển + kéo sai đã chốt -> Chưa tốt nguồn F + cờ đã chuyển", (() => {
+  const r = tierForKp({ quizCorrect: null, quizTotal: null, self: "known", fill: tab("incorrect", "incorrect", 2), drag: tab("incorrect", "incorrect", 2), hasQuizQuestion: false, transferred: true }, T)
+  return r.level === "weak" && r.source === "F" && r.flags.includes("đã chuyển")
+})())
 check("B: chuyển + kéo chờ -> Chưa tốt (điền chốt đứng, kéo chờ không xóa)", tierForKp({ quizCorrect: null, quizTotal: null, self: "known", fill: tab("incorrect", "incorrect", 2), drag: tab("incorrect", "incorrect", 1), hasQuizQuestion: false, transferred: true }, T).level === "weak")
 check("B: chuyển + chưa kéo -> Chưa tốt", tierForKp({ quizCorrect: null, quizTotal: null, self: "known", fill: tab("incorrect", "incorrect", 2), drag: emptyTab, hasQuizQuestion: false, transferred: true }, T).level === "weak")
 check("B: nhãn Chưa có câu kiểm tra khi điểm không gắn câu", tierForKp({ quizCorrect: null, quizTotal: null, self: "known", fill: tab("correct", "correct"), drag: emptyTab, hasQuizQuestion: false }, T).noQuizQuestion === true)

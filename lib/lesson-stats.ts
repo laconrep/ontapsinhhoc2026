@@ -8,26 +8,32 @@ import { isOverconfident } from "@/lib/scoring"
  * scripts/check-class-stats-*.mjs mà không cần dựng app.
  *
  * Quy tắc tầng (tier) cho một (học sinh, điểm kiến thức), theo lượt hiện tại.
- * Thứ tự ưu tiên bằng chứng (khung tầng đã chốt 28/10):
- *   (0) Kéo lộ khóa Chưa tốt: bất kỳ kết quả kéo nào sau khi đã lộ đáp án
- *       (đúng lần 3+ hoặc sai sau lộ) đều khóa ở Chưa tốt trong lượt này,
- *       trắc nghiệm không gỡ được.
+ * Thứ tự ưu tiên bằng chứng (khung tầng đã chốt 28/10, ĐIỀN THẮNG KÉO):
  *   (1) Có câu kiểm tra trong lượt kiểm tra gần nhất đã nộp -> theo trắc
- *       nghiệm: tỉ lệ ô đúng, ngưỡng theo lớp (mặc định 75/50); Thành thạo
- *       cần thêm ≥ 2 ô đúng (chặn trên tính theo ô — chỉ cắn điểm 1 ô);
- *       điểm 1 ô có bằng chứng kết hợp: Biết + điền đúng + trắc nghiệm
- *       đúng -> Thành thạo (vượt chặn), Biết + điền đúng + trắc nghiệm
- *       sai -> Khá (đệm); đệm chỉ cho 1 ô, trắc nghiệm nhiều ô dưới 50%
- *       vẫn Chưa tốt dù điền đúng.
- *   (2) Chưa có trắc nghiệm nhưng đã có kết quả chốt ở Tab 2/3 -> theo
- *       bước chốt sau cùng (kéo nếu có, ngược lại điền): đúng -> Khá
- *       (kèm cờ "sau gợi ý" nếu điền đúng sau gợi ý, cờ "đã chuyển" nếu
- *       điểm chuyển từ điền sang mà kéo đúng); sai đã chốt -> Chưa tốt.
- *   (3) Mới sai 1 lần, đang chờ làm lại (điền hoặc kéo) -> Chưa kiểm chứng
+ *       nghiệm: tỉ lệ ô đúng của ĐIỂM ĐÓ (không phải điểm toàn bài),
+ *       ngưỡng theo lớp (mặc định 75/50); Thành thạo cần thêm ≥ 2 ô đúng
+ *       (chặn trên tính theo ô — chỉ cắn điểm 1 ô); điểm 1 ô có bằng chứng
+ *       kết hợp: Biết + điền đúng + trắc nghiệm đúng -> Thành thạo (vượt
+ *       chặn), Biết + điền đúng + trắc nghiệm sai -> Khá (đệm); đệm chỉ
+ *       cho 1 ô, trắc nghiệm nhiều ô dưới 50% vẫn Chưa tốt dù điền đúng.
+ *       Ngoại lệ kéo lộ (nới lỏng 28/10): kết quả kéo sau lộ chỉ hạ mức
+ *       trắc nghiệm — 100% (đủ ≥ 2 ô) -> Thành thạo, 50–99% -> Khá,
+ *       < 50% -> Chưa tốt; điểm 1 ô đúng 100% sau lộ vẫn Khá (chặn).
+ *   (2) Chưa có trắc nghiệm nhưng điểm đã chuyển (submission Biết ∧ tiến
+ *       trình Chưa biết) -> điền thắng kéo: kéo đúng lần 1 (không lộ) thì
+ *       điền kéo bằng nhau -> Khá (D) + cờ "đã chuyển"; các trường hợp
+ *       còn lại (chưa kéo, kéo đang chờ, kéo đúng lần 2, kéo sai, kéo
+ *       sau lộ) -> Chưa tốt (F, riêng kéo sau lộ nguồn D) + cờ "đã
+ *       chuyển" khi kéo đã chốt.
+ *   (3) Chưa có trắc nghiệm, điểm không chuyển -> theo bước chốt: điền
+ *       đúng -> Khá (kèm cờ "sau gợi ý" nếu điền đúng sau gợi ý), điền
+ *       sai đã chốt -> Chưa tốt; điền trống thì kéo quyết (đúng chưa lộ
+ *       -> Khá, còn lại -> Chưa tốt).
+ *   (4) Mới sai 1 lần, đang chờ làm lại (điền hoặc kéo) -> Chưa kiểm chứng
  *       (ô lần đầu vẫn đỏ ở Màn 1 qua fillRed/dragRed); ngoại lệ: điền cũ
  *       đã lộ mà vẫn sai -> Chưa tốt.
- *   (4) Chỉ tự nhận xét, chưa làm Tab 2/3 -> Chưa kiểm chứng (S).
- *   (5) Không có hoạt động nào -> Chưa làm.
+ *   (5) Chỉ tự nhận xét, chưa làm Tab 2/3 -> Chưa kiểm chứng (S).
+ *   (6) Không có hoạt động nào -> Chưa làm.
  * Điểm không gắn câu kiểm tra nào luôn mang nhãn "Chưa có câu kiểm tra"
  * (ô ma trận gạch chéo), bất kể nguồn tầng nào.
  *
@@ -110,8 +116,9 @@ export interface TierResult {
   quizTotal: number | null
   noQuizQuestion: boolean
   /** Cờ hiển thị: "sau gợi ý" (điền đúng sau gợi ý), "đã chuyển" (điểm
-   *  chuyển từ điền sang mà kéo đúng). Chỉ gắn ở tầng Tab 2/3 và trường
-   *  hợp 1 ô có bằng chứng kết hợp/đệm; tầng trắc nghiệm nhiều ô không cờ. */
+   *  chuyển từ điền sang và đã có kết quả kéo chốt — kèm cả khi kéo
+   *  không gỡ được điền). Chỉ gắn ở tầng Tab 2/3 và trường hợp 1 ô có
+   *  bằng chứng kết hợp/đệm; tầng trắc nghiệm nhiều ô không cờ. */
   flags: string[]
 }
 
@@ -125,38 +132,57 @@ export function tierForKp(input: TierInput, t: StatsThresholds): TierResult {
     quizTotal: null as number | null,
     noQuizQuestion,
   }
+  // Kéo lộ = kết quả kéo sau khi đã lộ đáp án (đúng lần 3+ hoặc sai sau lộ).
+  const tainted = drag?.status != null && drag.revealed
+  // Kéo đúng lần 1 = đúng ngay lần thử đầu, chưa lộ (firstTry đúng; dữ liệu
+  // cũ thiếu firstTry thì attempts == 1 coi như lần 1).
+  const dragFirstTry =
+    drag?.status === "correct" &&
+    !drag.revealed &&
+    (drag.firstTry === "correct" || (drag.firstTry == null && drag.attempts === 1))
 
-  // (0) Kéo lộ khóa Chưa tốt: bất kỳ kết quả kéo nào sau khi đã lộ đáp án
-  // đều khóa ở Chưa tốt trong lượt này, trắc nghiệm không gỡ được.
-  if (drag?.status != null && drag.revealed) {
-    return { level: "weak", source: "D", ...base, flags: [] }
-  }
-
-  // (1) Trắc nghiệm đã nộp thắng tất cả (trừ kéo lộ ở trên).
+  // (1) Trắc nghiệm đã nộp.
   if (input.quizTotal != null && input.quizTotal > 0) {
     const correct = input.quizCorrect ?? 0
-    let level = quizLevel(correct, input.quizTotal, t)
+    let level: StatsLevel
     let flags: string[] = []
-    // Điểm 1 ô có bằng chứng kết hợp / đệm (chỉ khi Biết + điền đúng).
-    if (input.quizTotal === 1 && input.self === "known" && fill?.status === "correct") {
-      level = correct === 1 ? "mastered" : "ok"
-      flags = fill.firstTry === "incorrect" ? ["sau gợi ý"] : []
+    if (tainted) {
+      // Lộ nới lỏng (chốt 28/10): trắc nghiệm gỡ lộ dần — 100% (đủ ≥ 2 ô)
+      // -> Thành thạo, 50–99% -> Khá, < 50% -> Chưa tốt. Điểm 1 ô đúng
+      // 100% sau lộ vẫn Khá vì chặn ≥ 2 ô (không có bằng chứng kết hợp
+      // cho điểm chuyển/chép).
+      if (correct === input.quizTotal && correct >= 2) level = "mastered"
+      else if ((correct / input.quizTotal) * 100 >= t.ok) level = "ok"
+      else level = "weak"
+    } else {
+      level = quizLevel(correct, input.quizTotal, t)
+      // Điểm 1 ô có bằng chứng kết hợp / đệm (chỉ khi Biết + điền đúng).
+      if (input.quizTotal === 1 && input.self === "known" && fill?.status === "correct") {
+        level = correct === 1 ? "mastered" : "ok"
+        flags = fill.firstTry === "incorrect" ? ["sau gợi ý"] : []
+      }
     }
     return { level, source: "Q", quizCorrect: correct, quizTotal: input.quizTotal, noQuizQuestion, flags }
   }
 
-  // (2) Kéo/điền đã chốt — kéo là bước sau cùng nên thắng điền khi cả hai chốt.
-  // "Chốt" = đúng, hoặc sai mà không còn ở trạng thái chờ (sai lần 1).
-  const fillTerminal = fill?.status === "correct" || (fill?.status === "incorrect" && fill.attempts !== 1)
-  const dragTerminal = drag?.status === "correct" || (drag?.status === "incorrect" && drag.attempts !== 1)
-  if (dragTerminal && drag) {
-    return {
-      level: drag.status === "correct" ? "ok" : "weak",
-      source: "D",
-      ...base,
-      flags: drag.status === "correct" && transferred ? ["đã chuyển"] : [],
+  // (2) Tầng B, điểm đã chuyển: ĐIỀN THẮNG KÉO (chốt 28/10). Điền đã sai
+  // chốt (F) đứng trước kéo, trừ kéo đúng lần 1 (không lộ) thì điền kéo
+  // bằng nhau -> Khá. Kéo sau lộ nguồn D (lộ), còn lại nguồn F.
+  if (transferred) {
+    const dragTerminal = drag?.status === "correct" || (drag?.status === "incorrect" && drag.attempts !== 1)
+    if (dragTerminal && dragFirstTry) {
+      return { level: "ok", source: "D", ...base, flags: ["đã chuyển"] }
     }
+    if (dragTerminal) {
+      return { level: "weak", source: tainted ? "D" : "F", ...base, flags: ["đã chuyển"] }
+    }
+    // Chưa kéo, hoặc kéo đang chờ: điền chốt đứng -> Chưa tốt.
+    return { level: "weak", source: "F", ...base, flags: [] }
   }
+
+  // (3) Tầng B, điểm không chuyển: theo bước chốt — điền trước, kéo sau
+  // khi điền trống. Điền đúng -> Khá, điền sai đã chốt -> Chưa tốt.
+  const fillTerminal = fill?.status === "correct" || (fill?.status === "incorrect" && fill.attempts !== 1)
   if (fillTerminal && fill) {
     return {
       level: fill.status === "correct" ? "ok" : "weak",
@@ -169,14 +195,25 @@ export function tierForKp(input: TierInput, t: StatsThresholds): TierResult {
   if (fill?.status === "incorrect" && fill.revealed) {
     return { level: "weak", source: "F", ...base, flags: [] }
   }
-  // (3) Đang chờ (mới sai 1 lần, chưa chốt) -> Chưa kiểm chứng.
+  // Kéo đã chốt (điểm gốc Chưa biết, điền trống): đúng chưa lộ -> Khá,
+  // đúng sau lộ hoặc sai -> Chưa tốt.
+  const dragTerminal = drag?.status === "correct" || (drag?.status === "incorrect" && drag.attempts !== 1)
+  if (dragTerminal && drag) {
+    return {
+      level: drag.status === "correct" && !drag.revealed ? "ok" : "weak",
+      source: "D",
+      ...base,
+      flags: [],
+    }
+  }
+  // (4) Đang chờ (mới sai 1 lần, chưa chốt) -> Chưa kiểm chứng.
   if (drag?.status === "incorrect" && drag.attempts === 1) {
     return { level: "unverified", source: "D", ...base, flags: [] }
   }
   if (fill?.status === "incorrect" && fill.attempts === 1) {
     return { level: "unverified", source: "F", ...base, flags: [] }
   }
-  // (4) Chỉ tự nhận -> Chưa kiểm chứng (S); (5) chưa bắt đầu -> Chưa làm.
+  // (5) Chỉ tự nhận -> Chưa kiểm chứng (S); (6) chưa bắt đầu -> Chưa làm.
   if (input.self != null) {
     return { level: "unverified", source: "S", ...base, flags: [] }
   }
