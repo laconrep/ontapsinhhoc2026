@@ -2423,3 +2423,74 @@ phien8: khối thống kê chuyển sang lib/lesson-stats.ts dùng isOverconfide
 (class-phien1/2/3/6, parser-phien6/8, preview-phien3), không hồi quy.
 tsc sạch, next build exit 0. Chưa push (chờ PAT mới); kiểm chứng sống + đợt
 20 học sinh làm bài chờ sau deploy.
+
+## §39 — Khung tầng liên tab + sửa code thống kê trước (user chốt 28/10, triển khai thống kê trước, luồng Tab 2 sau)
+
+CHỐT: "Tạm ổn" = "Khá" — MỘT mức, chỉ đổi tên hiển thị (code "ok" giữ
+nguyên, phân loại "Ổn định tốt" không đổi). Thang tầng 5 mức: Thành thạo /
+Khá / Chưa tốt / Chưa kiểm chứng / Chưa làm. Ngưỡng trắc nghiệm 75/50
+(thay 80/50); ngưỡng mặc định lớp mới = 75/50; lớp ĐÃ LƯU 80 giữ nguyên
+(chưa quyết migrate — xem CÒN MỞ).
+
+KHUNG TẦNG (thứ tự ưu tiên trong một lượt, từ mạnh xuống yếu):
+(0) Kéo lộ khóa Chưa tốt: bất kỳ kết quả kéo nào sau khi đã lộ đáp án
+(đúng lần 3+ hoặc sai sau lộ) đều khóa ở Chưa tốt trong lượt đó, trắc
+nghiệm không gỡ được. (1) Trắc nghiệm đã nộp thắng tất cả (trừ kéo lộ):
+tỉ lệ ô đúng + chặn Thành thạo cần ≥ 2 ô đúng (chỉ cắn điểm 1 ô); điểm
+1 ô: Biết + điền đúng + trắc nghiệm đúng -> Thành thạo (bằng chứng kết
+hợp vượt chặn), Biết + điền đúng + trắc nghiệm sai -> Khá (đệm); đệm chỉ
+cho 1 ô, trắc nghiệm nhiều ô dưới 50% vẫn Chưa tốt dù điền đúng.
+(2) Chưa có trắc nghiệm nhưng đã chốt Tab 2/3 -> theo bước chốt sau cùng
+(kéo nếu có, ngược lại điền): đúng -> Khá (cờ "sau gợi ý" nếu điền đúng
+sau gợi ý, cờ "đã chuyển" nếu điểm chuyển mà kéo đúng); sai đã chốt ->
+Chưa tốt. (3) Mới sai 1 lần, đang chờ làm lại (điền hoặc kéo) -> Chưa
+kiểm chứng (ô lần đầu vẫn đỏ ở Màn 1 qua fillRed/dragRed); ngoại lệ: điền
+dữ liệu cũ đã lộ mà vẫn sai -> Chưa tốt. (4) Chỉ tự nhận -> Chưa kiểm
+chứng (S). (5) Chưa bắt đầu -> Chưa làm. Điểm chờ không tính vào điểm
+yếu (không kích hoạt "cần hỗ trợ" / "nên ôn lại cả lớp"). Làm lại lượt
+mới tính lại từ đầu, lộ lượt cũ không khóa lượt mới.
+
+POOL (chồng nhau theo thiết kế): cột Điền tính lịch sử — mẫu số theo
+submission Tab 1 (fallback tiến trình khi chưa nộp); cột Kéo tính việc
+hiện tại — tiến trình Chưa biết, gồm điểm gốc + điểm chuyển (submission
+Biết ∧ tiến trình Chưa biết, suy ra được, không thêm cột). Điểm chuyển
+vẫn giữ vạch đỏ cột Điền đồng thời vào pool Kéo. Pool Kéo chỉ "chốt" khi
+hết việc Tab 2 (mọi điểm Biết có ô trống đều điền đúng hoặc đã chuyển;
+học sinh toàn Chưa biết chốt ngay); trước đó cột Kéo hiện số tạm thời
+(mờ + nhãn "chưa chốt"), không hiện "Không có" khi còn việc Tab 2.
+Màn 1 bắt buộc có dòng đỏ dưới tiêu đề cột Kéo: "Gồm điểm chưa biết từ
+đầu và điểm chuyển từ điền khuyết". Quá tự tin + số Biết (Màn 2) cũng
+tính theo submission Tab 1. Tầng theo lượt kiểm tra (Màn 4 ▲■▼, Màn 2
+đầu→gần nhất) chỉ có bằng chứng trắc nghiệm nên áp tỉ lệ + chặn ≥ 2 ô,
+không đệm/kết hợp.
+
+CODE (lib/lesson-stats.ts): tierForKp viết lại theo khung trên, thêm
+TierInput.transferred + TierResult.flags; quizLevel (tỉ lệ + chặn) dùng
+chung cho tầng hiện tại và tầng theo lượt; DEFAULT_THRESHOLDS 75/50;
+LEVEL_LABEL.ok = "Khá"; buildStudentRow thêm dragFinalized + pool chồng;
+buildKpStats lấy tự nhận theo submission; buildMatrix mang flags.
+ACTION (app/actions/lesson-stats.ts): ngưỡng fallback theo
+DEFAULT_THRESHOLDS; openAttempt chỉ tính lượt mở bắt đầu SAU submission
+hiện tại (sửa bug mâu thuẫn "done" + "Đang làm" sau reset — lịch sử lượt
+đã nộp giữ nguyên không lọc); hasSubmission đưa vào RawStudentLesson;
+thông báo ngưỡng đổi "Tạm ổn" -> "Khá". LỚP MỚI: createClass ghi
+statsMastery/statsOk theo DEFAULT_THRESHOLDS; schema + ensureSchema đổi
+default 80 -> 75 (chỉ ảnh hưởng DB/lớp mới, lớp cũ giữ nguyên).
+UI (lesson-stats-tab.tsx): legend + hồ sơ + aria-label đổi sang "Khá";
+ngưỡng nhập mặc định 75; dòng đỏ dưới tiêu đề cột Kéo; ô Kéo mờ +
+"chưa chốt" khi chưa chốt; ô ma trận + panel chi tiết hiện cờ.
+
+KIỂM THỬ: scripts/check-class-stats-tier.mjs 71/71 (thêm chặn/đệm/kết
+hợp/kéo lộ/chờ/chuyển/pool chồng/dragFinalized/quá tự tin theo submission).
+phien4/phien5 cập nhật theo khung mới (ngưỡng 75, nhãn Khá, sai đã chốt
+mới tính yếu). Suite 41/48 pass, đúng 7 lỗi cũ (class-phien1/2/3/6,
+parser-phien6/8, preview-phien3), không hồi quy. tsc sạch.
+CHƯA PUSH (chờ PAT mới); kiểm chứng sống trên production + hồ sơ học
+sinh mới chờ sau deploy (fixture cũ giả định pool rời nhau nên không dùng
+lại được).
+
+CÒN MỞ (không thuộc §39): (a) lớp đã lưu ngưỡng 80 có migrate sang 75
+không; (b) luồng Tab 2 mới (sai lần 2 khóa + chuyển sang kéo, gợi ý chữ
+cái đầu, không lộ đáp án) — triển khai sau §39; (c) bảo đảm ≥ 2 ô cho
+mọi điểm ở phía AI sinh câu hỏi (kèm duyệt hàng loạt); (d) mô hình gán
+TF nhiều điểm (theo ý hay theo câu + sinh thêm); (e) synonym retroactive.

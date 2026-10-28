@@ -25,6 +25,7 @@ import {
   buildProgressTable,
   buildLessonChart,
   computeStreak,
+  DEFAULT_THRESHOLDS,
   type KpStat,
   type MatrixCell,
   type ProgressTableRow,
@@ -116,8 +117,8 @@ export async function getLessonStats(classId: string, lessonId?: string): Promis
   await ensureSchema()
   const cls = await assertTeacherClass(classId, teacher.id)
   const thresholds: StatsThresholds = {
-    mastery: cls.statsMastery ?? 80,
-    ok: cls.statsOk ?? 50,
+    mastery: cls.statsMastery ?? DEFAULT_THRESHOLDS.mastery,
+    ok: cls.statsOk ?? DEFAULT_THRESHOLDS.ok,
   }
   const now = new Date()
 
@@ -415,9 +416,17 @@ export async function getLessonStats(classId: string, lessonId?: string): Promis
     const submission = submissionByStudent.get(s.id)
     const attempts = attemptsByStudent.get(s.id) ?? []
     const submitted = attempts.filter((a) => a.completedAt != null)
-    const open = attempts.filter((a) => a.completedAt == null).sort(
-      (a, b) => b.startedAt.getTime() - a.startedAt.getTime(),
-    )[0]
+    // Lượt đang làm chỉ tính khi bắt đầu sau submission Tab 1 hiện tại:
+    // sau resetLessonProgress, submission bị xóa nhưng lượt mở cũ vẫn còn
+    // trong quiz_attempts — lượt đó thuộc lượt học cũ, không được tính là
+    // "Đang làm" của lượt hiện tại (ngược lại hàng thống kê mâu thuẫn:
+    // kiểm tra "done" nhưng huy hiệu "Đang làm"). Không có submission thì
+    // không có lượt mở. Lịch sử lượt đã nộp giữ nguyên, không lọc.
+    const open = submission
+      ? attempts
+          .filter((a) => a.completedAt == null && a.startedAt.getTime() > submission.submittedAt.getTime())
+          .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())[0]
+      : undefined
     const latestSubmittedId = submitted[submitted.length - 1]?.id
 
     const toRawAttempt = (a: (typeof attemptRows)[number]): RawAttempt => {
@@ -511,6 +520,7 @@ export async function getLessonStats(classId: string, lessonId?: string): Promis
       studentId: s.id,
       name: s.name,
       selfByKp: submission?.assessments ?? {},
+      hasSubmission: submission != null,
       progressByKp,
       submittedAttempts: submittedRaw,
       openAttempt: openRaw,
@@ -749,7 +759,7 @@ export async function updateClassStatsThresholds(
     ok > 100 ||
     ok >= mastery
   ) {
-    throw new Error("Ngưỡng không hợp lệ: cần 0 ≤ ngưỡng Tạm ổn < ngưỡng Thành thạo ≤ 100")
+    throw new Error("Ngưỡng không hợp lệ: cần 0 ≤ ngưỡng Khá < ngưỡng Thành thạo ≤ 100")
   }
   await db
     .update(classes)

@@ -414,7 +414,7 @@ export function ensureSchema(): Promise<void> {
       )
       .then(() =>
         pool
-          .query(`ALTER TABLE classes ADD COLUMN IF NOT EXISTS "statsMastery" integer NOT NULL DEFAULT 80`)
+          .query(`ALTER TABLE classes ADD COLUMN IF NOT EXISTS "statsMastery" integer NOT NULL DEFAULT 75`)
           .catch((e) => console.error("[ensureSchema] classes.statsMastery DDL failed:", e)),
       )
       .then(() =>

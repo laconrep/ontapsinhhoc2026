@@ -4,6 +4,7 @@ import { db } from "@/lib/db/index"
 import { generateInviteCode } from "@/lib/invite-code"
 import { classes, classStudents, user } from "@/lib/db/schema"
 import { requireRole } from "@/lib/auth-helpers"
+import { DEFAULT_THRESHOLDS } from "@/lib/lesson-stats"
 import { createClassSchema, updateClassSchema } from "@/lib/validation"
 import { and, desc, eq, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
@@ -81,6 +82,10 @@ export async function createClass(input: unknown) {
       schoolYear: data.schoolYear,
       teacherId: teacher.id,
       inviteCode,
+      // Ngưỡng mặc định theo khung tầng hiện tại (lớp đã lưu giữ nguyên
+      // giá trị của mình; chỉ lớp mới nhận mặc định này).
+      statsMastery: DEFAULT_THRESHOLDS.mastery,
+      statsOk: DEFAULT_THRESHOLDS.ok,
     })
     .returning()
   revalidatePath("/teacher/classes")

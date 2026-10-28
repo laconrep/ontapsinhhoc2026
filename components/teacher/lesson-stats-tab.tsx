@@ -81,7 +81,7 @@ function Legend() {
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
       <span className="font-medium text-foreground">Mức độ:</span>
       <span>🟢 Thành thạo</span>
-      <span>🟡 Tạm ổn</span>
+      <span>🟡 Khá</span>
       <span>🔴 Chưa tốt</span>
       <span>⚪ Chưa kiểm chứng</span>
       <span>▫️ Chưa làm</span>
@@ -97,7 +97,7 @@ export function LessonStatsTab({ classId }: { classId: string }) {
   const [error, setError] = useState<string | null>(null)
   const [screen, setScreen] = useState<Screen>(1)
   const [editingThresholds, setEditingThresholds] = useState(false)
-  const [masteryInput, setMasteryInput] = useState(80)
+  const [masteryInput, setMasteryInput] = useState(75)
   const [okInput, setOkInput] = useState(50)
   const [savingThresholds, setSavingThresholds] = useState(false)
   const [tooltip, setTooltip] = useState<{ x: number; y: number; title: string; lines: string[] } | null>(null)
@@ -284,7 +284,7 @@ export function LessonStatsTab({ classId }: { classId: string }) {
                   value={okInput}
                   onChange={(e) => setOkInput(Number(e.target.value))}
                   className="w-16 rounded-md border border-border bg-background px-2 py-1.5 text-foreground"
-                  aria-label="Ngưỡng Tạm ổn"
+                  aria-label="Ngưỡng Khá"
                 />
                 <button
                   type="button"
@@ -470,6 +470,9 @@ function Screen1({ data }: { data: LessonStatsDto }) {
                 <th className="pb-2 px-3 font-medium">
                   Kéo thả
                   <span className="mt-0.5 block font-normal">Xanh: đúng ngay lần đầu · Đỏ: sai lần đầu · Xám: chưa làm</span>
+                  <span className="mt-0.5 block font-normal text-red-600">
+                    Gồm điểm chưa biết từ đầu và điểm chuyển từ điền khuyết
+                  </span>
                 </th>
                 <th className="pb-2 px-3 font-medium">
                   Kiểm tra
@@ -536,20 +539,29 @@ function Screen1({ data }: { data: LessonStatsDto }) {
                   </td>
                   <td className="py-3 px-3">
                     {s.dragPool === 0 ? (
-                      <span className="text-xs text-muted-foreground">Không có</span>
+                      !s.dragFinalized && s.fillPool > 0 ? (
+                        <span className="text-xs text-zinc-400">chưa chốt</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Không có</span>
+                      )
                     ) : (
-                      <SplitBar
-                        segments={[
-                          { count: s.dragGreen, className: "bg-green-500", label: "Đúng lần đầu" },
-                          { count: s.dragRed, className: "bg-red-500", label: "Sai lần đầu" },
-                          {
-                            count: Math.max(0, s.dragPool - s.dragGreen - s.dragRed),
-                            className: "bg-zinc-300 text-zinc-600",
-                            label: "Chưa làm",
-                          },
-                        ]}
-                        tail={`${s.dragEventual}/${s.dragPool}`}
-                      />
+                      <div className={!s.dragFinalized ? "opacity-60" : undefined}>
+                        <SplitBar
+                          segments={[
+                            { count: s.dragGreen, className: "bg-green-500", label: "Đúng lần đầu" },
+                            { count: s.dragRed, className: "bg-red-500", label: "Sai lần đầu" },
+                            {
+                              count: Math.max(0, s.dragPool - s.dragGreen - s.dragRed),
+                              className: "bg-zinc-300 text-zinc-600",
+                              label: "Chưa làm",
+                            },
+                          ]}
+                          tail={`${s.dragEventual}/${s.dragPool}`}
+                        />
+                        {!s.dragFinalized ? (
+                          <span className="mt-1 block text-xs text-zinc-400">chưa chốt</span>
+                        ) : null}
+                      </div>
                     )}
                   </td>
                   <td className="py-3 px-3">
@@ -880,7 +892,11 @@ function Screen3({
                                   }
                                 : undefined
                             }
-                            title={hatched ? "Chưa có câu kiểm tra" : LEVEL_LABEL[cell.level]}
+                            title={
+                              hatched
+                                ? "Chưa có câu kiểm tra"
+                                : `${LEVEL_LABEL[cell.level]}${cell.flags.length > 0 ? ` (${cell.flags.join(", ")})` : ""}`
+                            }
                           >
                             <span className="text-sm font-semibold">
                               {CELL_SYMBOL[cell.level]}
@@ -892,6 +908,9 @@ function Screen3({
                               <span className="text-[10px]">
                                 {cell.quizCorrect ?? 0}/{cell.quizTotal} ô
                               </span>
+                            ) : null}
+                            {matrixMode !== "compact" && cell.flags.length > 0 ? (
+                              <span className="text-[10px] text-muted-foreground">{cell.flags.join(" · ")}</span>
                             ) : null}
                           </button>
                         </td>
@@ -926,6 +945,7 @@ function Screen3({
                 ? ` · Quiz: ${detailCell.quizCorrect ?? 0}/${detailCell.quizTotal} ô`
                 : ""}
             </span>
+            {detailCell.flags.length > 0 ? <span>Cờ: {detailCell.flags.join(" · ")}</span> : null}
             {(() => {
               const prog = detailStudent.progressByKp[detailKp.id]
               if (!prog) return null
@@ -976,7 +996,7 @@ function Screen3({
             {(
               [
                 ["Cần ôn lại", profileGroups.weak, "text-red-600"],
-                ["Tạm ổn", profileGroups.ok, "text-yellow-700"],
+                ["Khá", profileGroups.ok, "text-yellow-700"],
                 ["Thành thạo", profileGroups.mastered, "text-green-700"],
               ] as const
             ).map(([label, list, className]) => (

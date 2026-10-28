@@ -86,8 +86,8 @@ export const classes = pgTable("classes", {
   // SEC-05: mã mời mới dài 8 ký tự (trước đây 6) — cột nới lên 32 để chứa cả hai.
   inviteCode: varchar("inviteCode", { length: 32 }).notNull().unique(),
   schoolYear: text("schoolYear").notNull(),
-  // Thống kê §38 (full): ngưỡng xếp mức riêng từng lớp — mặc định 80/50.
-  statsMastery: integer("statsMastery").notNull().default(80),
+  // Thống kê §38 (full): ngưỡng xếp mức riêng từng lớp — mặc định 75/50.
+  statsMastery: integer("statsMastery").notNull().default(75),
   statsOk: integer("statsOk").notNull().default(50),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })

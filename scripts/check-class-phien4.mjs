@@ -23,10 +23,11 @@ const tab = (status, firstTry = null, attempts = 1, revealed = false) => ({
 const emptyTab = { status: null, firstTry: null, attempts: 0, revealed: false }
 const now = new Date("2026-10-27T12:00:00+07:00")
 
-// Ngưỡng xếp mức (thay quizBand): 80/50 mặc định, đổi theo lớp.
+// Ngưỡng xếp mức (thay quizBand): 75/50 mặc định, đổi theo lớp.
 assert(levelFromRate(80, T) === "mastered", "80% -> Thành thạo")
-assert(levelFromRate(79, T) === "ok", "79% -> Tạm ổn")
-assert(levelFromRate(50, T) === "ok", "50% -> Tạm ổn")
+assert(levelFromRate(79, T) === "mastered", "79% -> Thành thạo (ngưỡng mới 75)")
+assert(levelFromRate(74, T) === "ok", "74% -> Khá")
+assert(levelFromRate(50, T) === "ok", "50% -> Khá")
 assert(levelFromRate(49, T) === "weak", "49% -> Chưa tốt")
 assert(levelFromRate(85, { mastery: 90, ok: 60 }) === "ok", "ngưỡng lớp 90/60 đổi mức")
 console.log("OK levelFromRate")
@@ -55,9 +56,9 @@ function rawStudent(id, name, overrides) {
 const weakAll = rawStudent("hs1", "An", {
   selfByKp: { kp1: "known", kp2: "known", kp3: "known" },
   progressByKp: {
-    kp1: { self: "known", fill: tab("incorrect", "incorrect"), drag: emptyTab },
-    kp2: { self: "known", fill: tab("incorrect", "incorrect"), drag: emptyTab },
-    kp3: { self: "known", fill: tab("incorrect", "incorrect"), drag: emptyTab },
+    kp1: { self: "known", fill: tab("incorrect", "incorrect", 2), drag: emptyTab },
+    kp2: { self: "known", fill: tab("incorrect", "incorrect", 2), drag: emptyTab },
+    kp3: { self: "known", fill: tab("incorrect", "incorrect", 2), drag: emptyTab },
   },
 })
 const rowWeak = buildStudentRow(weakAll, kps, T, 1, now)

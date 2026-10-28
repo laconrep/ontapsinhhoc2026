@@ -7,34 +7,54 @@ import { isOverconfident } from "@/lib/scoring"
  * quy tắc đều viết thành hàm thuần để kiểm thử được bằng script
  * scripts/check-class-stats-*.mjs mà không cần dựng app.
  *
- * Quy tắc tầng (tier) cho một (học sinh, điểm kiến thức), theo lượt hiện tại:
- *   A — có câu kiểm tra trong lượt kiểm tra gần nhất đã nộp:
- *       tỉ lệ ô đúng trên lượt đó, ngưỡng theo lớp (mặc định 80/50).
- *   B — chưa có câu kiểm tra trong lượt đó nhưng đã làm Tab 2/3:
- *       làm đúng (dù lần đầu hay lần sau) -> Tạm ổn;
- *       làm sai, chưa xem đáp án -> Chưa tốt;
- *       đã xem đáp án mà chưa làm đúng -> Chưa kiểm chứng.
- *   C — chỉ tự nhận xét, chưa làm Tab 2/3 -> Chưa kiểm chứng.
- *   Không có hoạt động nào -> Chưa làm.
+ * Quy tắc tầng (tier) cho một (học sinh, điểm kiến thức), theo lượt hiện tại.
+ * Thứ tự ưu tiên bằng chứng (khung tầng đã chốt 28/10):
+ *   (0) Kéo lộ khóa Chưa tốt: bất kỳ kết quả kéo nào sau khi đã lộ đáp án
+ *       (đúng lần 3+ hoặc sai sau lộ) đều khóa ở Chưa tốt trong lượt này,
+ *       trắc nghiệm không gỡ được.
+ *   (1) Có câu kiểm tra trong lượt kiểm tra gần nhất đã nộp -> theo trắc
+ *       nghiệm: tỉ lệ ô đúng, ngưỡng theo lớp (mặc định 75/50); Thành thạo
+ *       cần thêm ≥ 2 ô đúng (chặn trên tính theo ô — chỉ cắn điểm 1 ô);
+ *       điểm 1 ô có bằng chứng kết hợp: Biết + điền đúng + trắc nghiệm
+ *       đúng -> Thành thạo (vượt chặn), Biết + điền đúng + trắc nghiệm
+ *       sai -> Khá (đệm); đệm chỉ cho 1 ô, trắc nghiệm nhiều ô dưới 50%
+ *       vẫn Chưa tốt dù điền đúng.
+ *   (2) Chưa có trắc nghiệm nhưng đã có kết quả chốt ở Tab 2/3 -> theo
+ *       bước chốt sau cùng (kéo nếu có, ngược lại điền): đúng -> Khá
+ *       (kèm cờ "sau gợi ý" nếu điền đúng sau gợi ý, cờ "đã chuyển" nếu
+ *       điểm chuyển từ điền sang mà kéo đúng); sai đã chốt -> Chưa tốt.
+ *   (3) Mới sai 1 lần, đang chờ làm lại (điền hoặc kéo) -> Chưa kiểm chứng
+ *       (ô lần đầu vẫn đỏ ở Màn 1 qua fillRed/dragRed); ngoại lệ: điền cũ
+ *       đã lộ mà vẫn sai -> Chưa tốt.
+ *   (4) Chỉ tự nhận xét, chưa làm Tab 2/3 -> Chưa kiểm chứng (S).
+ *   (5) Không có hoạt động nào -> Chưa làm.
  * Điểm không gắn câu kiểm tra nào luôn mang nhãn "Chưa có câu kiểm tra"
  * (ô ma trận gạch chéo), bất kể nguồn tầng nào.
  *
- * Lưu ý về "chuyển sang kéo thả": code luồng học hiện tại CHỈ đưa điểm
- * Chưa biết vào Tab 3 (getTab3Questions lọc selfAssessment = "unknown");
- * điểm Biết mà điền sai lần đầu KHÔNG tự chuyển sang kéo thả. Vì vậy
- * pool Điền khuyết = điểm Biết có ô trống, pool Kéo thả = điểm Chưa biết
- * có ô trống — đúng luồng học thật, không tự bịa thêm pool chuyển đổi.
+ * Pool Tab 2/3 và cột "chưa chốt": mẫu số lấy theo Tab 1 — pool Điền =
+ * điểm Biết (theo submission Tab 1, fallback tiến trình khi chưa nộp) có
+ * ô trống, pool Kéo = điểm Chưa biết (theo tiến trình hiện tại, gồm cả
+ * điểm đã chuyển từ điền sang) có ô trống. Điểm chuyển suy ra từ
+ * submission Biết ∧ tiến trình Chưa biết, không cần cờ riêng. Pool Kéo
+ * chỉ "chốt" khi hết việc Tab 2 (mọi điểm Biết có ô trống đều điền đúng
+ * hoặc đã chuyển; học sinh toàn Chưa biết thì chốt ngay); trước đó cột
+ * Kéo chỉ hiện số tạm thời, không hiện "Không có".
+ *
+ * Lưu ý triển khai theo từng bước: code thống kê này đã xử lý trạng thái
+ * chuyển (submission Biết ∧ tiến trình Chưa biết) nhưng luồng học Tab 2
+ * mới (sai lần 2 khóa + chuyển sang kéo) triển khai sau; dữ liệu hiện tại
+ * chưa có điểm chuyển, các nhánh chuyển chỉ chạy khi trạng thái đó xuất hiện.
  */
 
 export type StatsLevel = "mastered" | "ok" | "weak" | "unverified" | "not_started"
 export type TierSource = "Q" | "F" | "D" | "S" | null
 export type StatsThresholds = { mastery: number; ok: number }
 
-export const DEFAULT_THRESHOLDS: StatsThresholds = { mastery: 80, ok: 50 }
+export const DEFAULT_THRESHOLDS: StatsThresholds = { mastery: 75, ok: 50 }
 
 export const LEVEL_LABEL: Record<StatsLevel, string> = {
   mastered: "Thành thạo",
-  ok: "Tạm ổn",
+  ok: "Khá",
   weak: "Chưa tốt",
   unverified: "Chưa kiểm chứng",
   not_started: "Chưa làm",
@@ -53,6 +73,17 @@ export function levelFromRate(ratePercent: number, t: StatsThresholds): StatsLev
   return "weak"
 }
 
+/**
+ * Tầng theo trắc nghiệm: theo tỉ lệ, nhưng Thành thạo cần thêm ≥ 2 ô đúng
+ * (chặn trên tính theo ô — chỉ cắn điểm 1 ô duy nhất, vì tỉ lệ ≥ 75% với
+ * ≥ 2 ô luôn có ≥ 2 ô đúng).
+ */
+export function quizLevel(correct: number, total: number, t: StatsThresholds): StatsLevel {
+  const band = levelFromRate((correct / total) * 100, t)
+  if (band === "mastered" && correct < 2) return "ok"
+  return band
+}
+
 export interface TabState {
   status: "correct" | "incorrect" | null
   firstTry: "correct" | "incorrect" | null
@@ -67,6 +98,9 @@ export interface TierInput {
   fill: TabState | null
   drag: TabState | null
   hasQuizQuestion: boolean
+  /** Điểm chuyển từ điền sang kéo: submission Tab 1 = Biết nhưng tiến
+   *  trình hiện tại = Chưa biết (luồng Tab 2 mới đánh giá lại). */
+  transferred?: boolean
 }
 
 export interface TierResult {
@@ -75,39 +109,78 @@ export interface TierResult {
   quizCorrect: number | null
   quizTotal: number | null
   noQuizQuestion: boolean
+  /** Cờ hiển thị: "sau gợi ý" (điền đúng sau gợi ý), "đã chuyển" (điểm
+   *  chuyển từ điền sang mà kéo đúng). Chỉ gắn ở tầng Tab 2/3 và trường
+   *  hợp 1 ô có bằng chứng kết hợp/đệm; tầng trắc nghiệm nhiều ô không cờ. */
+  flags: string[]
 }
 
 export function tierForKp(input: TierInput, t: StatsThresholds): TierResult {
   const noQuizQuestion = !input.hasQuizQuestion
+  const fill = input.fill
+  const drag = input.drag
+  const transferred = input.transferred ?? false
+  const base = {
+    quizCorrect: null as number | null,
+    quizTotal: null as number | null,
+    noQuizQuestion,
+  }
+
+  // (0) Kéo lộ khóa Chưa tốt: bất kỳ kết quả kéo nào sau khi đã lộ đáp án
+  // đều khóa ở Chưa tốt trong lượt này, trắc nghiệm không gỡ được.
+  if (drag?.status != null && drag.revealed) {
+    return { level: "weak", source: "D", ...base, flags: [] }
+  }
+
+  // (1) Trắc nghiệm đã nộp thắng tất cả (trừ kéo lộ ở trên).
   if (input.quizTotal != null && input.quizTotal > 0) {
     const correct = input.quizCorrect ?? 0
+    let level = quizLevel(correct, input.quizTotal, t)
+    let flags: string[] = []
+    // Điểm 1 ô có bằng chứng kết hợp / đệm (chỉ khi Biết + điền đúng).
+    if (input.quizTotal === 1 && input.self === "known" && fill?.status === "correct") {
+      level = correct === 1 ? "mastered" : "ok"
+      flags = fill.firstTry === "incorrect" ? ["sau gợi ý"] : []
+    }
+    return { level, source: "Q", quizCorrect: correct, quizTotal: input.quizTotal, noQuizQuestion, flags }
+  }
+
+  // (2) Kéo/điền đã chốt — kéo là bước sau cùng nên thắng điền khi cả hai chốt.
+  // "Chốt" = đúng, hoặc sai mà không còn ở trạng thái chờ (sai lần 1).
+  const fillTerminal = fill?.status === "correct" || (fill?.status === "incorrect" && fill.attempts !== 1)
+  const dragTerminal = drag?.status === "correct" || (drag?.status === "incorrect" && drag.attempts !== 1)
+  if (dragTerminal && drag) {
     return {
-      level: levelFromRate((correct / input.quizTotal) * 100, t),
-      source: "Q",
-      quizCorrect: correct,
-      quizTotal: input.quizTotal,
-      noQuizQuestion,
+      level: drag.status === "correct" ? "ok" : "weak",
+      source: "D",
+      ...base,
+      flags: drag.status === "correct" && transferred ? ["đã chuyển"] : [],
     }
   }
-  const tab =
-    input.fill?.status != null
-      ? { state: input.fill, source: "F" as const }
-      : input.drag?.status != null
-        ? { state: input.drag, source: "D" as const }
-        : null
-  if (tab) {
-    if (tab.state.status === "correct") {
-      return { level: "ok", source: tab.source, quizCorrect: null, quizTotal: null, noQuizQuestion }
+  if (fillTerminal && fill) {
+    return {
+      level: fill.status === "correct" ? "ok" : "weak",
+      source: "F",
+      ...base,
+      flags: fill.status === "correct" && fill.firstTry === "incorrect" ? ["sau gợi ý"] : [],
     }
-    if (tab.state.revealed) {
-      return { level: "unverified", source: tab.source, quizCorrect: null, quizTotal: null, noQuizQuestion }
-    }
-    return { level: "weak", source: tab.source, quizCorrect: null, quizTotal: null, noQuizQuestion }
   }
+  // Điền dữ liệu cũ đã lộ mà vẫn sai -> Chưa tốt (không rơi về chờ).
+  if (fill?.status === "incorrect" && fill.revealed) {
+    return { level: "weak", source: "F", ...base, flags: [] }
+  }
+  // (3) Đang chờ (mới sai 1 lần, chưa chốt) -> Chưa kiểm chứng.
+  if (drag?.status === "incorrect" && drag.attempts === 1) {
+    return { level: "unverified", source: "D", ...base, flags: [] }
+  }
+  if (fill?.status === "incorrect" && fill.attempts === 1) {
+    return { level: "unverified", source: "F", ...base, flags: [] }
+  }
+  // (4) Chỉ tự nhận -> Chưa kiểm chứng (S); (5) chưa bắt đầu -> Chưa làm.
   if (input.self != null) {
-    return { level: "unverified", source: "S", quizCorrect: null, quizTotal: null, noQuizQuestion }
+    return { level: "unverified", source: "S", ...base, flags: [] }
   }
-  return { level: "not_started", source: null, quizCorrect: null, quizTotal: null, noQuizQuestion }
+  return { level: "not_started", source: null, ...base, flags: [] }
 }
 
 // ================= Dữ liệu thô (server action ráp từ DB) =================
@@ -144,6 +217,7 @@ export interface RawStudentLesson {
   studentId: string
   name: string
   selfByKp: Record<string, "known" | "unknown">
+  hasSubmission: boolean // đã nộp Tab 1 (khóa) hay chưa; không có submission thì pool Kéo chưa chốt
   progressByKp: Record<
     string,
     {
@@ -166,7 +240,10 @@ export function attemptTierForKp(
 ): StatsLevel | null {
   const slots = attempt.slotsByKp[kpId]
   if (!slots || slots.total <= 0) return null
-  return levelFromRate((slots.correct / slots.total) * 100, t)
+  // Tầng theo lượt kiểm tra chỉ có bằng chứng trắc nghiệm nên chỉ áp dụng
+  // tỉ lệ + chặn ≥ 2 ô (không có đệm/bằng chứng kết hợp vì thiếu Tab 2/3
+  // của lượt đó); Màn 4 so sánh các lượt bằng tầng này.
+  return quizLevel(slots.correct, slots.total, t)
 }
 
 // ================= Màn 1 — Tiến trình =================
@@ -187,6 +264,10 @@ export interface StudentRow {
   dragRed: number
   dragPool: number
   dragEventual: number
+  /** Pool Kéo đã chốt chưa: hết việc Tab 2 thì true, còn chờ chuyển thì
+   *  false (cột Kéo chỉ hiện số tạm thời). Học sinh toàn Chưa biết thì
+   *  chốt ngay (chân không). */
+  dragFinalized: boolean
   quizAnswered: number
   quizTotal: number
   quizState: "done" | "doing" | "none"
@@ -231,7 +312,8 @@ export function buildStudentRow(
   const firstAttempt = s.submittedAttempts[0] ?? null
 
   for (const kp of kps) {
-    const self = s.selfByKp[kp.id] ?? s.progressByKp[kp.id]?.self ?? null
+    const submissionSelf = s.selfByKp[kp.id] ?? null
+    const self = submissionSelf ?? s.progressByKp[kp.id]?.self ?? null
     if (self === "known") selfKnown += 1
     else if (self === "unknown") selfUnknown += 1
     const prog = s.progressByKp[kp.id]
@@ -244,6 +326,7 @@ export function buildStudentRow(
         fill: prog?.fill ?? null,
         drag: prog?.drag ?? null,
         hasQuizQuestion: kp.questionIds.length > 0,
+        transferred: submissionSelf === "known" && prog?.self === "unknown",
       },
       thresholds,
     )
@@ -251,13 +334,20 @@ export function buildStudentRow(
     if (tier.level === "weak") weakCount += 1
 
     // Pool Tab 2/3: chỉ điểm có ô trống mới vào pool (điểm chỉ đọc không có việc).
+    // Hai cột CHỒNG nhau theo thiết kế: cột Điền tính lịch sử (mẫu số theo
+    // Tab 1 — submission trước, fallback tiến trình khi chưa nộp), cột Kéo
+    // tính việc hiện tại (tiến trình Chưa biết, gồm cả điểm chuyển từ điền
+    // sang). Nhờ vậy điểm bị đánh giá lại (submission Biết, tiến trình
+    // Chưa biết) vẫn giữ vạch đỏ ở cột Điền, đồng thời vào pool Kéo.
+    const poolSelfKnown = (submissionSelf ?? prog?.self ?? null) === "known"
     if (kp.slotCount > 0 && prog) {
-      if (prog.self === "known") {
+      if (poolSelfKnown) {
         fillPool += 1
         if (prog.fill.firstTry === "correct") fillGreen += 1
         else if (prog.fill.firstTry === "incorrect") fillRed += 1
         if (prog.fill.status === "correct") fillEventual += 1
-      } else if (prog.self === "unknown") {
+      }
+      if (prog.self === "unknown") {
         dragPool += 1
         if (prog.drag.firstTry === "correct") dragGreen += 1
         else if (prog.drag.firstTry === "incorrect") dragRed += 1
@@ -265,6 +355,18 @@ export function buildStudentRow(
       }
     }
   }
+
+  // Pool Kéo chốt khi hết việc Tab 2: mọi điểm Biết có ô trống (theo
+  // submission) đều điền đúng hoặc đã chuyển sang Chưa biết. Chưa nộp
+  // Tab 1 thì chưa chốt (Tab 2 còn chưa mở).
+  const dragFinalized =
+    s.hasSubmission &&
+    kps.every((kp) => {
+      if (kp.slotCount <= 0) return true
+      if (s.selfByKp[kp.id] !== "known") return true
+      const p = s.progressByKp[kp.id]
+      return p?.fill.status === "correct" || p?.self === "unknown"
+    })
 
   // Huy hiệu hạn nộp.
   let deadlineBadge: StudentRow["deadlineBadge"] = null
@@ -355,6 +457,7 @@ export function buildStudentRow(
     dragRed,
     dragPool,
     dragEventual,
+    dragFinalized,
     quizAnswered,
     quizTotal,
     quizState,
@@ -499,12 +602,16 @@ export function buildKpStats(
     for (const s of students) {
       const prog = s.progressByKp[kp.id]
       if (!prog) continue
-      if (prog.self === "known") knownAssessed += 1
+      // Tự nhận lấy theo submission Tab 1 trước (fallback tiến trình khi
+      // chưa nộp) — nhờ vậy điểm bị đánh giá lại vẫn tính vào số Biết và
+      // cờ quá tự tin, không biến mất khỏi thống kê.
+      const subSelf = s.selfByKp[kp.id] ?? prog.self ?? null
+      if (subSelf === "known") knownAssessed += 1
       // Chủ quan sai = đúng helper isOverconfident (tự nhận Biết nhưng sai
       // lần đầu; kể cả dữ liệu cũ chưa có firstTry mà thử > 1 lần).
       if (
         isOverconfident({
-          selfAssessment: prog.self,
+          selfAssessment: subSelf,
           fillFirstTry: prog.fill.firstTry,
           fillAttempts: prog.fill.attempts,
         })
@@ -545,13 +652,14 @@ export interface MatrixCell {
   quizCorrect: number | null
   quizTotal: number | null
   hatched: boolean
+  flags: string[]
 }
 
 export function buildMatrix(
   rows: StudentRow[],
   kps: RawKp[],
 ): { orderedKps: RawKp[]; cells: Record<string, Record<string, MatrixCell>> } {
-  // Sắp xếp theo độ khó: tỉ lệ Chưa tốt giảm dần, rồi Tạm ổn tăng dần, rồi thứ tự gốc.
+  // Sắp xếp theo độ khó: tỉ lệ Chưa tốt giảm dần, rồi Khá tăng dần, rồi thứ tự gốc.
   const weakRate = new Map<string, number>()
   const okRate = new Map<string, number>()
   for (const kp of kps) {
@@ -583,6 +691,7 @@ export function buildMatrix(
         quizCorrect: tier?.quizCorrect ?? null,
         quizTotal: tier?.quizTotal ?? null,
         hatched: kp.questionIds.length === 0,
+        flags: tier?.flags ?? [],
       }
     }
     cells[row.studentId] = byKp

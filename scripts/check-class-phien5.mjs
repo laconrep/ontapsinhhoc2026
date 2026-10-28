@@ -8,7 +8,7 @@ function assert(cond, msg) {
 }
 
 assert(LEVEL_LABEL.mastered === "Thành thạo", "mastered label")
-assert(LEVEL_LABEL.ok === "Tạm ổn", "ok label")
+assert(LEVEL_LABEL.ok === "Khá", "ok label")
 assert(LEVEL_LABEL.weak === "Chưa tốt", "weak label")
 assert(LEVEL_LABEL.unverified === "Chưa kiểm chứng", "unverified label")
 assert(LEVEL_LABEL.not_started === "Chưa làm", "not_started label")
