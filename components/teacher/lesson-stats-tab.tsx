@@ -262,6 +262,12 @@ export function LessonStatsTab({ classId }: { classId: string }) {
             </a>
           </p>
         ) : null}
+        {data.coverage.total > 0 ? (
+          <p className="mt-3 text-sm text-muted-foreground">
+            Độ phủ đánh giá: {data.coverage.attached}/{data.coverage.total} câu đã gắn vào điểm kiến thức (
+            {Math.round((data.coverage.attached / data.coverage.total) * 100)}%).
+          </p>
+        ) : null}
         {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
       </div>
 
@@ -354,6 +360,7 @@ export function LessonStatsTab({ classId }: { classId: string }) {
 function Screen1({ data }: { data: LessonStatsDto }) {
   const o = data.overview
   const weakest = o.weakestKp
+  const overdueCount = data.students.filter((s) => s.deadlineBadge === "Quá hạn").length
   return (
     <div className="flex flex-col gap-6">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -392,6 +399,9 @@ function Screen1({ data }: { data: LessonStatsDto }) {
             </span>
           ))}
         </div>
+        {overdueCount > 0 ? (
+          <p className="mt-2 text-xs text-red-600">⚠ {overdueCount} em quá hạn vẫn chưa xong bài.</p>
+        ) : null}
       </div>
 
       {data.students.length === 0 ? (
@@ -451,6 +461,9 @@ function Screen1({ data }: { data: LessonStatsDto }) {
                         ⚠ Cần hỗ trợ: {s.helpReasons.join("; ")}
                       </span>
                     ) : null}
+                    {s.flags.length > 0 ? (
+                      <span className="mt-1 block text-xs text-amber-700">⚑ {s.flags.join(" · ")}</span>
+                    ) : null}
                   </td>
                   <td className="py-3 px-3">
                     <SplitBar
@@ -470,18 +483,26 @@ function Screen1({ data }: { data: LessonStatsDto }) {
                     {s.fillPool === 0 ? (
                       <span className="text-xs text-muted-foreground">Không có</span>
                     ) : (
-                      <SplitBar
-                        segments={[
-                          { count: s.fillGreen, className: "bg-green-500", label: "Đúng lần đầu" },
-                          { count: s.fillRed, className: "bg-red-500", label: "Sai lần đầu" },
-                          {
-                            count: Math.max(0, s.fillPool - s.fillGreen - s.fillRed),
-                            className: "bg-zinc-300 text-zinc-600",
-                            label: "Chưa làm",
-                          },
-                        ]}
-                        tail={`${s.fillEventual}/${s.fillPool}`}
-                      />
+                      <>
+                        <SplitBar
+                          segments={[
+                            { count: s.fillGreen, className: "bg-green-500", label: "Đúng lần đầu" },
+                            { count: s.fillRed, className: "bg-red-500", label: "Sai lần đầu" },
+                            {
+                              count: Math.max(0, s.fillPool - s.fillGreen - s.fillRed),
+                              className: "bg-zinc-300 text-zinc-600",
+                              label: "Chưa làm",
+                            },
+                          ]}
+                          tail={`${s.fillEventual}/${s.fillPool}`}
+                        />
+                        {s.fillGreen + s.fillRed > 0 ? (
+                          <span className="mt-1 block text-xs text-muted-foreground">
+                            Đúng lần đầu: {s.fillGreen}/{s.fillGreen + s.fillRed} (
+                            {Math.round((s.fillGreen / (s.fillGreen + s.fillRed)) * 100)}%)
+                          </span>
+                        ) : null}
+                      </>
                     )}
                   </td>
                   <td className="py-3 px-3">
@@ -505,6 +526,12 @@ function Screen1({ data }: { data: LessonStatsDto }) {
                           ]}
                           tail={`${s.dragEventual}/${s.dragPool}`}
                         />
+                        {s.dragGreen + s.dragRed > 0 ? (
+                          <span className="mt-1 block text-xs text-muted-foreground">
+                            Đúng lần đầu: {s.dragGreen}/{s.dragGreen + s.dragRed} (
+                            {Math.round((s.dragGreen / (s.dragGreen + s.dragRed)) * 100)}%)
+                          </span>
+                        ) : null}
                         {!s.dragFinalized ? (
                           <span className="mt-1 block text-xs text-zinc-400">chưa chốt</span>
                         ) : null}
@@ -615,12 +642,31 @@ function Screen2({
                     Thành thạo {k.firstMastered} → {k.latestMastered} em{" "}
                     {k.latestMastered > k.firstMastered ? "▲" : k.latestMastered < k.firstMastered ? "▼" : "■"}
                   </span>
+                  {k.fillFirstTry.total > 0 ? (
+                    <span>
+                      Điền đúng lần đầu: {k.fillFirstTry.correct}/{k.fillFirstTry.total}
+                    </span>
+                  ) : null}
+                  {k.dragFirstTry.total > 0 ? (
+                    <span>
+                      Kéo đúng lần đầu: {k.dragFirstTry.correct}/{k.dragFirstTry.total}
+                    </span>
+                  ) : null}
                   {k.mostMissed ? (
                     <span>
                       Câu sai nhiều nhất: Câu {k.mostMissed.questionNo} —{" "}
-                      {Math.round(k.mostMissed.missRate * 100)}% sai ({k.mostMissed.wrongCount}/
-                      {k.mostMissed.answeredCount})
-                      {k.mostMissed.commonWrong ? ` · Đáp án sai phổ biến: ${truncate(k.mostMissed.commonWrong, 40)}` : ""}
+                      {k.mostMissed.answeredCount < 5 ? (
+                        <>Chưa đủ dữ liệu ({k.mostMissed.answeredCount}/5 em)</>
+                      ) : (
+                        <>
+                          {Math.round(k.mostMissed.missRate * 100)}% sai ({k.mostMissed.wrongCount}/
+                          {k.mostMissed.answeredCount})
+                          {k.mostMissed.missRate >= 0.3 ? " · Nên xem lại câu hỏi" : ""}
+                        </>
+                      )}
+                      {k.mostMissed.commonWrong && k.mostMissed.answeredCount >= 5
+                        ? ` · Đáp án sai phổ biến: ${truncate(k.mostMissed.commonWrong, 40)}`
+                        : ""}
                     </span>
                   ) : null}
                   <span>
@@ -1052,6 +1098,25 @@ function Screen4({
     arr.push(row.name)
     namesByClass.set(row.classification, arr)
   }
+  // Phân tán điểm + học được trong buổi (tính từ hàng học sinh, không đổi DTO).
+  const latestScores = data.students.map((s) => s.latestScore10).filter((v): v is number => v != null)
+  const scoreSpread =
+    latestScores.length > 0
+      ? {
+          min: Math.min(...latestScores),
+          max: Math.max(...latestScores),
+          std: (() => {
+            const mean = latestScores.reduce((a, b) => a + b, 0) / latestScores.length
+            const variance =
+              latestScores.reduce((a, b) => a + (b - mean) * (b - mean), 0) / latestScores.length
+            return Math.sqrt(variance).toFixed(1)
+          })(),
+        }
+      : null
+  const inSessionTransferred = data.students.reduce((a, s) => a + s.inSessionTransferred, 0)
+  const inSessionLearned = data.students.reduce((a, s) => a + s.inSessionLearned, 0)
+  const submittedTotals = data.students.filter((s) => s.quizState === "done").map((s) => s.quizTotal)
+  const samePaper = submittedTotals.length > 0 && submittedTotals.every((t) => t === submittedTotals[0])
   return (
     <div className="flex flex-col gap-6">
       <p className="rounded-lg bg-secondary/40 p-3 text-sm text-muted-foreground">
@@ -1109,6 +1174,17 @@ function Screen4({
           )}
         </div>
       </div>
+
+      {scoreSpread || inSessionTransferred > 0 ? (
+        <p className="text-sm text-foreground">
+          {scoreSpread
+            ? `Điểm dao động (lượt gần nhất): ${scoreSpread.min} – ${scoreSpread.max} (lệch chuẩn ${scoreSpread.std})${samePaper ? " — cả lớp cùng bộ câu hỏi" : ""}. `
+            : ""}
+          {inSessionTransferred > 0
+            ? `Học được trong buổi: ${inSessionLearned}/${inSessionTransferred} điểm chuyển từ điền sang kéo đã lên Khá/Thành thạo.`
+            : ""}
+        </p>
+      ) : null}
 
       <div className="flex flex-wrap gap-2">
         {["improving", "stable_good", "stuck", "abandoned", "not_started"].map((c) => {

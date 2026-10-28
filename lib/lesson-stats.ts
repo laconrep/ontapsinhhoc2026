@@ -318,6 +318,14 @@ export interface StudentRow {
   helpReasons: string[]
   tiersByKp: Record<string, TierResult>
   weakCount: number
+  /** Số điểm tự nhận Biết nhưng sai lần đầu (đúng định nghĩa isOverconfident ở Màn 2). */
+  overconfidentKpCount: number
+  /** Cờ hiển thị ở Màn 1: làm rất nhanh / xem đáp án / chủ quan sai. */
+  flags: string[]
+  /** Điểm chuyển từ điền sang kéo (submission Biết, tiến trình Chưa biết). */
+  inSessionTransferred: number
+  /** Trong số điểm chuyển, số điểm cuối cùng lên Khá/Thành thạo. */
+  inSessionLearned: number
   firstScore10: number | null
   latestScore10: number | null
   lastActivityAt: string | null
@@ -348,6 +356,9 @@ export function buildStudentRow(
   let dragPool = 0
   let dragEventual = 0
   let weakCount = 0
+  let overconfidentKpCount = 0
+  let inSessionTransferred = 0
+  let inSessionLearned = 0
 
   const latestAttempt = s.submittedAttempts[s.submittedAttempts.length - 1] ?? null
   const firstAttempt = s.submittedAttempts[0] ?? null
@@ -373,6 +384,21 @@ export function buildStudentRow(
     )
     tiersByKp[kp.id] = tier
     if (tier.level === "weak") weakCount += 1
+    // Điểm chuyển trong buổi + chủ quan sai (cùng định nghĩa với Màn 2).
+    if (submissionSelf === "known" && prog?.self === "unknown") {
+      inSessionTransferred += 1
+      if (tier.level === "ok" || tier.level === "mastered") inSessionLearned += 1
+    }
+    if (
+      prog &&
+      isOverconfident({
+        selfAssessment: self,
+        fillFirstTry: prog.fill.firstTry,
+        fillAttempts: prog.fill.attempts,
+      })
+    ) {
+      overconfidentKpCount += 1
+    }
 
     // Pool Tab 2/3: chỉ điểm có ô trống mới vào pool (điểm chỉ đọc không có việc).
     // Hai cột CHỒNG nhau theo thiết kế: cột Điền tính lịch sử (mẫu số theo
@@ -485,6 +511,20 @@ export function buildStudentRow(
   }
   // Chỉ một lượt đã nộp: chưa xác định được điểm yếu kéo dài (cần ≥ 2 lượt).
 
+  // Cờ Màn 1: ngưỡng "làm rất nhanh" giống cờ chất lượng ở Màn 4 (< 10 giây/ô).
+  let revealedKpCount = 0
+  for (const kp of kps) {
+    const p = s.progressByKp[kp.id]
+    if (p && (p.fill.revealed || p.drag.revealed)) revealedKpCount += 1
+  }
+  const flags: string[] = []
+  if (latestAttempt?.durationMs != null && latestAttempt.totalSlots > 0) {
+    const avgSec = latestAttempt.durationMs / 1000 / latestAttempt.totalSlots
+    if (avgSec < 10) flags.push("Làm rất nhanh")
+  }
+  if (revealedKpCount > 0) flags.push(`Xem đáp án ${revealedKpCount} điểm`)
+  if (overconfidentKpCount > 0) flags.push(`Chủ quan sai ${overconfidentKpCount} điểm`)
+
   return {
     studentId: s.studentId,
     name: s.name,
@@ -512,6 +552,10 @@ export function buildStudentRow(
     helpReasons,
     tiersByKp,
     weakCount,
+    overconfidentKpCount,
+    flags,
+    inSessionTransferred,
+    inSessionLearned,
     firstScore10,
     latestScore10,
     lastActivityAt: s.lastActivityAt,
@@ -548,6 +592,9 @@ export interface KpStat {
   overconfidentCount: number
   knownAssessed: number
   revealedCount: number
+  /** Đúng lần đầu ở Tab 2/3 của điểm (total = số em đã thử lần đầu). */
+  fillFirstTry: { correct: number; total: number }
+  dragFirstTry: { correct: number; total: number }
 }
 
 export function buildKpStats(
@@ -652,6 +699,10 @@ export function buildKpStats(
     let overconfidentCount = 0
     let knownAssessed = 0
     let revealedCount = 0
+    let fillFirstCorrect = 0
+    let fillFirstTotal = 0
+    let dragFirstCorrect = 0
+    let dragFirstTotal = 0
     for (const s of students) {
       const prog = s.progressByKp[kp.id]
       if (!prog) continue
@@ -672,6 +723,18 @@ export function buildKpStats(
         overconfidentCount += 1
       }
       if (prog.fill.revealed || prog.drag.revealed) revealedCount += 1
+      if (prog.fill.firstTry === "correct") {
+        fillFirstCorrect += 1
+        fillFirstTotal += 1
+      } else if (prog.fill.firstTry === "incorrect") {
+        fillFirstTotal += 1
+      }
+      if (prog.drag.firstTry === "correct") {
+        dragFirstCorrect += 1
+        dragFirstTotal += 1
+      } else if (prog.drag.firstTry === "incorrect") {
+        dragFirstTotal += 1
+      }
     }
 
     const hasQuiz = kp.questionIds.length > 0
@@ -693,6 +756,8 @@ export function buildKpStats(
       overconfidentCount,
       knownAssessed,
       revealedCount,
+      fillFirstTry: { correct: fillFirstCorrect, total: fillFirstTotal },
+      dragFirstTry: { correct: dragFirstCorrect, total: dragFirstTotal },
     }
   })
 }
