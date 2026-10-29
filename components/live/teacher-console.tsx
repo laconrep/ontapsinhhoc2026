@@ -294,7 +294,7 @@ export function TeacherConsole({ sessionId }: { sessionId: string }) {
               <span className="flex h-5 w-5 items-center justify-center rounded-md bg-primary/80 text-primary-foreground">
                 <GraduationCap className="h-3 w-3" />
               </span>
-              <p className="font-heading text-sm font-bold leading-none text-foreground">EduSync</p>
+              <p className="font-heading text-sm font-bold leading-none text-foreground">AI Trợ lí Ôn tập</p>
             </div>
             <SignOutButton />
           </div>

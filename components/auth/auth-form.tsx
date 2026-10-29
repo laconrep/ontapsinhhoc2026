@@ -79,7 +79,7 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
         <div className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
           <div className="mb-6 text-center">
             <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground text-balance">
-              {isSignUp ? "Tạo tài khoản EduSync" : "Chào mừng trở lại"}
+              {isSignUp ? "Tạo tài khoản AI Trợ lí Ôn tập" : "Chào mừng trở lại"}
             </h1>
             <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground text-pretty">
               {isSignUp

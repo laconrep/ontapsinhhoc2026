@@ -13,7 +13,7 @@ export default function PrivacyPage() {
         <p className="mt-2 text-sm text-muted-foreground">Bản nháp — cần người sở hữu duyệt trước khi áp dụng.</p>
         <div className="mt-6 space-y-4 text-base leading-relaxed text-foreground">
           <p>
-            EduSync lưu thông tin tài khoản (họ tên, email, vai trò) và dữ liệu học tập (lớp, bài
+            AI Trợ lí Ôn tập lưu thông tin tài khoản (họ tên, email, vai trò) và dữ liệu học tập (lớp, bài
             nộp, tiến độ) để vận hành lớp học.
           </p>
           <p>

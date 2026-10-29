@@ -12,7 +12,7 @@ export function BuildStatus() {
     <section id="status" className="mx-auto max-w-6xl px-4 py-12 md:py-16">
       <div className="rounded-2xl border border-border bg-card p-6 md:p-8">
         <p className="text-sm font-medium text-primary">Trạng thái dự án</p>
-        <h2 className="mt-1 font-heading text-2xl font-bold tracking-tight">Đang xây dựng theo lộ trình EduSync</h2>
+        <h2 className="mt-1 font-heading text-2xl font-bold tracking-tight">Đang xây dựng theo lộ trình AI Trợ lí Ôn tập</h2>
         <p className="mt-2 max-w-2xl text-pretty leading-relaxed text-muted-foreground">
           Bước B1 đã hoàn tất: khung ứng dụng, bộ kiểu dữ liệu dùng chung, kết nối Neon Postgres và hệ thống giao diện.
           Các bước tiếp theo sẽ bổ sung dữ liệu và nghiệp vụ.

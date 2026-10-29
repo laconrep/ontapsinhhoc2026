@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next"
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "EduSync — Ôn tập Sinh học thông minh",
-    short_name: "EduSync",
+    name: "AI Trợ lí Ôn tập — Sinh học",
+    short_name: "AI Ôn tập",
     description:
       "Nền tảng ôn tập Sinh học cho giáo viên và học sinh: bài giảng, điểm kiến thức, luyện tập tương tác và theo dõi tiến độ.",
     start_url: "/",

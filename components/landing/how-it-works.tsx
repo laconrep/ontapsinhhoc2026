@@ -26,7 +26,7 @@ export function HowItWorks() {
           Cách hoạt động
         </h2>
         <p className="mt-3 text-pretty leading-relaxed text-muted-foreground">
-          Ba bước để bắt đầu ôn tập trên EduSync.
+          Ba bước để bắt đầu ôn tập trên AI Trợ lí Ôn tập.
         </p>
       </div>
       <ol className="mt-10 grid gap-4 md:grid-cols-3">

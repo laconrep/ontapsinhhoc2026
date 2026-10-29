@@ -24,7 +24,7 @@ export function Logo({
       >
         <Leaf className={s.icon} aria-hidden="true" />
       </span>
-      <span className={cn("font-heading font-bold tracking-tight", s.text)}>EduSync</span>
+      <span className={cn("font-heading font-bold tracking-tight", s.text)}>AI Trợ lí Ôn tập</span>
     </span>
   )
 }

@@ -19,18 +19,18 @@ const bricolage = Bricolage_Grotesque({
 
 export const metadata: Metadata = {
   title: {
-    default: "EduSync — Ôn tập Sinh học thông minh",
-    template: "%s · EduSync",
+    default: "AI Trợ lí Ôn tập — Sinh học",
+    template: "%s · AI Trợ lí Ôn tập",
   },
   description:
     "Nền tảng ôn tập Sinh học cho giáo viên và học sinh: bài giảng, điểm kiến thức, luyện tập tương tác và theo dõi tiến độ.",
   openGraph: {
-    title: "EduSync — Ôn tập Sinh học thông minh",
+    title: "AI Trợ lí Ôn tập — Sinh học",
     description:
       "Nền tảng ôn tập Sinh học cho giáo viên và học sinh: bài giảng, điểm kiến thức, luyện tập tương tác và theo dõi tiến độ.",
     locale: "vi_VN",
     type: "website",
-    siteName: "EduSync",
+    siteName: "AI Trợ lí Ôn tập",
   },
   icons: {
     icon: "/icon.svg",

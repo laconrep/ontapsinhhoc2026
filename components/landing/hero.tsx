@@ -16,7 +16,7 @@ export function Hero() {
         </h1>
 
         <p className="mx-auto mt-5 max-w-2xl text-pretty text-base leading-relaxed text-muted-foreground md:text-lg">
-          EduSync giúp giáo viên xây dựng bài giảng theo điểm kiến thức và học sinh luyện tập tương tác — điền khuyết, kéo
+          AI Trợ lí Ôn tập giúp giáo viên xây dựng bài giảng theo điểm kiến thức và học sinh luyện tập tương tác — điền khuyết, kéo
           thả, trắc nghiệm — kèm theo dõi tiến độ và ôn tập ngắt quãng.
         </p>
 

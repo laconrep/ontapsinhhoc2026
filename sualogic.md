@@ -2665,3 +2665,9 @@ KIỂM THỬ: tsc sạch; scripts/check-question-stats.mjs mới 21/21 (tỉ l�
 ## §46 — Sửa tỉ lệ phương án MC luôn 0% (bug tìm được lúc kiểm thật §45)
 
 KIỂM THẬT 28/10 (DTO production, lớp v41 20 HS): questionStats đủ 53 câu, độ phủ 29/53, 18 em nộp — nhưng bảng % phương án của mọi câu MC đều 0%. Nguyên nhân: đáp án MC lưu id phương án đã chọn ở `studentAnswer`, không phải `optionId` (bằng chứng trong code: wrongTextFor tra nội dung phương án MC bằng studentAnswer; optionId của đáp án MC là null). buildQuestionStats khớp bằng optionId nên đếm trượt hết. Sửa: khóa khớp phương án theo loại câu — MC dùng `studentAnswer ?? optionId`, TF giữ `optionId` (studentAnswer của TF chỉ là 'D'/'S'). Test tổng hợp thêm 2 case MC với optionId null (23/23). Không phải bug: bộ dữ liệu v41 không có câu 'Khó' nào (câu khó nhất là câu 15, đúng 39% > ngưỡng 30%) nên cột Độ khó chỉ có Dễ/Vừa — đúng luật, không phải lỗi tính.
+
+## §47 — Đổi tên hiển thị app thành 'AI Trợ lí Ôn tập' (29/10, user chốt)
+
+PHẠM VI: chỉ chuỗi hiển thị trong giao diện — logo (components/shared/logo.tsx), khung giáo viên (teacher-shell), bảng điều khiển tiết trực tiếp (teacher-console), trang chủ (hero, how-it-works, build-status), form đăng nhập (auth-form), tiêu đề/metadata (app/layout.tsx: 'AI Trợ lí Ôn tập — Sinh học', template '%s · AI Trợ lí Ôn tập', siteName), manifest (name 'AI Trợ lí Ôn tập — Sinh học', short_name 'AI Ôn tập'), chân trang ('AI trợ lí ôn tập Sinh học cho lớp học hiện đại.'), điều khoản + riêng tư. KHÔNG ĐỔI: tên package (edusync), repo, domain, storage keys (edusync:tab*, edusync-tv-*), mailto giữ chỗ (hello@edusync.local), comment code và thông báo lỗi dev. Tên trong hồ sơ giải thưởng vẫn 'EduSync' (chờ user quyết riêng).
+
+KIỂM THỬ: grep không còn 'EduSync' hiển thị trong app/components; tsc sạch (exit 0); next build exit 0. Commit local, chờ PAT để push (push xong Vercel tự deploy, token worker mới có hiệu lực theo).

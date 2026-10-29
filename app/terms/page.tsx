@@ -14,7 +14,7 @@ export default function TermsPage() {
         <p className="mt-2 text-sm text-muted-foreground">Bản nháp — cần người sở hữu duyệt trước khi áp dụng.</p>
         <div className="mt-6 space-y-4 text-base leading-relaxed text-foreground">
           <p>
-            EduSync là nền tảng ôn tập Sinh học dành cho giáo viên và học sinh. Nội dung dưới đây
+            AI Trợ lí Ôn tập là nền tảng ôn tập Sinh học dành cho giáo viên và học sinh. Nội dung dưới đây
             chỉ là khung tạm, chưa phải điều khoản pháp lý.
           </p>
           <p>
