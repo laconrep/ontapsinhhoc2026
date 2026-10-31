@@ -90,6 +90,20 @@ export interface LiveQuizView {
  */
 type LiveQuizState = Omit<LiveQuizView, "remainingSec" | "refresh" | "applyQuestion" | "applyReveal">
 
+/**
+ * Snapshot cũ về trễ (poll gửi đi trước khi GV chuyển câu, trả về sau):
+ * chỉ nhận answers khi snapshot đúng câu đang hiển thị. Snapshot thuộc câu
+ * khác mà ghi đè thì cột Đúng/Sai/Chưa hiện đáp án câu cũ lên câu mới.
+ */
+export function staleSnapshotAnswers<T>(
+  snapIndex: number,
+  currentIndex: number,
+  snapAnswers: T,
+  currentAnswers: T,
+): T {
+  return snapIndex === currentIndex ? snapAnswers : currentAnswers
+}
+
 export function useLiveQuiz(sessionId: string): LiveQuizView {
   const [state, setState] = useState<LiveQuizState>({
     connected: false,
@@ -150,7 +164,7 @@ export function useLiveQuiz(sessionId: string): LiveQuizView {
         error: snap.error ?? null,
         joinedCount: snap.joinedCount,
         joined: snap.joined ?? s.joined,
-        answers: snap.answers,
+        answers: staleSnapshotAnswers(snap.currentIndex, s.currentIndex, snap.answers, s.answers),
         notFullscreen: snap.notFullscreen,
       }))
       return

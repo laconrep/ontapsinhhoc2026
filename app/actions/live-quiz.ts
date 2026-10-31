@@ -33,6 +33,7 @@ import {
   type LiveQuestionFull,
   type LiveSessionState,
 } from "@/lib/live-session-state"
+import { loadLiveSnapshotPresence } from "@/lib/live-presence"
 
 // ---- Emit: ghi DB (lịch sử) + phát realtime ----
 async function emit(
@@ -520,12 +521,30 @@ export async function getLiveQuizSnapshot(sessionId: string) {
   const isTeacher = s.teacherId === user.id
   const current = state.currentIndex >= 0 ? state.questions[state.currentIndex] : null
 
+  // Cột Đúng/Sai/Chưa phải giống nhau ở mọi instance: joined + answers lấy
+  // từ DB (nguồn thật duy nhất xuyên instance) thay vì RAM của instance
+  // đang phục vụ request. Lỗi DB thì rớt về RAM cũ, không làm hỏng snapshot.
+  const base = serializeState(state)
+  let presence: Awaited<ReturnType<typeof loadLiveSnapshotPresence>> | null = null
+  try {
+    presence = await loadLiveSnapshotPresence(
+      sessionId,
+      current?.id ?? null,
+      current ? currentQuestionRound(state, current.id) : 1,
+    )
+  } catch (err) {
+    console.error("[live] snapshot presence fallback to RAM", err)
+  }
+
   return {
     sessionId,
     className: s.className,
     status: s.status,
     isTeacher,
-    ...serializeState(state),
+    ...base,
+    joined: presence?.joined ?? base.joined,
+    joinedCount: presence?.joinedCount ?? base.joinedCount,
+    answers: presence?.answers ?? base.answers,
     // câu hiện tại (HS: che đáp án; GV: kèm đáp án + câu kế tiếp)
     question: current ? maskQuestion(current) : null,
     revealed:
