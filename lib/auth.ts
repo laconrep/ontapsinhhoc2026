@@ -3,6 +3,15 @@ import { pool } from "@/lib/db"
 
 const isBuild = process.env.NEXT_PHASE === "phase-production-build"
 
+// §49 (2026-11-06): "Invalid origin" khi đăng nhập bằng trình duyệt —
+// origin thật của production (https://ontapsinhhoc-seven.vercel.app)
+// không có trong trustedOrigins lúc chạy trên Vercel: VERCEL_URL là URL
+// riêng của từng deployment, VERCEL_PROJECT_PRODUCTION_URL không chắc
+// có mặt lúc runtime, nên chỉ dựa vào biến môi trường là thiếu. Liệt kê
+// thẳng origin production ở đây; các mục theo biến môi trường giữ lại
+// làm dự phòng.
+const PRODUCTION_ORIGIN = "https://ontapsinhhoc-seven.vercel.app"
+
 export const auth = betterAuth({
   database: pool,
   secret:
@@ -58,6 +67,7 @@ export const auth = betterAuth({
     },
   },
   trustedOrigins: [
+    PRODUCTION_ORIGIN,
     ...(process.env.V0_RUNTIME_URL ? [process.env.V0_RUNTIME_URL] : []),
     ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
     ...(process.env.VERCEL_PROJECT_PRODUCTION_URL
