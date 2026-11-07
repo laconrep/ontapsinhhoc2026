@@ -470,25 +470,31 @@ export function WorksheetImporter({
         { onBlobProgress: (pct) => setBlobProgress(pct) },
       )
       aiJobIdRef.current = res.jobId
-      // §21: việc AI đã tạo = việc dở -> ghi thẻ đỏ giữ chỗ (trừ nạp
-      // cộng thêm — bài đích đã có thẻ). Lỗi ghi thẻ không chặn luồng AI.
-      if (!intoLesson) {
-        try {
-          const r = await fetch("/api/import-drafts", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              kind: "ai",
-              jobId: res.jobId,
-              filename: file.name,
-              classId: assignToClass?.id ?? null,
-            }),
-          })
-          const d = (await r.json().catch(() => ({}))) as { id?: string }
-          if (d.id) draftIdRef.current = d.id
-        } catch {
-          // Thẻ đỏ là phụ trợ — không chặn luồng AI.
-        }
+      // §51: việc AI đã tạo = việc dở -> LUÔN ghi thẻ đỏ giữ chỗ, kể cả
+      // nạp cộng thêm. Trước đây nạp cộng thêm không ghi thẻ nên việc AI
+      // xong không tìm thấy bằng cách click theo tab (tab Bài giảng /
+      // chi tiết bài đều không có mục việc AI; panel "Việc AI trước đó
+      // chưa lưu" cũng bị ẩn ở chế độ cộng thêm theo §18) — giáo viên
+      // chỉ thấy lại được ở trang nạp thường không tham số. Thẻ đỏ mở
+      // lại bản xem trước ở chế độ thường (không intoLesson) nên bước
+      // gắn từ nhiễu kéo thả (§16) vẫn chạy đủ; giáo viên muốn cộng
+      // thêm thì mở lại từ trang nạp ở chế độ cộng thêm. Lỗi ghi thẻ
+      // không chặn luồng AI.
+      try {
+        const r = await fetch("/api/import-drafts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            kind: "ai",
+            jobId: res.jobId,
+            filename: file.name,
+            classId: assignToClass?.id ?? null,
+          }),
+        })
+        const d = (await r.json().catch(() => ({}))) as { id?: string }
+        if (d.id) draftIdRef.current = d.id
+      } catch {
+        // Thẻ đỏ là phụ trợ — không chặn luồng AI.
       }
       setAiJob({
         id: res.jobId,
