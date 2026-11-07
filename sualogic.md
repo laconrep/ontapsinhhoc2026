@@ -2689,3 +2689,13 @@ NGUYÊN NHÂN GỐC: better-auth `validateOrigin` kiểm tra Origin header với
 SỬA (tối thiểu, không tắt origin check): thêm hằng `PRODUCTION_ORIGIN = "https://ontapsinhhoc-seven.vercel.app"` vào đầu `trustedOrigins` trong lib/auth.ts; các mục theo biến môi trường giữ nguyên làm dự phòng. Không đổi baseURL, không đổi gì khác.
 
 KIỂM THỬ: tsc sạch (exit 0). Kiểm thật sau deploy: curl POST sign-in với Origin production phải trả 200 thay vì INVALID_ORIGIN; đăng nhập bằng trình duyệt với tài khoản thật.
+
+## §50 — HS phải bấm nhiều lần mới chọn được đáp án trong phiên live (06/11, user báo)
+
+TRIỆU CHỨNG: trong phiên live, HS phải bấm nhiều lần vào một đáp án mới chọn được; lần bấm đầu thường không ăn, bấm lại sau 1–2 giây thì ăn. Không liên quan §48 (chọn đáp án là state cục bộ, không gọi server; poll snapshot không đụng mcChoice/tfChoices/saText; nút không bị khóa khi đang gửi; không remount, không debounce).
+
+NGUYÊN NHÂN GỐC: layout nhảy sau khi câu đã vẽ. `components/live/student-question-layout.tsx` đo lần đầu trong `useLayoutEffect` khi ảnh chưa tải xong (ảnh lazy, figure không có chiều cao giữ chỗ) nên đo thiếu chiều cao thật → chọn cỡ chữ quá lớn và/hoặc mode `single` trong khi thực tế không vừa. Khi ảnh tải xong (`load`) và font tải xong (`document.fonts.ready`) thì đo lại và đổi fontSize/mode (single→split) SAU paint → nút đáp án dịch chuyển dưới ngón tay → cú chạm đầu không trúng nút (click cảm ứng cần chạm xuống + nhả cùng trúng một phần tử). Yếu tố phụ: ở mode split, khung đáp án `overflow-y-auto`; trên iOS chạm trong lúc quán tính cuộn còn chạy sẽ dừng cuộn thay vì tạo click.
+
+SỬA (cách A, 1 file `student-question-layout.tsx`): khóa layout sau lần đo đầu của mỗi câu (flag `lockedRef`, reset khi đổi câu). Các lần đo sau (ảnh/font tải xong, ResizeObserver) chỉ được đổi layout khi layout đang hiển thị thật sự bị cắt (kiểm bằng `fits(fs hiện tại)` trên cây đo ẩn): khi đó chỉ được thu nhỏ cỡ chữ hoặc chuyển sang split; không bao giờ phóng to lại hay quay về single; ở mode split (hai khung cuộn, không bao giờ cắt) thì không đổi gì. Lần đo đầu vẫn chạy không khóa nên mỗi câu mới vẫn chọn layout đúng cho câu đó; bàn phím mở/đóng làm hộp nhỏ/lớn lại cũng theo cùng luật khóa (chỉ thu nhỏ khi tràn, không phóng to lại).
+
+KIỂM THỬ: tsc sạch; suite (7 lỗi cũ y hệt). CHƯA tái hiện bằng trình duyệt (không vào được localhost) — kết luận từ code; kiểm thật cuối: phiên live thật với bài có ảnh công thức, HS dùng iPhone mạng chậm, bấm ngay 1–2 giây sau khi câu hiện, quan sát nút có còn dịch chuyển không.

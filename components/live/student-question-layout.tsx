@@ -44,6 +44,18 @@ export function StudentQuestionLayout({
     fs: PHONE_MIN_FS,
     ratio: 0.65,
   })
+  // §50: layout lock. The first measure for a question runs before its
+  // images/fonts finish loading, so it under-measures and picks a font
+  // that is too large (or single mode when split is needed). Re-measuring
+  // afterwards used to apply the corrected layout, which moved the answer
+  // buttons under the student's finger mid-tap (a touch click only fires
+  // when press and release hit the same element). Once locked, a later
+  // measure may only shrink the font or switch to split, and only when
+  // the layout on screen is actually clipped right now — never enlarge,
+  // never switch back to single.
+  const lockedRef = useRef(false)
+  const layoutRef = useRef(layout)
+  layoutRef.current = layout
 
   const measure = useCallback(() => {
     const box = boxRef.current
@@ -88,13 +100,27 @@ export function StudentQuestionLayout({
       ratio = Math.round(computeSplitRatio(stemH, optsH, box.clientHeight - SPLIT_GAP) * 100) / 100
     }
 
+    if (lockedRef.current) {
+      const cur = layoutRef.current
+      // Split panes scroll, so nothing is ever clipped there: never move.
+      if (cur.mode === "split") return
+      // Never enlarge after the first measure.
+      if (fs > cur.fs) return
+      // Only shrink / switch to split when the layout on screen is
+      // actually clipped right now; otherwise keep the first layout.
+      if (fits(cur.fs)) return
+      apply(fs)
+    }
+
     setLayout((prev) =>
       prev.mode === mode && prev.fs === fs && prev.ratio === ratio ? prev : { mode, fs, ratio },
     )
   }, [questionId])
 
   useLayoutEffect(() => {
+    lockedRef.current = false
     measure()
+    lockedRef.current = true
   }, [measure, questionId])
 
   useLayoutEffect(() => {
