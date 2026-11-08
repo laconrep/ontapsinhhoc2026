@@ -2719,3 +2719,14 @@ QUYẾT ĐỊNH CỦA USER (08/11, chọn qua options): THÊM GỢI Ý ĐỊNH D
 SỬA (tối thiểu): đổi placeholder của ô nhập trả lời ngắn trong `components/student/tab4-quiz.tsx` thành "Nhập câu trả lời (ghi cả đơn vị nếu có)". Lưu ý: client KHÔNG nhận đáp án đúng (`QuizQuestion` không có trường đáp án — chống gian lận qua DevTools) nên không thể gợi ý định dạng động theo từng câu (vd: chỉ hiện "%" khi đáp án có %); gợi ý chung là phạm vi đúng.
 
 KIỂM THỬ: tsc sạch; suite 45/52 (7 lỗi cũ y hệt). Kiểm thật cuối: mở Tab 4, ô trả lời ngắn phải hiện placeholder mới; nộp "30" cho câu hỏi phần trăm vẫn sai như cũ (luật chấm không đổi).
+
+## §53 — Nút "Nộp bài" Tab 4 chỉ hiện ở câu cuối + trang Tiến độ không thấy bài trắc nghiệm đang làm dở (08/11, user yêu cầu sau kiểm thử thật)
+
+TRIỆU CHỨNG: (1) Nút "Nộp bài" (gọi `submitQuiz`) chỉ render khi `isLast` (câu cuối) nên HS làm 10/56 câu không thấy nút nộp cả bài, tưởng chưa có. (2) Trang Tiến độ: mục "Mức tiến bộ qua bài kiểm tra" ghi "Chưa có lần làm bài kiểm tra nào" dù HS đã nộp 10 câu — vì `getQuizProgress` chỉ đếm `quizAttempts` có `completedAt` (chỉ set khi nộp cả bài); nộp từng câu (`submitQuizQuestion`) chỉ ghi `quizAnswers`, không tạo lần làm đã xong. Biểu đồ 7 ngày cũng 0 vì nguồn hoạt động chỉ có `quizAttempts.completedAt` + `studentTab1Submissions.submittedAt`, không đếm `quizAnswers.answeredAt`.
+
+SỬA:
+- (1) Thêm nút "Nộp bài" cố định ở đầu trang Tab 4 (cạnh nhãn loại câu), bấm được ở mọi câu; gọi cùng `requestSubmit` (còn câu chưa nộp thì hiện hộp thoại xác nhận như nút ở câu cuối). Nút ở câu cuối giữ nguyên.
+- (2) `getQuizProgress` thêm lần làm ĐANG DỞ (`completedAt IS NULL` và có ≥1 câu đã nộp): điểm tạm tính = số ô đúng tới lúc này / tổng số ô × 10 (cùng công thức điểm chốt; câu chưa nộp tính sai như khi nộp bài); mở rộng `LessonAttemptProgress` thêm `inProgress`, `submittedCount`, `totalQuestions`, `correctCount` (câu đúng = mọi ô của câu đều đúng, TF cần đủ 4 ý); component `QuizProgress` hiện dòng "Đang làm dở — đã nộp X/Y câu (đúng Z). Điểm mới nhất là điểm tạm tính, chưa phải điểm chốt." khi `inProgress`.
+- (3) `getStudentStats`: thêm `quizAnswers.answeredAt` vào nguồn ngày hoạt động (streak + biểu đồ 7 ngày) để ngày nào HS nộp câu trắc nghiệm cũng được tính hoạt động.
+
+KIỂM THỬ: tsc sạch; suite 45/52 (7 lỗi cũ y hệt); next build exit 0. Kiểm thật cuối: mở Tab 4 ở câu giữa — nút "Nộp bài" phải hiện ở đầu trang; nộp vài câu rồi mở trang Tiến độ — mục trắc nghiệm phải hiện bài đang làm dở với số câu đã nộp, biểu đồ 7 ngày phải > 0 trong ngày.

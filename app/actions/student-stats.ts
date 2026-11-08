@@ -10,6 +10,8 @@ import {
   studentProgress,
   studentTab1Submissions,
   quizAttempts,
+  quizAnswers,
+  quizAttemptQuestions,
 } from "@/lib/db/schema"
 import { requireRole } from "@/lib/auth-helpers"
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm"
@@ -76,7 +78,10 @@ export async function getStudentStats(): Promise<StudentStatsDto> {
   const student = await requireRole("student")
 
   // Nguồn ngày hoạt động (append-only)
-  const [quizDates, tab1Dates] = await Promise.all([
+  // §53: nộp từng câu trắc nghiệm cũng tính là hoạt động trong ngày —
+  // trước đây chỉ đếm lần nộp bài xong + nộp Tab 1 nên HS nộp 10/56 câu
+  // mà biểu đồ 7 ngày vẫn 0 và streak không tăng.
+  const [quizDates, tab1Dates, quizAnswerDates] = await Promise.all([
     db
       .select({ ts: quizAttempts.completedAt })
       .from(quizAttempts)
@@ -85,11 +90,19 @@ export async function getStudentStats(): Promise<StudentStatsDto> {
       .select({ ts: studentTab1Submissions.submittedAt })
       .from(studentTab1Submissions)
       .where(eq(studentTab1Submissions.studentId, student.id)),
+    db
+      .select({ ts: quizAnswers.answeredAt })
+      .from(quizAnswers)
+      .innerJoin(quizAttempts, eq(quizAttempts.id, quizAnswers.attemptId))
+      .where(
+        and(eq(quizAttempts.studentId, student.id), isNotNull(quizAnswers.answeredAt)),
+      ),
   ])
 
   const allActivity: Date[] = [
     ...quizDates.map((r) => r.ts as Date),
     ...tab1Dates.map((r) => r.ts),
+    ...quizAnswerDates.map((r) => r.ts as Date),
   ].filter(Boolean)
 
   const dayKeys = new Set(allActivity.map((d) => toDayKey(new Date(d))))
@@ -234,6 +247,83 @@ export async function getQuizProgress(): Promise<LessonAttemptProgress[]> {
         improvement: 0,
         lastAttemptAt: (r.completedAt as Date).toISOString(),
         _scores: [score10],
+      })
+    }
+  }
+
+  // §53: lần làm ĐANG DỞ (chưa nộp bài) cũng phải hiện tiến độ — trước đây
+  // chỉ đếm lần đã nộp xong nên HS nộp 10/56 câu mà trang Tiến độ vẫn ghi
+  // "Chưa có lần làm bài kiểm tra nào". Điểm tạm tính = số ô đúng tới lúc
+  // này / tổng số ô × 10 (cùng công thức điểm chốt; câu chưa nộp tính sai
+  // như khi nộp bài), và ghi rõ đang dở + đã nộp bao nhiêu câu.
+  const openRows = await db
+    .select({
+      attemptId: quizAttempts.id,
+      lessonId: quizAttempts.lessonId,
+      title: lessons.title,
+      chapterTitle: chapters.title,
+      totalSlots: quizAttempts.totalSlots,
+      startedAt: quizAttempts.startedAt,
+    })
+    .from(quizAttempts)
+    .innerJoin(lessons, eq(lessons.id, quizAttempts.lessonId))
+    .innerJoin(chapters, eq(chapters.id, lessons.chapterId))
+    .where(and(eq(quizAttempts.studentId, student.id), sql`${quizAttempts.completedAt} IS NULL`))
+    .orderBy(asc(quizAttempts.startedAt))
+
+  for (const o of openRows) {
+    const [qRows, aRows] = await Promise.all([
+      db
+        .select({ questionId: quizAttemptQuestions.questionId })
+        .from(quizAttemptQuestions)
+        .where(eq(quizAttemptQuestions.attemptId, o.attemptId)),
+      db
+        .select({ questionId: quizAnswers.questionId, isCorrect: quizAnswers.isCorrect })
+        .from(quizAnswers)
+        .where(eq(quizAnswers.attemptId, o.attemptId)),
+    ])
+    if (aRows.length === 0) continue // chưa nộp câu nào thì chưa tính là đã làm
+    const totalQuestions = qRows.length
+    const totalSlots = o.totalSlots ?? 1
+    const correctSlots = aRows.filter((r) => r.isCorrect).length
+    const provisional = Math.round((correctSlots / totalSlots) * 100) / 10
+    // Câu đúng = mọi ô của câu đều đúng (TF cần đủ 4 ý).
+    const byQ = new Map<string, boolean[]>()
+    for (const r of aRows) {
+      const list = byQ.get(r.questionId) ?? []
+      list.push(r.isCorrect ?? false)
+      byQ.set(r.questionId, list)
+    }
+    let correctCount = 0
+    for (const list of byQ.values()) if (list.every(Boolean)) correctCount += 1
+    const submittedCount = byQ.size
+    const lastAt = o.startedAt as Date
+    const existing = byLesson.get(o.lessonId)
+    if (existing) {
+      existing.attempts += 1
+      existing.latestScore = provisional
+      existing.bestScore = Math.max(existing.bestScore, provisional)
+      existing.lastAttemptAt = lastAt.toISOString()
+      existing.inProgress = true
+      existing.submittedCount = submittedCount
+      existing.totalQuestions = totalQuestions
+      existing.correctCount = correctCount
+    } else {
+      byLesson.set(o.lessonId, {
+        lessonId: o.lessonId,
+        title: o.title,
+        chapterTitle: o.chapterTitle,
+        attempts: 1,
+        firstScore: provisional,
+        latestScore: provisional,
+        bestScore: provisional,
+        improvement: 0,
+        lastAttemptAt: lastAt.toISOString(),
+        inProgress: true,
+        submittedCount,
+        totalQuestions,
+        correctCount,
+        _scores: [provisional],
       })
     }
   }

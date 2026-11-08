@@ -32,6 +32,13 @@ export function QuizProgress({ items }: { items: LessonAttemptProgress[] }) {
               <ImprovementBadge value={it.improvement} />
             </div>
 
+            {it.inProgress && it.submittedCount != null && it.totalQuestions != null && (
+              <p className="mt-2 text-xs font-medium text-primary">
+                Đang làm dở — đã nộp {it.submittedCount}/{it.totalQuestions} câu
+                {it.correctCount != null ? ` (đúng ${it.correctCount})` : ""}. Điểm mới nhất là điểm tạm tính, chưa phải điểm chốt.
+              </p>
+            )}
+
             <div className="mt-3 grid grid-cols-4 gap-2 text-center">
               <StatCard compact label="Số lần" value={String(it.attempts)} icon={<Repeat2 className="h-3.5 w-3.5" />} />
               <StatCard compact label="Lần đầu" value={it.firstScore.toFixed(1)} />

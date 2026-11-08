@@ -333,13 +333,18 @@ export function Tab4Quiz({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-medium text-muted-foreground">
           Câu {index + 1}/{questions.length} · Đã nộp {submittedCount} câu
         </p>
-        <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-foreground">
-          {question.type === "MC" ? "Trắc nghiệm" : question.type === "TF" ? "Đúng/Sai" : "Trả lời ngắn"}
-        </span>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-foreground">
+            {question.type === "MC" ? "Trắc nghiệm" : question.type === "TF" ? "Đúng/Sai" : "Trả lời ngắn"}
+          </span>
+          <Button variant="outline" size="sm" className="min-h-8" onClick={requestSubmit} disabled={pending}>
+            Nộp bài
+          </Button>
+        </div>
       </div>
 
       <ol className="flex flex-wrap gap-1" aria-label="Danh sách câu">

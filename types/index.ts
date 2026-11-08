@@ -401,6 +401,15 @@ export interface LessonAttemptProgress {
   bestScore: number
   improvement: number
   lastAttemptAt: string
+  /** §53: lần làm mới nhất còn đang dở (chưa nộp bài) — điểm mới nhất
+   * là điểm tạm tính theo số câu đã nộp, chưa phải điểm chốt. */
+  inProgress?: boolean
+  /** §53: số câu đã nộp trong lần làm đang dở (đếm theo câu, TF tính 1 câu). */
+  submittedCount?: number
+  /** §53: tổng số câu của lần làm đang dở. */
+  totalQuestions?: number
+  /** §53: số câu đúng trong lần làm đang dở (đếm theo câu, TF đúng khi đủ 4 ý). */
+  correctCount?: number
 }
 
 export interface QuestionBankItem {
