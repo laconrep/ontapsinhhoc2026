@@ -2730,3 +2730,13 @@ SỬA:
 - (3) `getStudentStats`: thêm `quizAnswers.answeredAt` vào nguồn ngày hoạt động (streak + biểu đồ 7 ngày) để ngày nào HS nộp câu trắc nghiệm cũng được tính hoạt động.
 
 KIỂM THỬ: tsc sạch; suite 45/52 (7 lỗi cũ y hệt); next build exit 0. Kiểm thật cuối: mở Tab 4 ở câu giữa — nút "Nộp bài" phải hiện ở đầu trang; nộp vài câu rồi mở trang Tiến độ — mục trắc nghiệm phải hiện bài đang làm dở với số câu đã nộp, biểu đồ 7 ngày phải > 0 trong ngày.
+
+## §54 — Nút "Tài khoản" giáo viên bấm là crash cả trang, không đăng xuất được (08/11, kiểm thử thật trên production)
+
+TRIỆU CHỨNG: bấm nút "Tài khoản / <tên GV>" ở header giáo viên là cả trang sập ra màn hình lỗi "Có lỗi xảy ra / Không thể tải trang. Bạn hãy thử lại hoặc quay về trang chủ." (error boundary app/error.tsx), menu không bao giờ mở. Tái hiện 5/5 sáng 08/11 (chuột + bàn phím, /teacher và /teacher/classes), và 2/2 lần nữa trong phiên tái hiện riêng. Đây là đường đăng xuất duy nhất của giáo viên: vào thẳng /sign-in, nút Đăng nhập ở trang chủ và /sign-up?role=student đều bị chuyển về /teacher khi còn phiên GV; tab mới dùng chung phiên. Học sinh không bị (student-shell dùng nút Đăng xuất thường, không dropdown). Các dropdown khác dùng cùng component DropdownMenu vẫn chạy (menu ⋮ lớp học, menu ⋮ điểm kiến thức) nên lỗi nằm riêng ở UserMenu.
+
+NGUYÊN NHÂN GỐC: `DropdownMenuLabel` trong UserMenu (`components/teacher/teacher-shell.tsx`) dùng TRẦN, không bọc trong `DropdownMenuGroup`. Label này render `MenuPrimitive.GroupLabel` của @base-ui/react/menu, mà GroupLabel gọi `useMenuGroupRootContext()` — hook này THROW ngay khi không có `MenuGroupContext` ("Base UI: MenuGroupContext is missing. Menu group parts must be used within <Menu.Group> or <Menu.RadioGroup>."). Label chỉ render khi menu mở nên trang tải bình thường, bấm mở menu mới nổ lỗi và error boundary bắt. Đây là dropdown duy nhất trong app dùng Label (grep: chỉ teacher-shell.tsx) nên chỉ nó crash.
+
+SỬA (tối thiểu, 1 file): bọc toàn bộ nội dung menu (label + các mục) trong `<DropdownMenuGroup>` — Group cung cấp MenuGroupContext nên label không còn throw; giao diện và các mục giữ nguyên (tên GV ở đầu, đổi giao diện, đăng xuất). Không đổi component DropdownMenu dùng chung, không đổi student-shell.
+
+KIỂM THỬ: tsc sạch; suite 45/52 (7 lỗi cũ y hệt); next build exit 0. Chưa tái hiện bằng trình duyệt ở local (DB local mới khởi tạo thiếu bảng gốc nên không đăng nhập được — việc riêng của môi trường local, không liên quan bản sửa); chẩn đoán từ code nguồn Base UI + đối chiếu các dropdown còn lại. Kiểm thật cuối sau deploy: bấm nút Tài khoản bằng tài khoản GV kiểm thử — menu phải mở, đăng xuất rồi đăng nhập lại bằng tài khoản học sinh trong cùng một profile phải được.

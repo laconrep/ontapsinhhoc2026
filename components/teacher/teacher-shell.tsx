@@ -8,6 +8,7 @@ import { TeacherNav } from "@/components/teacher/teacher-nav"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -39,26 +40,28 @@ function UserMenu({ userName }: { userName: string }) {
         <span className="hidden max-w-[10rem] truncate sm:inline">{userName}</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-44">
-        <DropdownMenuLabel>{userName}</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => setTheme(dark ? "light" : "dark")}>
-          {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          {dark ? "Giao diện sáng" : "Giao diện tối"}
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          disabled={pending}
-          onClick={() => {
-            startTransition(async () => {
-              await authClient.signOut()
-              router.push("/sign-in")
-              router.refresh()
-            })
-          }}
-        >
-          <LogOut className="h-4 w-4" />
-          {pending ? "Đang thoát..." : "Đăng xuất"}
-        </DropdownMenuItem>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{userName}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => setTheme(dark ? "light" : "dark")}>
+            {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            {dark ? "Giao diện sáng" : "Giao diện tối"}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            disabled={pending}
+            onClick={() => {
+              startTransition(async () => {
+                await authClient.signOut()
+                router.push("/sign-in")
+                router.refresh()
+              })
+            }}
+          >
+            <LogOut className="h-4 w-4" />
+            {pending ? "Đang thoát..." : "Đăng xuất"}
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   )
