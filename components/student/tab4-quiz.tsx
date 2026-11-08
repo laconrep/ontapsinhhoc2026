@@ -404,7 +404,7 @@ export function Tab4Quiz({
                 <Input
                   value={(answers[question.id] as string) ?? ""}
                   onChange={(e) => setAnswer(question.id, e.target.value)}
-                  placeholder="Nhập câu trả lời..."
+                  placeholder="Nhập câu trả lời (ghi cả đơn vị nếu có)"
                   className="text-base"
                   style={{ fontSize: 16 }}
                 />

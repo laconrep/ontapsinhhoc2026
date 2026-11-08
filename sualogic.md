@@ -2709,3 +2709,13 @@ NGUYÊN NHÂN GỐC (2 chỗ cộng hưởng): (1) `startAiFlow` trong `componen
 SỬA (tối thiểu, giữ nguyên §18): bỏ điều kiện `if (!intoLesson)` quanh việc ghi dòng nháp AI trong `startAiFlow` — việc AI LUÔN được ghi thẻ đỏ giữ chỗ, kể cả nạp cộng thêm. Thẻ đỏ mở lại bản xem trước ở chế độ thường (link `?resumeJob=<id>`, không intoLesson) nên bước gắn từ nhiễu §16 vẫn chạy đủ; giáo viên vẫn muốn cộng thêm thì mở lại từ trang nạp ở chế độ cộng thêm. Panel "Việc AI trước đó chưa lưu" vẫn ẩn ở chế độ cộng thêm theo §18 (không đụng). Không đổi đường nạp thường (đã ghi thẻ từ trước).
 
 KIỂM THỬ: tsc sạch; suite (7 lỗi cũ y hệt). Kiểm thật cuối: nạp AI cộng thêm trên production rồi mở tab Bài giảng — thẻ đỏ phải hiện việc AI đã xong; bấm "Mở tiếp" phải ra bản xem trước ở chế độ thường.
+
+## §52 — Ô trả lời ngắn Tab 4 không gợi ý định dạng, HS gõ "30" bị sai vì đáp án là "30%" (08/11, kiểm thử thật trên production)
+
+TRIỆU CHỨNG: Tab 4, câu trả lời ngắn hỏi "tỉ lệ nucleotide loại A là bao nhiêu phần trăm?", HS gõ "30" bị chấm sai vì đáp án lưu là "30%" (gõ "25%" ở câu sau thì đúng). Ô nhập chỉ ghi placeholder "Nhập câu trả lời..." nên HS gõ số trần là hợp lý mà vẫn mất điểm. Chấm trả lời ngắn là so chuỗi tuyệt đối (không chuẩn hóa).
+
+QUYẾT ĐỊNH CỦA USER (08/11, chọn qua options): THÊM GỢI Ý ĐỊNH DẠNG TRONG Ô NHẬP — không đổi luật chấm (giữ so chuỗi tuyệt đối), không để nguyên.
+
+SỬA (tối thiểu): đổi placeholder của ô nhập trả lời ngắn trong `components/student/tab4-quiz.tsx` thành "Nhập câu trả lời (ghi cả đơn vị nếu có)". Lưu ý: client KHÔNG nhận đáp án đúng (`QuizQuestion` không có trường đáp án — chống gian lận qua DevTools) nên không thể gợi ý định dạng động theo từng câu (vd: chỉ hiện "%" khi đáp án có %); gợi ý chung là phạm vi đúng.
+
+KIỂM THỬ: tsc sạch; suite 45/52 (7 lỗi cũ y hệt). Kiểm thật cuối: mở Tab 4, ô trả lời ngắn phải hiện placeholder mới; nộp "30" cho câu hỏi phần trăm vẫn sai như cũ (luật chấm không đổi).
