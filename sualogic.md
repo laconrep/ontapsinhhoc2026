@@ -2740,3 +2740,13 @@ NGUYÊN NHÂN GỐC: `DropdownMenuLabel` trong UserMenu (`components/teacher/tea
 SỬA (tối thiểu, 1 file): bọc toàn bộ nội dung menu (label + các mục) trong `<DropdownMenuGroup>` — Group cung cấp MenuGroupContext nên label không còn throw; giao diện và các mục giữ nguyên (tên GV ở đầu, đổi giao diện, đăng xuất). Không đổi component DropdownMenu dùng chung, không đổi student-shell.
 
 KIỂM THỬ: tsc sạch; suite 45/52 (7 lỗi cũ y hệt); next build exit 0. Chưa tái hiện bằng trình duyệt ở local (DB local mới khởi tạo thiếu bảng gốc nên không đăng nhập được — việc riêng của môi trường local, không liên quan bản sửa); chẩn đoán từ code nguồn Base UI + đối chiếu các dropdown còn lại. Kiểm thật cuối sau deploy: bấm nút Tài khoản bằng tài khoản GV kiểm thử — menu phải mở, đăng xuất rồi đăng nhập lại bằng tài khoản học sinh trong cùng một profile phải được.
+
+## §55 — Nhận việc AI: bỏ thăm dò 1 phút, chuyển sang endpoint báo hiệu + hook 5 giây (08/11, user yêu cầu)
+
+BỐI CẢNH: hook cron thăm dò MCP mỗi 5 phút rồi 1 phút — việc mới tải lên phải chờ tới lượt thăm dò mới được nhận (tối đa ~1 phút). User yêu cầu "không cần dò, app có job thì tự nhắn cho worker luôn". Đẩy thuần túy (app gọi trực tiếp vào worker) KHÔNG làm được: runtime Muse không có webhook/trigger inbound; cả cron lẫn hook đều là thăm dò theo thiết kế. Hook cũng không thay được cron để gọi MCP vì script hook chạy không có credential (không dùng được token Vault).
+
+SỬA (2 phần):
+- (1) Endpoint công khai mới `GET /api/ai-jobs/signal` (`app/api/ai-jobs/signal/route.ts`): chỉ trả `{pendingCount, latestPendingCreatedAt}` — một câu truy vấn tổng hợp trên `ai_jobs` theo `status='pending'` (đã có index). KHÔNG lộ tên file, id GV, id việc hay nội dung. Không cần đăng nhập (hook không có token). Chỉ đọc, không ghi log. Lỗi DB trả 503 với tín hiệu rỗng để hook im lặng.
+- (2) Hook `ontap-ai-signal` (phía Muse, ngoài repo): script Bash thăm dò endpoint mỗi 5 giây, giữ mốc cao nhất (high-water mark) của `latestPendingCreatedAt` trong state; chỉ wake khi mốc mới xuất hiện (có việc mới) hoặc cùng mốc mà số lượng tăng. Khi wake, agent xác minh bằng `poll_queue.py check` rồi spawn coordinator như luồng cũ (fan-out 24, skill, helper Vault). Cron thăm dò 1 phút (`ontap-ai-auto-pickup`) được TẮT sau khi hook xác nhận chạy — tránh nhận trùng (claim nguyên tử + poll state vẫn là lưới an toàn).
+
+KIỂM THỬ: tsc sạch; next build exit 0, route `/api/ai-jobs/signal` hiện trong danh sách build. Kiểm thật cuối sau deploy: curl endpoint phải trả đúng số việc đang chờ + mốc tạo mới nhất; tải một file AI mới lên — hook phải nhận việc trong khoảng 5 giây (không chờ lượt thăm dò phút).
