@@ -109,17 +109,27 @@ export function LessonStatsTab({ classId }: { classId: string }) {
   const [profileId, setProfileId] = useState<string | null>(null)
   const lessonIdRef = useRef<string | null>(null)
   lessonIdRef.current = lessonId
+  const classIdRef = useRef(classId)
+  classIdRef.current = classId
 
   const fetchStats = useCallback(
     async (id: string) => {
+      const classIdAtCall = classId
       try {
-        const result = await getLessonStats(classId, id)
+        const result = await getLessonStats(classIdAtCall, id)
+        // Bỏ kết quả cũ (§56): giáo viên đã chuyển sang lớp khác hoặc đổi
+        // bài trong lúc chờ — không để dữ liệu lớp/bài cũ ghi đè dữ liệu
+        // lớp/bài hiện tại (trộn học sinh lớp này sang lớp khác).
+        if (classIdRef.current !== classIdAtCall) return
+        if (lessonIdRef.current !== id) return
         setData(result)
         setError(null)
       } catch (e) {
+        if (classIdRef.current !== classIdAtCall) return
+        if (lessonIdRef.current !== id) return
         setError(e instanceof Error ? e.message : "Không tải được thống kê")
       } finally {
-        setLoading(false)
+        if (classIdRef.current === classIdAtCall && lessonIdRef.current === id) setLoading(false)
       }
     },
     [classId],
@@ -128,6 +138,17 @@ export function LessonStatsTab({ classId }: { classId: string }) {
   // Lần đầu: lấy bài mặc định (bài mới giao nhất) rồi tải.
   useEffect(() => {
     let cancelled = false
+    // Đổi lớp (§56): xóa ngay dữ liệu lớp cũ để không hiện nhầm học sinh
+    // lớp cũ trong lúc chờ dữ liệu lớp mới; đặt lại các lựa chọn theo lớp.
+    setData(null)
+    setLessonId(null)
+    setLoading(true)
+    setError(null)
+    setScreen(1)
+    setCellDetail(null)
+    setProfileId(null)
+    setMatrixGroup(0)
+    setExpandedKp(null)
     ;(async () => {
       try {
         const first = await getLessonStats(classId)

@@ -2750,3 +2750,17 @@ SỬA (2 phần):
 - (2) Hook `ontap-ai-signal` (phía Muse, ngoài repo): script Bash thăm dò endpoint mỗi 5 giây, giữ mốc cao nhất (high-water mark) của `latestPendingCreatedAt` trong state; chỉ wake khi mốc mới xuất hiện (có việc mới) hoặc cùng mốc mà số lượng tăng. Khi wake, agent xác minh bằng `poll_queue.py check` rồi spawn coordinator như luồng cũ (fan-out 24, skill, helper Vault). Cron thăm dò 1 phút (`ontap-ai-auto-pickup`) được TẮT sau khi hook xác nhận chạy — tránh nhận trùng (claim nguyên tử + poll state vẫn là lưới an toàn).
 
 KIỂM THỬ: tsc sạch; next build exit 0, route `/api/ai-jobs/signal` hiện trong danh sách build. Kiểm thật cuối sau deploy: curl endpoint phải trả đúng số việc đang chờ + mốc tạo mới nhất; tải một file AI mới lên — hook phải nhận việc trong khoảng 5 giây (không chờ lượt thăm dò phút).
+
+## §56 — Trang thống kê nhầm học sinh từ lớp này sang lớp khác (10/11, user báo)
+
+TRIỆU CHỨNG: mở tab Thống kê của một lớp thì thấy học sinh của lớp khác.
+
+KIỂM TRA: server action `getLessonStats` (`app/actions/lesson-stats.ts`) KHÔNG sai — mọi truy vấn đều lọc đúng lớp: danh sách HS lấy từ `classStudents` theo `classId`; nộp Tab 1, tiến độ, lượt kiểm tra, biểu đồ đều lọc thêm bằng `studentIds` của lớp đó + bài đã chọn. Không có cache nào (không `unstable_cache`/React cache). Trang chi tiết lớp (`force-dynamic`) truyền đúng `cls.id`. Vậy danh sách HS không thể lẫn từ server.
+
+NGUYÊN NHÂN GỐC (phía client, `components/teacher/lesson-stats-tab.tsx`): component KHÔNG unmount khi chuyển lớp (cùng route động `[id]`, React tái dùng) nhưng (1) không reset state khi `classId` đổi — dữ liệu + bài của lớp cũ vẫn hiện cho tới khi fetch mới xong; (2) `fetchStats` (dùng cho polling 30s + hiện tab) KHÔNG có chặn như effect tải lần đầu — một lượt poll của lớp cũ đang bay mà giáo viên chuyển lớp, nó về sau sẽ `setData` bằng dữ liệu lớp cũ, ghi đè dữ liệu lớp mới, và dữ liệu sai ở lại tới lượt poll sau (30s). Đúng triệu chứng "nhầm học sinh lớp này sang lớp khác".
+
+SỬA (tối thiểu, 1 file): (1) thêm `classIdRef`, `fetchStats` ghi lại `classId` lúc gọi và sau `await` bỏ kết quả nếu `classId` hoặc bài đã đổi (cả hai chặn: đổi lớp và đổi bài); (2) effect tải lần đầu, khi `classId` đổi, xóa ngay `data`/`lessonId` và đặt lại `loading`/lỗi/màn hình/chi tiết ô/hồ sơ HS để không hiện học sinh lớp cũ trong lúc chờ.
+
+LƯU Ý (giới hạn mô hình dữ liệu, KHÔNG sửa trong §56): `quizAttempts`/`studentProgress`/`studentTab1Submissions` không có cột `classId` — chỉ gắn theo học sinh + bài. Một học sinh học 2 lớp cùng một bài thì kết quả của em được tính ở CẢ hai lớp. Nếu sau §56 mà vẫn thấy một học sinh cụ thể xuất hiện sai lớp kèm điểm của em, khả năng cao là trường hợp này — cần bác cho biết học sinh + lớp cụ thể mới xử lý tiếp (phạm vi đổi mô hình, không phải lỗi hiển thị).
+
+KIỂM THỬ: tsc sạch; next build exit 0. Suite thống kê/lớp không đổi so với baseline (check-class-stats-tier 78/78, check-stats-supplements 1588/0; check-class-phien1/2/3/6 vẫn lỗi cũ từ trước — thiếu module class-stats-calc, assert trạng thái giao bài, nhãn tab cũ). Kiểm thật cuối sau deploy: mở tab Thống kê lớp A rồi chuyển nhanh sang lớp B — phải thấy màn hình chờ rồi hiện đúng học sinh lớp B, không còn học sinh lớp A.
