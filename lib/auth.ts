@@ -11,6 +11,10 @@ const isBuild = process.env.NEXT_PHASE === "phase-production-build"
 // thẳng origin production ở đây; các mục theo biến môi trường giữ lại
 // làm dự phòng.
 const PRODUCTION_ORIGIN = "https://ontapsinhhoc-seven.vercel.app"
+// Chuyển nhà 2026-11-16: project mới ontapsinhhoc2026 trên tài khoản
+// Vercel mới (oncomean-3910), địa chỉ production mới. Giữ origin cũ
+// để deployment cũ (tạm dừng đến 16/12) vẫn đăng nhập được khi mở lại.
+const PRODUCTION_ORIGIN_NEW = "https://ontapsinhhoc2026.vercel.app"
 
 export const auth = betterAuth({
   database: pool,
@@ -68,6 +72,7 @@ export const auth = betterAuth({
   },
   trustedOrigins: [
     PRODUCTION_ORIGIN,
+    PRODUCTION_ORIGIN_NEW,
     ...(process.env.V0_RUNTIME_URL ? [process.env.V0_RUNTIME_URL] : []),
     ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
     ...(process.env.VERCEL_PROJECT_PRODUCTION_URL
