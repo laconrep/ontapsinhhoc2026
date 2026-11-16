@@ -2764,3 +2764,19 @@ SỬA (tối thiểu, 1 file): (1) thêm `classIdRef`, `fetchStats` ghi lại `c
 LƯU Ý (giới hạn mô hình dữ liệu, KHÔNG sửa trong §56): `quizAttempts`/`studentProgress`/`studentTab1Submissions` không có cột `classId` — chỉ gắn theo học sinh + bài. Một học sinh học 2 lớp cùng một bài thì kết quả của em được tính ở CẢ hai lớp. Nếu sau §56 mà vẫn thấy một học sinh cụ thể xuất hiện sai lớp kèm điểm của em, khả năng cao là trường hợp này — cần bác cho biết học sinh + lớp cụ thể mới xử lý tiếp (phạm vi đổi mô hình, không phải lỗi hiển thị).
 
 KIỂM THỬ: tsc sạch; next build exit 0. Suite thống kê/lớp không đổi so với baseline (check-class-stats-tier 78/78, check-stats-supplements 1588/0; check-class-phien1/2/3/6 vẫn lỗi cũ từ trước — thiếu module class-stats-calc, assert trạng thái giao bài, nhãn tab cũ). Kiểm thật cuối sau deploy: mở tab Thống kê lớp A rồi chuyển nhanh sang lớp B — phải thấy màn hình chờ rồi hiện đúng học sinh lớp B, không còn học sinh lớp A.
+
+## §57 — Chuyển nhà Vercel: project cũ bị tạm dừng vì vượt CPU gói Hobby (16/11, user quyết)
+
+TRIỆU CHỨNG: app trên `ontapsinhhoc-seven.vercel.app` trả HTTP 402 `DEPLOYMENT_DISABLED` ("This deployment is temporarily paused") từ 16/11.
+
+NGUYÊN NHÂN GỐC (không phải lỗi code/DB): team Vercel cũ (`dangc3ductritc-4641`) vượt giới hạn Fluid Active CPU gói Hobby — 4h 51m / 4h. Project ontapsinhhoc chỉ dùng 1h 31m; phần lớn (3h 19m) từ project `chambainguvan` cùng team (chỉ dùng preview deployments). Vercel tự mở lại ngày 16/12/2026, KHÔNG có nút Resume; cách duy nhất mở ngay là nâng cấp Pro hoặc chuyển project sang tài khoản khác.
+
+CHUYỂN (user chốt chuyển sang tài khoản Vercel khác): project mới `ontapsinhhoc2026` trên tài khoản mới (`oncomean-3910`), cùng repo GitHub `laconrep/ontapsinhhoc2026` nhánh master, địa chỉ production mới `https://ontapsinhhoc2026.vercel.app`. Dữ liệu học sinh KHÔNG mất: app dùng chung database Neon `ontapsinhhoc-db` (cùng `DATABASE_URL`).
+
+LƯU Ý (bẫy khi chuyển): Vercel lưu biến môi trường dạng Secret ở chế độ chỉ-ghi — KHÔNG xem lại hay copy được giá trị từ dashboard project cũ (`DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `AI_WORKER_TOKEN`, `BLOB_READ_WRITE_TOKEN`). Cách lấy: `DATABASE_URL` (+ `UNPOOLED`) lấy từ Neon console qua mục Storage của project cũ (mở bằng SSO, hiện đầy đủ chuỗi kết nối pooled/direct); `BLOB_READ_WRITE_TOKEN` bằng cách tạo Blob store mới trên tài khoản mới (Vercel tự sinh token + `BLOB_STORE_ID` + `BLOB_WEBHOOK_PUBLIC_KEY`); `AI_WORKER_TOKEN` giữ giá trị cũ (nhập lại vào project mới). Đặt thêm `BETTER_AUTH_URL` sang domain mới.
+
+SỬA (code, 1 file `lib/auth.ts`): thêm origin production mới `https://ontapsinhhoc2026.vercel.app` vào `trustedOrigins`, GIỮ origin cũ (xem §49 — origin hardcode vì biến môi trường runtime không chắc có mặt). Ngoài repo: hook nhận việc AI (`ontap-ai-signal.sh`) và cấu hình worker MCP (`mcp_vault.py`, `ai-worker.mjs`, doc) đổi base URL sang domain mới.
+
+DỌN DẸP SAU (chưa làm): sau 16/12 project cũ tự mở lại — khi đó có 2 URL cùng trỏ một DB; lấy URL mới làm chính thức, xóa project cũ sau. Mã QR trong hồ sơ giải thưởng trỏ URL cũ (đã chết) — quyết định riêng, không thuộc lần chuyển này.
+
+KIỂM THỬ: tsc sạch; next build exit 0. Kiểm thật cuối sau deploy: curl `/api/ai-jobs/signal` phải trả 200 với đúng số việc đang chờ (không phải 503); đăng nhập bằng tài khoản GV kiểm thử, mở một bài giảng và xem tiến trình học sinh còn đủ.
