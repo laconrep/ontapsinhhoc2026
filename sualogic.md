@@ -2780,3 +2780,13 @@ SỬA (code, 1 file `lib/auth.ts`): thêm origin production mới `https://ontap
 DỌN DẸP SAU (chưa làm): sau 16/12 project cũ tự mở lại — khi đó có 2 URL cùng trỏ một DB; lấy URL mới làm chính thức, xóa project cũ sau. Mã QR trong hồ sơ giải thưởng trỏ URL cũ (đã chết) — quyết định riêng, không thuộc lần chuyển này.
 
 KIỂM THỬ: tsc sạch; next build exit 0. Kiểm thật cuối sau deploy: curl `/api/ai-jobs/signal` phải trả 200 với đúng số việc đang chờ (không phải 503); đăng nhập bằng tài khoản GV kiểm thử, mở một bài giảng và xem tiến trình học sinh còn đủ.
+
+## §58 — Trang đăng nhập sập vì thiếu BETTER_AUTH_SECRET trên project mới (17/11)
+
+TRIỆU CHỨNG: sau chuyển nhà (§57), trang chủ và endpoint tín hiệu chạy bình thường (DB đã nối) nhưng /sign-in và /sign-up hiện trang lỗi "Có lỗi xảy ra — Không thể tải trang"; /api/auth/session, /api/auth/providers, /api/auth/csrf đều trả HTTP 500.
+
+NGUYÊN NHÂN GỐC: Better Auth ném `BetterAuthError: "You are using the default secret. Please set BETTER_AUTH_SECRET..."` vì project mới chưa đặt `BETTER_AUTH_SECRET`. Không có secret thật, mọi yêu cầu tới /api/auth/* đều 500, và trang đăng nhập (gọi getCurrentUser) sập theo error boundary. Trang chủ không dùng auth nên vẫn chạy.
+
+SỬA: đặt `BETTER_AUTH_SECRET` mới (sinh ngẫu nhiên, 64 ký tự hex) cho project mới (Production + Preview + Development) rồi deploy lại. Phiên đăng nhập cũ (ký bằng secret cũ, nếu có) sẽ hết hiệu lực — người dùng đăng nhập lại, đúng với bản chất chuyển nhà.
+
+KIỂM THỬ: sau deploy, /api/auth/session không còn 500; đăng nhập bằng tài khoản GV kiểm thử phải vào được dashboard và thấy đủ bài giảng/lớp.
