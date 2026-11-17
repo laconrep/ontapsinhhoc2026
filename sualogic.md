@@ -2790,3 +2790,13 @@ NGUYÊN NHÂN GỐC: Better Auth ném `BetterAuthError: "You are using the defau
 SỬA: đặt `BETTER_AUTH_SECRET` mới (sinh ngẫu nhiên, 64 ký tự hex) cho project mới (Production + Preview + Development) rồi deploy lại. Phiên đăng nhập cũ (ký bằng secret cũ, nếu có) sẽ hết hiệu lực — người dùng đăng nhập lại, đúng với bản chất chuyển nhà.
 
 KIỂM THỬ: sau deploy, /api/auth/session không còn 500; đăng nhập bằng tài khoản GV kiểm thử phải vào được dashboard và thấy đủ bài giảng/lớp.
+
+## §59 — Chuyển vùng function Vercel sang Singapore (SIN1) cho gần Neon DB (17/11)
+
+TRIỆU CHỨNG: sau chuyển nhà (§57–§58), app chạy nhưng rất chậm — dashboard sau đăng nhập 19,2 giây, chi tiết lớp lần đầu 18,4 giây, lần sau 5,3 giây (đo thật bằng tài khoản kiểm thử).
+
+NGUYÊN NHÂN GỐC: function Vercel của project mới đặt ở IAD1 (Virginia, Mỹ) — header `X-Vercel-Id: iad1::` — trong khi Neon DB ở Singapore. Mỗi truy vấn DB phải đi xuyên Thái Bình Dương (~200ms/lượt); trang dashboard/chi tiết lớp gọi nhiều truy vấn nối tiếp nên cộng dồn thành nhiều giây. Lần đầu còn cộng thêm cold start (Hobby) + chuỗi ensureSchema.
+
+SỬA: đổi Function Region của project ontapsinhhoc2026 sang Singapore (SIN1) trong Settings → Functions, rồi deploy lại để vùng mới có hiệu lực. Không đổi code, không đổi dữ liệu.
+
+KIỂM THỬ: sau deploy, header `X-Vercel-Id` phải bắt đầu bằng `sin1::`; đo lại dashboard và chi tiết lớp phải nhanh hơn rõ rệt so với 19,2 giây / 18,4 giây trước đổi.
