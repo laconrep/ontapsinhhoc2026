@@ -2800,3 +2800,11 @@ NGUYÊN NHÂN GỐC: function Vercel của project mới đặt ở IAD1 (Virgin
 SỬA: đổi Function Region của project ontapsinhhoc2026 sang Singapore (SIN1) trong Settings → Functions, rồi deploy lại để vùng mới có hiệu lực. Không đổi code, không đổi dữ liệu.
 
 KIỂM THỬ: sau deploy, header `X-Vercel-Id` phải bắt đầu bằng `sin1::`; đo lại dashboard và chi tiết lớp phải nhanh hơn rõ rệt so với 19,2 giây / 18,4 giây trước đổi.
+
+## §60 — Xoay AI_WORKER_TOKEN vì khóa trên project mới không khớp kho (17/11)
+
+TRIỆU CHỨNG: sau chuyển nhà, cổng MCP trả HTTP 503 `{"error":"Cổng MCP chưa mở hoặc sai khóa"}` khi worker gọi `list` — token AI worker trong Secure Vault không khớp với AI_WORKER_TOKEN đã đặt trên project mới (giá trị bác gõ tay hôm 16/11). Hệ quả: worker không nhận được việc AI mới; 2 việc mới tạo lúc ~06:53 ngày 17/11 đang chờ (pendingCount tăng từ 5 lên 7).
+
+SỬA: xoay sang khóa mới (sinh ngẫu nhiên, 64 ký tự hex), đặt cùng một giá trị ở cả hai chỗ — biến môi trường AI_WORKER_TOKEN trên Vercel (Production) và kho Secure Vault (connector custom.ontap-ai-worker) — rồi deploy lại để biến mới có hiệu lực.
+
+KIỂM THỬ: sau deploy + cập nhật kho, `mcp_vault.py list` phải trả danh sách việc (không còn 503); 2 việc mới được hook nhận và xử lý.
